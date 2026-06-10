@@ -95,6 +95,9 @@ func (e *extractor) extractGoFunction(node *tsparse.Node) {
 		return
 	}
 
+	// Emit `references` edges for parameter and return type annotations.
+	e.extractGoTypeAnnotations(node, fn.ID)
+
 	body := node.ChildByFieldName("body")
 	if body != nil {
 		e.nodeStack = append(e.nodeStack, fn.ID)
@@ -137,6 +140,9 @@ func (e *extractor) extractGoMethod(node *tsparse.Node) {
 	if receiverType != "" {
 		e.addReceiverContains(receiverType, mn.ID)
 	}
+
+	// Emit `references` edges for parameter and return type annotations.
+	e.extractGoTypeAnnotations(node, mn.ID)
 
 	body := node.ChildByFieldName("body")
 	if body != nil {
@@ -592,6 +598,76 @@ func (e *extractor) extractGoCompositeInstantiation(node *tsparse.Node) {
 		Line:          int(node.StartPoint().Row) + 1,
 		Column:        int(node.StartPoint().Column),
 	})
+}
+
+// extractGoTypeAnnotations emits `references` unresolved refs for all
+// user-defined types named in a function/method's parameter list and result
+// type. Mirrors the upstream's extractTypeAnnotations for Go.
+//
+// We walk every type_identifier and qualified_type leaf in the parameters and
+// result subtrees, skipping built-in primitives. For qualified types like
+// `store.Cache` we emit the last segment (`Cache`) at the position of the
+// type_identifier child (matching the upstream's column behaviour).
+func (e *extractor) extractGoTypeAnnotations(node *tsparse.Node, fromID string) {
+	params := node.ChildByFieldName("parameters")
+	result := node.ChildByFieldName("result")
+	if params != nil {
+		e.walkGoTypeRefs(params, fromID)
+	}
+	if result != nil {
+		e.walkGoTypeRefs(result, fromID)
+	}
+}
+
+// walkGoTypeRefs recursively walks a subtree and emits `references` unresolved
+// refs for every type_identifier that names a user-defined type.
+func (e *extractor) walkGoTypeRefs(node *tsparse.Node, fromID string) {
+	if node == nil {
+		return
+	}
+	kind := node.Kind()
+	switch kind {
+	case "type_identifier":
+		name := node.Text()
+		if name != "" && !goBuiltinType(name) {
+			e.unresolvedRefs = append(e.unresolvedRefs, model.UnresolvedReference{
+				FromNodeID:    fromID,
+				ReferenceName: name,
+				ReferenceKind: model.EdgeReferences,
+				Line:          int(node.StartPoint().Row) + 1,
+				Column:        int(node.StartPoint().Column),
+				FilePath:      e.filePath,
+				Language:      e.lang,
+			})
+		}
+		return
+	case "qualified_type":
+		// e.g. `store.Cache` — walk children to find the type_identifier leaf
+		// which tree-sitter places on the last segment (`Cache`).
+		for i := 0; i < node.NamedChildCount(); i++ {
+			e.walkGoTypeRefs(node.NamedChild(i), fromID)
+		}
+		return
+	}
+	// Recurse into other nodes (pointer_type, parameter_declaration, etc.)
+	for i := 0; i < node.NamedChildCount(); i++ {
+		e.walkGoTypeRefs(node.NamedChild(i), fromID)
+	}
+}
+
+// goBuiltinType reports whether name is a Go built-in primitive type
+// that should not generate a `references` edge.
+func goBuiltinType(name string) bool {
+	switch name {
+	case "bool", "byte", "complex64", "complex128",
+		"error", "float32", "float64",
+		"int", "int8", "int16", "int32", "int64",
+		"rune", "string",
+		"uint", "uint8", "uint16", "uint32", "uint64", "uintptr",
+		"any", "comparable":
+		return true
+	}
+	return false
 }
 
 // goSignature builds the signature string for a Go function/method node:
