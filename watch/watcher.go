@@ -128,9 +128,9 @@ type Options struct {
 // FileWatcher watches a project root for source-file changes and calls a
 // debounced sync callback.
 type FileWatcher struct {
-	root    string
-	syncFn  SyncFunc
-	opts    Options
+	root     string
+	syncFn   SyncFunc
+	opts     Options
 	debounce time.Duration
 
 	mu          sync.Mutex
@@ -543,7 +543,6 @@ func defaultIsSourceFile(rel string) bool {
 	}
 	return false
 }
-
 
 // Test registry: maps project root → live watcher for IngestEventForTests.
 var (
