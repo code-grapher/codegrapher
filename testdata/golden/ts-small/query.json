@@ -1,0 +1,155 @@
+[
+  {
+    "node": {
+      "id": "class:d704799d2aefd3d2a1b36523104285a1",
+      "kind": "class",
+      "name": "Store",
+      "qualifiedName": "Store",
+      "filePath": "src/store.ts",
+      "language": "typescript",
+      "startLine": 11,
+      "endLine": 28,
+      "startColumn": 7,
+      "endColumn": 1,
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781127971484
+    },
+    "score": 102.40749753184437
+  },
+  {
+    "node": {
+      "id": "file:src/store.ts",
+      "kind": "file",
+      "name": "store.ts",
+      "qualifiedName": "src/store.ts",
+      "filePath": "src/store.ts",
+      "language": "typescript",
+      "startLine": 1,
+      "endLine": 35,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781127971483
+    },
+    "score": 43.376703533567024
+  },
+  {
+    "node": {
+      "id": "method:ee7eba3cd90130d2e3b96c58fdded9eb",
+      "kind": "method",
+      "name": "items",
+      "qualifiedName": "Store::items",
+      "filePath": "src/store.ts",
+      "language": "typescript",
+      "startLine": 12,
+      "endLine": 12,
+      "startColumn": 2,
+      "endColumn": 43,
+      "visibility": "private",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781127971484
+    },
+    "score": 24.234076076068497
+  },
+  {
+    "node": {
+      "id": "method:e77b32544aadebe25bc51acf272621a7",
+      "kind": "method",
+      "name": "size",
+      "qualifiedName": "Store::size",
+      "filePath": "src/store.ts",
+      "language": "typescript",
+      "startLine": 25,
+      "endLine": 27,
+      "startColumn": 2,
+      "endColumn": 3,
+      "signature": "(): number",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781127971484
+    },
+    "score": 24.210339013339315
+  },
+  {
+    "node": {
+      "id": "method:2a78b45f7f72dfb0c66ce42caedaf1de",
+      "kind": "method",
+      "name": "set",
+      "qualifiedName": "Store::set",
+      "filePath": "src/store.ts",
+      "language": "typescript",
+      "startLine": 21,
+      "endLine": 23,
+      "startColumn": 2,
+      "endColumn": 3,
+      "docstring": "Store a value under a key.",
+      "signature": "(key: string, value: string): void",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781127971484
+    },
+    "score": 24.06853469407656
+  },
+  {
+    "node": {
+      "id": "method:085a0ec23522fac1f22bdcb70ec94651",
+      "kind": "method",
+      "name": "get",
+      "qualifiedName": "Store::get",
+      "filePath": "src/store.ts",
+      "language": "typescript",
+      "startLine": 15,
+      "endLine": 18,
+      "startColumn": 2,
+      "endColumn": 3,
+      "docstring": "Get a value by key.",
+      "signature": "(key: string): LookupResult",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781127971484
+    },
+    "score": 24.066713709307752
+  },
+  {
+    "node": {
+      "id": "import:297a7c70612498716cce139b0a71edaf",
+      "kind": "import",
+      "name": "./store",
+      "qualifiedName": "./store",
+      "filePath": "src/cache.ts",
+      "language": "typescript",
+      "startLine": 1,
+      "endLine": 1,
+      "startColumn": 0,
+      "endColumn": 54,
+      "signature": "import { Store, type Entry, describe } from './store';",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781127971478
+    },
+    "score": 12.375958760874873
+  }
+]

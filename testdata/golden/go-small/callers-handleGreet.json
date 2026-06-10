@@ -1,0 +1,11 @@
+{
+  "symbol": "handleGreet",
+  "callers": [
+    {
+      "name": "main",
+      "kind": "function",
+      "filePath": "cmd/app/main.go",
+      "startLine": 11
+    }
+  ]
+}

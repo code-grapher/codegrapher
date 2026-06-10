@@ -1,0 +1,11 @@
+{
+  "symbol": "lookup",
+  "callers": [
+    {
+      "name": "report",
+      "kind": "method",
+      "filePath": "src/cache.ts",
+      "startLine": 23
+    }
+  ]
+}

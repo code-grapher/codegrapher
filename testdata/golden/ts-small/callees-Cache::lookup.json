@@ -1,0 +1,17 @@
+{
+  "symbol": "Cache::lookup",
+  "callees": [
+    {
+      "name": "get",
+      "kind": "method",
+      "filePath": "src/store.ts",
+      "startLine": 15
+    },
+    {
+      "name": "Entry",
+      "kind": "interface",
+      "filePath": "src/store.ts",
+      "startLine": 2
+    }
+  ]
+}

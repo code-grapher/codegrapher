@@ -1,0 +1,68 @@
+{
+  "symbol": "set",
+  "depth": 2,
+  "nodeCount": 10,
+  "edgeCount": 9,
+  "affected": [
+    {
+      "name": "set",
+      "kind": "method",
+      "filePath": "src/store.ts",
+      "startLine": 21
+    },
+    {
+      "name": "warm",
+      "kind": "method",
+      "filePath": "src/cache.ts",
+      "startLine": 16
+    },
+    {
+      "name": "main",
+      "kind": "function",
+      "filePath": "src/main.ts",
+      "startLine": 3
+    },
+    {
+      "name": "Cache",
+      "kind": "class",
+      "filePath": "src/cache.ts",
+      "startLine": 4
+    },
+    {
+      "name": "Store",
+      "kind": "class",
+      "filePath": "src/store.ts",
+      "startLine": 11
+    },
+    {
+      "name": "items",
+      "kind": "method",
+      "filePath": "src/store.ts",
+      "startLine": 12
+    },
+    {
+      "name": "get",
+      "kind": "method",
+      "filePath": "src/store.ts",
+      "startLine": 15
+    },
+    {
+      "name": "lookup",
+      "kind": "method",
+      "filePath": "src/cache.ts",
+      "startLine": 8
+    },
+    {
+      "name": "size",
+      "kind": "method",
+      "filePath": "src/store.ts",
+      "startLine": 25
+    },
+    {
+      "name": "store.ts",
+      "kind": "file",
+      "filePath": "src/store.ts",
+      "startLine": 1
+    }
+  ]
+}

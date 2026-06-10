@@ -1,0 +1,11 @@
+{
+  "symbol": "set",
+  "callers": [
+    {
+      "name": "warm",
+      "kind": "method",
+      "filePath": "src/cache.ts",
+      "startLine": 16
+    }
+  ]
+}

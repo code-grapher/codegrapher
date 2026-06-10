@@ -1,0 +1,20 @@
+[
+  {
+    "path": "cmd/app/main.go",
+    "language": "go",
+    "nodeCount": 9,
+    "size": 731
+  },
+  {
+    "path": "internal/store/cache.go",
+    "language": "go",
+    "nodeCount": 5,
+    "size": 545
+  },
+  {
+    "path": "internal/store/store.go",
+    "language": "go",
+    "nodeCount": 13,
+    "size": 1235
+  }
+]

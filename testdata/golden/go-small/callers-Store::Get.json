@@ -1,0 +1,11 @@
+{
+  "symbol": "Store::Get",
+  "callers": [
+    {
+      "name": "Lookup",
+      "kind": "method",
+      "filePath": "internal/store/cache.go",
+      "startLine": 15
+    }
+  ]
+}

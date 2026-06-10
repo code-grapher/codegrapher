@@ -1,0 +1,38 @@
+{
+  "symbol": "describe",
+  "depth": 2,
+  "nodeCount": 5,
+  "edgeCount": 4,
+  "affected": [
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "src/store.ts",
+      "startLine": 34
+    },
+    {
+      "name": "report",
+      "kind": "method",
+      "filePath": "src/cache.ts",
+      "startLine": 23
+    },
+    {
+      "name": "main",
+      "kind": "function",
+      "filePath": "src/main.ts",
+      "startLine": 3
+    },
+    {
+      "name": "Cache",
+      "kind": "class",
+      "filePath": "src/cache.ts",
+      "startLine": 4
+    },
+    {
+      "name": "store.ts",
+      "kind": "file",
+      "filePath": "src/store.ts",
+      "startLine": 1
+    }
+  ]
+}

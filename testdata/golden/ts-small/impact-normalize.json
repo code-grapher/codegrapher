@@ -1,0 +1,38 @@
+{
+  "symbol": "normalize",
+  "depth": 2,
+  "nodeCount": 5,
+  "edgeCount": 4,
+  "affected": [
+    {
+      "name": "normalize",
+      "kind": "function",
+      "filePath": "src/store.ts",
+      "startLine": 30
+    },
+    {
+      "name": "set",
+      "kind": "method",
+      "filePath": "src/store.ts",
+      "startLine": 21
+    },
+    {
+      "name": "warm",
+      "kind": "method",
+      "filePath": "src/cache.ts",
+      "startLine": 16
+    },
+    {
+      "name": "Store",
+      "kind": "class",
+      "filePath": "src/store.ts",
+      "startLine": 11
+    },
+    {
+      "name": "store.ts",
+      "kind": "file",
+      "filePath": "src/store.ts",
+      "startLine": 1
+    }
+  ]
+}

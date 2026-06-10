@@ -1,0 +1,20 @@
+[
+  {
+    "path": "src/cache.ts",
+    "language": "typescript",
+    "nodeCount": 8,
+    "size": 719
+  },
+  {
+    "path": "src/main.ts",
+    "language": "typescript",
+    "nodeCount": 3,
+    "size": 224
+  },
+  {
+    "path": "src/store.ts",
+    "language": "typescript",
+    "nodeCount": 10,
+    "size": 806
+  }
+]

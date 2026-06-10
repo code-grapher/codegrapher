@@ -1,0 +1,11 @@
+{
+  "symbol": "Lookup",
+  "callers": [
+    {
+      "name": "handleGreet",
+      "kind": "function",
+      "filePath": "cmd/app/main.go",
+      "startLine": 22
+    }
+  ]
+}

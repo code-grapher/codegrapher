@@ -1,0 +1,17 @@
+{
+  "symbol": "handleGreet",
+  "callees": [
+    {
+      "name": "Lookup",
+      "kind": "method",
+      "filePath": "internal/store/cache.go",
+      "startLine": 15
+    },
+    {
+      "name": "Cache",
+      "kind": "struct",
+      "filePath": "internal/store/cache.go",
+      "startLine": 4
+    }
+  ]
+}

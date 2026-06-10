@@ -1,0 +1,11 @@
+{
+  "symbol": "get",
+  "callees": [
+    {
+      "name": "LookupResult",
+      "kind": "type_alias",
+      "filePath": "src/store.ts",
+      "startLine": 8
+    }
+  ]
+}

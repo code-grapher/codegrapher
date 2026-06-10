@@ -1,0 +1,11 @@
+{
+  "symbol": "Set",
+  "callers": [
+    {
+      "name": "Warm",
+      "kind": "method",
+      "filePath": "internal/store/cache.go",
+      "startLine": 24
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "symbol": "get",
+  "callers": [
+    {
+      "name": "lookup",
+      "kind": "method",
+      "filePath": "src/cache.ts",
+      "startLine": 8
+    }
+  ]
+}

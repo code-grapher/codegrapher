@@ -1,0 +1,38 @@
+{
+  "symbol": "normalize",
+  "depth": 2,
+  "nodeCount": 5,
+  "edgeCount": 4,
+  "affected": [
+    {
+      "name": "normalize",
+      "kind": "function",
+      "filePath": "internal/store/store.go",
+      "startLine": 62
+    },
+    {
+      "name": "Set",
+      "kind": "method",
+      "filePath": "internal/store/store.go",
+      "startLine": 40
+    },
+    {
+      "name": "Warm",
+      "kind": "method",
+      "filePath": "internal/store/cache.go",
+      "startLine": 24
+    },
+    {
+      "name": "store.go",
+      "kind": "file",
+      "filePath": "internal/store/store.go",
+      "startLine": 1
+    },
+    {
+      "name": "Store",
+      "kind": "struct",
+      "filePath": "internal/store/store.go",
+      "startLine": 13
+    }
+  ]
+}

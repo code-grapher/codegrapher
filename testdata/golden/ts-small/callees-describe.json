@@ -1,0 +1,11 @@
+{
+  "symbol": "describe",
+  "callees": [
+    {
+      "name": "Entry",
+      "kind": "interface",
+      "filePath": "src/store.ts",
+      "startLine": 2
+    }
+  ]
+}

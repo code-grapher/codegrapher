@@ -1,0 +1,11 @@
+{
+  "symbol": "Set",
+  "callees": [
+    {
+      "name": "normalize",
+      "kind": "function",
+      "filePath": "internal/store/store.go",
+      "startLine": 62
+    }
+  ]
+}

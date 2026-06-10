@@ -1,0 +1,26 @@
+{
+  "symbol": "handleGreet",
+  "depth": 2,
+  "nodeCount": 3,
+  "edgeCount": 2,
+  "affected": [
+    {
+      "name": "handleGreet",
+      "kind": "function",
+      "filePath": "cmd/app/main.go",
+      "startLine": 22
+    },
+    {
+      "name": "main",
+      "kind": "function",
+      "filePath": "cmd/app/main.go",
+      "startLine": 11
+    },
+    {
+      "name": "main.go",
+      "kind": "file",
+      "filePath": "cmd/app/main.go",
+      "startLine": 1
+    }
+  ]
+}

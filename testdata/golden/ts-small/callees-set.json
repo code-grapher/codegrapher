@@ -1,0 +1,11 @@
+{
+  "symbol": "set",
+  "callees": [
+    {
+      "name": "normalize",
+      "kind": "function",
+      "filePath": "src/store.ts",
+      "startLine": 30
+    }
+  ]
+}
