@@ -246,8 +246,3 @@ func (e *extractor) createNode(kind model.NodeKind, name string, n *tsparse.Node
 	}
 	return &e.nodes[len(e.nodes)-1]
 }
-
-// nodeText returns the source text of n (convenience wrapper).
-func (e *extractor) nodeText(n *tsparse.Node) string {
-	return n.Text()
-}

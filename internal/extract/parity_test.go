@@ -330,29 +330,6 @@ func TestExtractFileNode(t *testing.T) {
 	}
 }
 
-// printNodeDiff is a helper used in debugging.
-func printNodeDiff(t *testing.T, got []model.Node, golden []goldenNode) {
-	t.Helper()
-	gotByID := make(map[string]bool)
-	for _, n := range got {
-		gotByID[n.ID] = true
-	}
-	goldenByID := make(map[string]bool)
-	for _, n := range golden {
-		goldenByID[n.ID] = true
-	}
-	for _, n := range golden {
-		if !gotByID[n.ID] {
-			t.Logf("MISSING: %s %s %s L%d", n.Kind, n.Name, n.FilePath, n.StartLine)
-		}
-	}
-	for _, n := range got {
-		if !goldenByID[n.ID] {
-			t.Logf("EXTRA: %s %s %s L%d", n.Kind, n.Name, n.FilePath, n.StartLine)
-		}
-	}
-}
-
 // Suppress "imported and not used" errors.
 var (
 	_ = fmt.Sprintf
