@@ -1,0 +1,361 @@
+package extract_test
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/specscore/codegrapher/internal/extract"
+	"github.com/specscore/codegrapher/model"
+)
+
+const repoRoot = "../.."
+
+// goldenNode mirrors the SQLite JSON output for comparison.
+type goldenNode struct {
+	ID             string  `json:"id"`
+	Kind           string  `json:"kind"`
+	Name           string  `json:"name"`
+	QualifiedName  string  `json:"qualified_name"`
+	FilePath       string  `json:"file_path"`
+	Language       string  `json:"language"`
+	StartLine      int     `json:"start_line"`
+	EndLine        int     `json:"end_line"`
+	StartColumn    int     `json:"start_column"`
+	EndColumn      int     `json:"end_column"`
+	Docstring      *string `json:"docstring"`
+	Signature      *string `json:"signature"`
+	Visibility     *string `json:"visibility"`
+	IsExported     int     `json:"is_exported"`
+	IsAsync        int     `json:"is_async"`
+	IsStatic       int     `json:"is_static"`
+	IsAbstract     int     `json:"is_abstract"`
+	Decorators     *string `json:"decorators"`
+	TypeParameters *string `json:"type_parameters"`
+	ReturnType     *string `json:"return_type"`
+}
+
+type goldenEdge struct {
+	Source string `json:"source"`
+	Target string `json:"target"`
+	Kind   string `json:"kind"`
+}
+
+// TestParityGoSmall runs our extractor over all files in testdata/fixtures/go-small
+// and compares node IDs, kinds, names, and lines against the golden.
+func TestParityGoSmall(t *testing.T) {
+	testParity(t, "go-small")
+}
+
+// TestParityTsSmall runs our extractor over all files in testdata/fixtures/ts-small
+// and compares against the golden.
+func TestParityTsSmall(t *testing.T) {
+	testParity(t, "ts-small")
+}
+
+func testParity(t *testing.T, fixture string) {
+	t.Helper()
+
+	fixtureDir := filepath.Join(repoRoot, "testdata", "fixtures", fixture)
+	goldenDir := filepath.Join(repoRoot, "testdata", "golden", fixture)
+
+	// Load golden nodes
+	nodesFile := filepath.Join(goldenDir, "extraction-nodes.json")
+	nodesData, err := os.ReadFile(nodesFile)
+	if err != nil {
+		t.Fatalf("read golden nodes: %v", err)
+	}
+	var goldenNodes []goldenNode
+	if err := json.Unmarshal(nodesData, &goldenNodes); err != nil {
+		t.Fatalf("parse golden nodes: %v", err)
+	}
+
+	// Load golden contains edges
+	containsFile := filepath.Join(goldenDir, "extraction-contains.json")
+	containsData, err := os.ReadFile(containsFile)
+	if err != nil {
+		t.Fatalf("read golden contains: %v", err)
+	}
+	var goldenContains []goldenEdge
+	if err := json.Unmarshal(containsData, &goldenContains); err != nil {
+		t.Fatalf("parse golden contains: %v", err)
+	}
+
+	// Collect all source files in fixture
+	var sourceFiles []string
+	err = filepath.Walk(fixtureDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return err
+		}
+		lang := extract.DetectLanguage(path)
+		if lang != model.LangUnknown {
+			sourceFiles = append(sourceFiles, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk fixture: %v", err)
+	}
+
+	// Extract all files
+	var allNodes []model.Node
+	var allEdges []model.Edge
+
+	for _, absPath := range sourceFiles {
+		// Compute repo-relative path (the format used in goldens)
+		relPath, err := filepath.Rel(fixtureDir, absPath)
+		if err != nil {
+			t.Fatalf("rel path: %v", err)
+		}
+		relPath = filepath.ToSlash(relPath)
+
+		content, err := os.ReadFile(absPath)
+		if err != nil {
+			t.Fatalf("read %s: %v", absPath, err)
+		}
+
+		lang := extract.DetectLanguage(absPath)
+		result, err := extract.ExtractFile(relPath, content, lang)
+		if err != nil {
+			t.Fatalf("extract %s: %v", relPath, err)
+		}
+		allNodes = append(allNodes, result.Nodes...)
+		allEdges = append(allEdges, result.Edges...)
+		for _, e := range result.Errors {
+			t.Logf("extraction error in %s: %s", relPath, e.Message)
+		}
+	}
+
+	// Build maps for lookup
+	gotByID := make(map[string]model.Node, len(allNodes))
+	for _, n := range allNodes {
+		gotByID[n.ID] = n
+	}
+
+	goldenByID := make(map[string]goldenNode, len(goldenNodes))
+	for _, n := range goldenNodes {
+		goldenByID[n.ID] = n
+	}
+
+	// --- Node parity check ---
+	t.Run("node_count", func(t *testing.T) {
+		if len(allNodes) != len(goldenNodes) {
+			// Print differences for debugging
+			for _, g := range goldenNodes {
+				if _, ok := gotByID[g.ID]; !ok {
+					t.Logf("MISSING node: %s %s %s L%d", g.Kind, g.Name, g.FilePath, g.StartLine)
+				}
+			}
+			for _, n := range allNodes {
+				if _, ok := goldenByID[n.ID]; !ok {
+					t.Logf("EXTRA node: %s %s %s L%d", n.Kind, n.Name, n.FilePath, n.StartLine)
+				}
+			}
+			t.Errorf("got %d nodes, want %d", len(allNodes), len(goldenNodes))
+		}
+	})
+
+	t.Run("node_ids", func(t *testing.T) {
+		for _, g := range goldenNodes {
+			got, ok := gotByID[g.ID]
+			if !ok {
+				t.Errorf("missing node ID %s (kind=%s name=%s file=%s L%d)",
+					g.ID, g.Kind, g.Name, g.FilePath, g.StartLine)
+				continue
+			}
+			// Check key fields
+			if string(got.Kind) != g.Kind {
+				t.Errorf("node %s: kind got=%s want=%s", g.ID, got.Kind, g.Kind)
+			}
+			if got.Name != g.Name {
+				t.Errorf("node %s: name got=%q want=%q", g.ID, got.Name, g.Name)
+			}
+			if got.StartLine != g.StartLine {
+				t.Errorf("node %s (%s %s): startLine got=%d want=%d", g.ID, g.Kind, g.Name, got.StartLine, g.StartLine)
+			}
+			if got.EndLine != g.EndLine {
+				t.Errorf("node %s (%s %s): endLine got=%d want=%d", g.ID, g.Kind, g.Name, got.EndLine, g.EndLine)
+			}
+			if got.QualifiedName != g.QualifiedName {
+				t.Errorf("node %s (%s %s): qualifiedName got=%q want=%q", g.ID, g.Kind, g.Name, got.QualifiedName, g.QualifiedName)
+			}
+			if got.FilePath != g.FilePath {
+				t.Errorf("node %s: filePath got=%q want=%q", g.ID, got.FilePath, g.FilePath)
+			}
+			// isExported
+			gotExported := 0
+			if got.IsExported {
+				gotExported = 1
+			}
+			if gotExported != g.IsExported {
+				t.Errorf("node %s (%s %s): isExported got=%d want=%d", g.ID, g.Kind, g.Name, gotExported, g.IsExported)
+			}
+			// signature
+			if g.Signature != nil && (got.Signature != *g.Signature) {
+				t.Errorf("node %s (%s %s): signature got=%q want=%q", g.ID, g.Kind, g.Name, got.Signature, *g.Signature)
+			}
+			if g.Signature == nil && got.Signature != "" {
+				t.Errorf("node %s (%s %s): signature got=%q want=null", g.ID, g.Kind, g.Name, got.Signature)
+			}
+			// docstring
+			if g.Docstring != nil && got.Docstring != *g.Docstring {
+				t.Errorf("node %s (%s %s): docstring got=%q want=%q", g.ID, g.Kind, g.Name, got.Docstring, *g.Docstring)
+			}
+			if g.Docstring == nil && got.Docstring != "" {
+				t.Errorf("node %s (%s %s): docstring got=%q want=null", g.ID, g.Kind, g.Name, got.Docstring)
+			}
+		}
+	})
+
+	t.Run("extra_nodes", func(t *testing.T) {
+		for _, n := range allNodes {
+			if _, ok := goldenByID[n.ID]; !ok {
+				t.Errorf("unexpected node ID %s (kind=%s name=%s file=%s L%d)",
+					n.ID, n.Kind, n.Name, n.FilePath, n.StartLine)
+			}
+		}
+	})
+
+	// --- Contains edge parity check ---
+	t.Run("contains_edges", func(t *testing.T) {
+		gotContains := make(map[string]bool)
+		for _, e := range allEdges {
+			if e.Kind == model.EdgeContains {
+				key := e.Source + "->" + e.Target
+				gotContains[key] = true
+			}
+		}
+
+		for _, g := range goldenContains {
+			key := g.Source + "->" + g.Target
+			if !gotContains[key] {
+				t.Errorf("missing contains edge: %s → %s", g.Source, g.Target)
+			}
+		}
+
+		// Check for extra contains edges
+		goldenContainsSet := make(map[string]bool)
+		for _, g := range goldenContains {
+			goldenContainsSet[g.Source+"->"+g.Target] = true
+		}
+		for _, e := range allEdges {
+			if e.Kind != model.EdgeContains {
+				continue
+			}
+			key := e.Source + "->" + e.Target
+			if !goldenContainsSet[key] {
+				t.Errorf("extra contains edge: %s → %s", e.Source, e.Target)
+			}
+		}
+	})
+}
+
+// TestExtractFileDetectLanguage tests language detection.
+func TestExtractFileDetectLanguage(t *testing.T) {
+	cases := []struct {
+		path string
+		want model.Language
+	}{
+		{"foo.go", model.LangGo},
+		{"foo.ts", model.LangTypeScript},
+		{"foo.tsx", model.LangTSX},
+		{"foo.js", model.LangJavaScript},
+		{"foo.jsx", model.LangJSX},
+		{"foo.py", model.LangUnknown},
+		{"foo.rb", model.LangUnknown},
+		{"README.md", model.LangUnknown},
+	}
+	for _, c := range cases {
+		got := extract.DetectLanguage(c.path)
+		if got != c.want {
+			t.Errorf("DetectLanguage(%q) = %q, want %q", c.path, got, c.want)
+		}
+	}
+}
+
+// TestIsGeneratedFile tests generated file detection.
+func TestIsGeneratedFile(t *testing.T) {
+	generated := []string{
+		"api/user.pb.go",
+		"api/user_grpc.pb.go",
+		"mock_service.go", // ^mock_[^/]+\.go$ requires no directory prefix
+		"service_mock.go",
+		"schema.generated.ts",
+		"types.gen.js",
+	}
+	notGenerated := []string{
+		"cmd/main.go",
+		"internal/store/store.go",
+		"src/app.ts",
+		"src/cache.ts",
+	}
+	for _, p := range generated {
+		if !extract.IsGeneratedFile(p) {
+			t.Errorf("IsGeneratedFile(%q) = false, want true", p)
+		}
+	}
+	for _, p := range notGenerated {
+		if extract.IsGeneratedFile(p) {
+			t.Errorf("IsGeneratedFile(%q) = true, want false", p)
+		}
+	}
+}
+
+// TestExtractFileNode tests that ExtractFile always emits a file node.
+func TestExtractFileNode(t *testing.T) {
+	content := []byte("package main\n\nfunc main() {}\n")
+	result, err := extract.ExtractFile("cmd/main.go", content, model.LangGo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Nodes) == 0 {
+		t.Fatal("expected at least 1 node (file node)")
+	}
+	fileNode := result.Nodes[0]
+	if fileNode.Kind != model.KindFile {
+		t.Errorf("first node kind = %q, want %q", fileNode.Kind, model.KindFile)
+	}
+	if fileNode.ID != "file:cmd/main.go" {
+		t.Errorf("file node ID = %q, want file:cmd/main.go", fileNode.ID)
+	}
+	if fileNode.Name != "main.go" {
+		t.Errorf("file node name = %q, want main.go", fileNode.Name)
+	}
+	if fileNode.QualifiedName != "cmd/main.go" {
+		t.Errorf("file node qualifiedName = %q, want cmd/main.go", fileNode.QualifiedName)
+	}
+}
+
+// printNodeDiff is a helper used in debugging.
+func printNodeDiff(t *testing.T, got []model.Node, golden []goldenNode) {
+	t.Helper()
+	gotByID := make(map[string]bool)
+	for _, n := range got {
+		gotByID[n.ID] = true
+	}
+	goldenByID := make(map[string]bool)
+	for _, n := range golden {
+		goldenByID[n.ID] = true
+	}
+	for _, n := range golden {
+		if !gotByID[n.ID] {
+			t.Logf("MISSING: %s %s %s L%d", n.Kind, n.Name, n.FilePath, n.StartLine)
+		}
+	}
+	for _, n := range got {
+		if !goldenByID[n.ID] {
+			t.Logf("EXTRA: %s %s %s L%d", n.Kind, n.Name, n.FilePath, n.StartLine)
+		}
+	}
+}
+
+// Suppress "imported and not used" errors.
+var (
+	_ = fmt.Sprintf
+	_ = strings.TrimSpace
+	_ = time.Now
+)
