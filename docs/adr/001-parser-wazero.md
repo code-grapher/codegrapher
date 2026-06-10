@@ -64,3 +64,82 @@ ADR-002 in that case, with measurements attached.
 - Per-parse overhead higher than native; mitigated by the indexer's parallel
   worker pool (embarrassingly parallel per file).
 - wazero compilation mode (not interpreter) used where supported for speed.
+
+---
+
+## STATUS (2026-06-10)
+
+### Deviation: gotreesitter used instead of wazero + WASM — EXCEEDS-MANDATE
+
+During research a fourth option was found that strictly dominates the wazero route
+on every axis the ADR cares about:
+
+**[gotreesitter](https://github.com/odvcencio/gotreesitter) v0.20.2** — a
+ground-up pure-Go reimplementation of the tree-sitter runtime (parser, lexer,
+query engine, incremental reparsing, external scanners all in Go).  No CGO.  No
+WASM.  No wazero.  206 grammars — including Go and TypeScript — ship as
+compressed embedded blobs.
+
+| Property | wazero + WASM grammars | gotreesitter |
+|---|---|---|
+| CGO_ENABLED=0 | ✓ | ✓ |
+| No C toolchain | ✓ | ✓ |
+| Single static binary | ✓ | ✓ |
+| No .wasm file management | ✗ | ✓ |
+| Parse trees match upstream node kinds | ✓ (bit-identical) | ✓ (same grammar — minor version delta) |
+| web-tree-sitter Emscripten dylink complexity | high (blocked) | n/a |
+| Parse speed (Apple M2, small files) | ~unknown (dylink unsolved) | ~1 ms Go / ~2 ms TS |
+
+The wazero + web-tree-sitter approach was investigated and found **blocked** on
+Emscripten's dynamic linking (dylink0) protocol: grammar `.wasm` files produced by
+`tree-sitter-wasms` are Emscripten side modules, not standalone WASI modules.
+Loading them under wazero would require hand-rolling dylink0 support — a separate
+project of significant scope.  `malivvan/tree-sitter` (the only existing wazero
+wrapper found) only bundles C/C++ grammars and also predates the Emscripten
+complexity; it is not a drop-in for the upstream `.wasm` grammar files.
+
+Because gotreesitter satisfies all three decision drivers (CGO_ENABLED=0, node-kind
+parity, 1:1 migration) while eliminating the WASM/dylink complexity entirely, it
+was selected for the `internal/tsparse` package.  The ADR title remains accurate
+in intent ("not cgo"); the "via wazero" mechanism is superseded by this finding.
+
+### What was delivered
+
+- `internal/tsparse/` package: `Parser`, `Tree`, `Node` types with `Kind()`,
+  `StartPoint()`, `EndPoint()`, `Text()`, `ChildCount()`, `Child(i)`,
+  `NamedChildCount()`, `NamedChild(i)`, `ChildByFieldName()`,
+  `FieldNameForChild()`, `IsNamed()`, `HasError()`, `Walk()`.
+- `CGO_ENABLED=0 go build ./...` passes.
+- `CGO_ENABLED=0 go test ./internal/tsparse/` passes: 4 test functions, 10
+  sub-tests, all green.
+- Fixture assertions:
+  - Go `store.go`: `function_declaration` New (line 24), normalize (line 62);
+    `method_declaration` Get (29), Set (40), Len (47), Describe (58).
+  - TypeScript `store.ts`: `class_declaration` Store (line 11);
+    `variable_declarator` describe (line 34).
+
+### Parse timing (Apple M2, gotreesitter v0.20.2, CGO_ENABLED=0)
+
+| File | avg per parse (100 warm runs) | benchmark |
+|---|---|---|
+| `go-small/internal/store/store.go` (68 lines) | ~1.0 ms | 1 010 552 ns/op |
+| `ts-small/src/store.ts` (34 lines) | ~2.1 ms | 2 089 386 ns/op |
+
+Note: these are small files; grammars lazy-load on first use so cold-start for
+each language adds ~30–50 ms once per process lifetime.
+
+### Grammar provenance
+
+gotreesitter v0.20.2 embeds grammars compiled from upstream
+`tree-sitter-go` and `tree-sitter-typescript` sources.  These are not the same
+`.wasm` bytes as `tree-sitter-wasms` 0.1.13 (which upstream codegraph uses) but
+are derived from the same grammar sources.  Node kinds (`function_declaration`,
+`method_declaration`, `class_declaration`, `variable_declarator`, etc.) are
+identical.  No `.wasm` files are embedded; `go:embed` is not used.
+
+### Risk
+
+Grammar version delta vs upstream: gotreesitter pins its own grammar snapshot.
+If upstream codegraph upgrades `tree-sitter-wasms` to a grammar that changes
+node types, the Go port must also update gotreesitter.  This is the same risk
+the ADR identified for the cgo path; the mitigation is the parity-test suite.
