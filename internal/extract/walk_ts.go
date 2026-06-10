@@ -157,6 +157,9 @@ func (e *extractor) extractTSFunction(node *tsparse.Node, nameOverride string) {
 		return
 	}
 
+	// Emit references for return type and parameter type annotations.
+	e.extractTSTypeAnnotationRefs(node, fn.ID)
+
 	body := resolveTSBody(node)
 	if body != nil {
 		e.nodeStack = append(e.nodeStack, fn.ID)
@@ -244,6 +247,9 @@ func (e *extractor) extractTSMethod(node *tsparse.Node) {
 	if mn == nil {
 		return
 	}
+
+	// Emit references for return type and parameter type annotations.
+	e.extractTSTypeAnnotationRefs(node, mn.ID)
 
 	body := resolveTSBody(node)
 	if body != nil {
@@ -382,10 +388,15 @@ func (e *extractor) extractTSTypeAlias(node *tsparse.Node) {
 	}
 	isExported := e.isTSExported(node)
 
-	e.createNode(model.KindTypeAlias, name, node, nodeExtra{
+	ta := e.createNode(model.KindTypeAlias, name, node, nodeExtra{
 		docstring:  docstring,
 		isExported: isExported,
 	})
+	if ta == nil {
+		return
+	}
+	// Emit references for the type alias body (e.g. type Foo = Bar | Baz).
+	e.extractTSTypeAnnotationRefs(node, ta.ID)
 }
 
 // extractTSImport handles import_statement.
@@ -735,6 +746,84 @@ func (e *extractor) emitTSReExportRefs(node *tsparse.Node, fromNodeID string) {
 			})
 		}
 	}
+}
+
+// tsBuiltinTypes is the set of TypeScript built-in type names that should not
+// be emitted as unresolved references.
+var tsBuiltinTypes = map[string]bool{
+	"string": true, "number": true, "boolean": true, "void": true,
+	"undefined": true, "any": true, "never": true, "unknown": true,
+	"null": true, "object": true, "bigint": true, "symbol": true,
+	"Array": true, "Record": true, "Map": true, "Set": true,
+	"Promise": true, "Error": true, "Object": true, "Function": true,
+	"Date": true, "RegExp": true, "Symbol": true, "Iterator": true,
+	"Partial": true, "Required": true, "Readonly": true, "Pick": true,
+	"Omit": true, "Exclude": true, "Extract": true, "NonNullable": true,
+	"ReturnType": true, "InstanceType": true, "Parameters": true,
+	"ConstructorParameters": true, "ThisType": true, "Awaited": true,
+}
+
+// extractTSTypeAnnotationRefs emits references unresolved refs for type annotations
+// on a function/method node (return type and parameter types). Also handles
+// type_alias_declaration's value field.
+// Mirrors upstream's emitTypeRefs logic in the TS extractor.
+func (e *extractor) extractTSTypeAnnotationRefs(node *tsparse.Node, fromID string) {
+	// Return type field
+	retType := node.ChildByFieldName("return_type")
+	if retType != nil {
+		e.collectTSTypeRefs(retType, fromID)
+	}
+
+	// Parameter type annotations
+	params := node.ChildByFieldName("parameters")
+	if params != nil {
+		for i := 0; i < params.NamedChildCount(); i++ {
+			param := params.NamedChild(i)
+			if param == nil {
+				continue
+			}
+			ann := param.ChildByFieldName("type")
+			if ann == nil {
+				// Some parameter kinds have type_annotation as a child with no field
+				for j := 0; j < param.NamedChildCount(); j++ {
+					ch := param.NamedChild(j)
+					if ch != nil && ch.Kind() == "type_annotation" {
+						e.collectTSTypeRefs(ch, fromID)
+					}
+				}
+			} else {
+				e.collectTSTypeRefs(ann, fromID)
+			}
+		}
+	}
+
+	// Type alias value: type Foo = Bar | Baz
+	if node.Kind() == "type_alias_declaration" {
+		val := node.ChildByFieldName("value")
+		if val != nil {
+			e.collectTSTypeRefs(val, fromID)
+		}
+	}
+}
+
+// collectTSTypeRefs walks a type node and emits references for each type_identifier found.
+func (e *extractor) collectTSTypeRefs(typeNode *tsparse.Node, fromID string) {
+	tsparse.Walk(typeNode, func(n *tsparse.Node) {
+		if n.Kind() != "type_identifier" {
+			return
+		}
+		name := n.Text()
+		if name == "" || tsBuiltinTypes[name] {
+			return
+		}
+		e.unresolvedRefs = append(e.unresolvedRefs, model.UnresolvedReference{
+			FromNodeID:    fromID,
+			ReferenceName: name,
+			ReferenceKind: model.EdgeReferences,
+			Line:          int(n.StartPoint().Row) + 1,
+			Column:        int(n.StartPoint().Column),
+		})
+	})
 }
 
 // tsSignature builds the signature for a TS function/method.

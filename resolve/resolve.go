@@ -441,12 +441,89 @@ func resolveGoBareName(ref model.UnresolvedReference, s *store.Store, name strin
 // ──────────────────────────────────────────────────────────────────────────────
 
 // resolveGenericRef performs a simple name-based lookup for non-Go refs.
+// Handles dotted calls like "cache.warm" by finding methods named "warm" in
+// same-language same-file context, mirroring upstream's matchMethodCall strategy.
 func resolveGenericRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
-	candidates, err := s.GetNodesByName(ref.ReferenceName)
+	name := ref.ReferenceName
+
+	// Dotted call: "obj.method" or "ns.Symbol" — try method resolution first.
+	if dotIdx := strings.Index(name, "."); dotIdx > 0 {
+		symbol := name[dotIdx+1:]
+		if symbol != "" && !strings.ContainsAny(symbol, "./") {
+			edge := resolveDottedRef(ref, s, symbol)
+			if edge != nil {
+				return edge
+			}
+		}
+		// For qualified names that couldn't be resolved by method lookup, bail.
+		// Don't fall through to bare-name lookup with the full dotted name.
+		return nil
+	}
+
+	candidates, err := s.GetNodesByName(name)
 	if err != nil || len(candidates) == 0 {
 		return nil
 	}
 	target := pickBestNode(candidates, ref.FilePath)
+	if target == nil {
+		return nil
+	}
+	kind := ref.ReferenceKind
+	// Promote calls to instantiates if target is a class/struct.
+	if kind == model.EdgeCalls && (target.Kind == model.KindClass || target.Kind == model.KindStruct) {
+		kind = model.EdgeInstantiates
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   kind,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolveDottedRef resolves a dotted "receiver.method" call by finding methods
+// named `symbol` that belong to a class matching the capitalized receiver name
+// or any same-language method with that exact name (if unique). Mirrors upstream
+// matchMethodCall strategy 2 and 3.
+func resolveDottedRef(ref model.UnresolvedReference, s *store.Store, symbol string) *model.Edge {
+	candidates, err := s.GetNodesByName(symbol)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+
+	// Filter to same-language method/function candidates.
+	var langMatches []model.Node
+	for _, n := range candidates {
+		if n.Language == ref.Language && (n.Kind == model.KindMethod || n.Kind == model.KindFunction) {
+			langMatches = append(langMatches, n)
+		}
+	}
+	if len(langMatches) == 0 {
+		// Fallback: any same-language node.
+		for _, n := range candidates {
+			if n.Language == ref.Language {
+				langMatches = append(langMatches, n)
+			}
+		}
+	}
+	if len(langMatches) == 0 {
+		return nil
+	}
+
+	// If only one candidate, use it (high confidence).
+	if len(langMatches) == 1 {
+		return &model.Edge{
+			Source: ref.FromNodeID,
+			Target: langMatches[0].ID,
+			Kind:   ref.ReferenceKind,
+			Line:   ref.Line,
+			Column: ref.Column,
+		}
+	}
+
+	// Multiple candidates: pick best by proximity.
+	target := pickBestNode(langMatches, ref.FilePath)
 	if target == nil {
 		return nil
 	}
