@@ -22,7 +22,7 @@ Reads: nodes.ingr, edges.ingr, files.ingr, project_metadata.ingr
 The existing database is replaced. Run 'codegrapher sync' afterward
 to reconcile any drift between the snapshot and the working tree.
 
-Default input directory: <project-root>/ingitdb/codegrapher/
+Default input directory: <project-root>/codegrapher/
 Use --in to override.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

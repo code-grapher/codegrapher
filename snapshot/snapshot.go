@@ -23,7 +23,7 @@ import (
 
 // DefaultSnapshotDir is the default output/input directory for snapshots,
 // relative to the project root (the path passed to export/import).
-const DefaultSnapshotDir = "ingitdb/codegrapher"
+const DefaultSnapshotDir = "codegrapher"
 
 // Export writes INGR snapshot files for the index at projectRoot to outDir.
 // outDir is created if it does not exist.

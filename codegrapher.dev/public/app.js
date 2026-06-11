@@ -143,7 +143,7 @@ function mountViewer(route) {
 async function loadViewer(route, qInput) {
   const { forge, org, repo, filePath, q } = route;
   const rawBase = `https://raw.githubusercontent.com/${org}/${repo}/HEAD`;
-  const snapshotUrl = `${rawBase}/ingitdb/codegrapher/files.ingr`;
+  const snapshotUrl = `${rawBase}/codegrapher/files.ingr`;
 
   let filesData;
   try {
@@ -378,8 +378,8 @@ function renderNoSnapshot(org, repo) {
       <div class="viewer-no-snapshot">
         <p><strong>${escapeHtml(org)}/${escapeHtml(repo)}</strong> has no CodeGrapher snapshot yet.</p>
         <p>To add one, run:</p>
-        <pre class="no-snapshot-cmd">codegraph init &amp;&amp; codegraph export\ngit add ingitdb/ &amp;&amp; git commit -m "chore: add codegrapher snapshot"</pre>
-        <p class="viewer-hint">The snapshot is fetched from <code>ingitdb/codegrapher/files.ingr</code> in the repo.</p>
+        <pre class="no-snapshot-cmd">codegrapher init &amp;&amp; codegrapher export\ngit add codegrapher/ &amp;&amp; git commit -m "chore: add codegrapher snapshot"</pre>
+        <p class="viewer-hint">The snapshot is fetched from <code>codegrapher/files.ingr</code> in the repo.</p>
       </div>
     `;
   }

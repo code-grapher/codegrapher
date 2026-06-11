@@ -29,7 +29,7 @@ codegrapher.dev/
 | URL pattern | Behaviour |
 |---|---|
 | `/` | Landing page (static) |
-| `/github.com/{org}/{repo}` | Repo tree viewer — loads `ingitdb/codegrapher/files.ingr` |
+| `/github.com/{org}/{repo}` | Repo tree viewer — loads `codegrapher/files.ingr` |
 | `/github.com/{org}/{repo}/{path…}` | File viewer — fetches raw file content |
 | `?q={pattern}` | Filters tree (substring or `*` glob); synced to URL via `history.replaceState` |
 
@@ -43,7 +43,7 @@ reads `location.pathname` on load and dispatches to viewer or landing.
 ## Data contract
 
 The viewer fetches:
-- **Tree:** `https://raw.githubusercontent.com/{org}/{repo}/HEAD/ingitdb/codegrapher/files.ingr`
+- **Tree:** `https://raw.githubusercontent.com/{org}/{repo}/HEAD/codegrapher/files.ingr`
   Parsed client-side with the inline INGR parser to build the directory tree.
 - **File content:** `https://raw.githubusercontent.com/{org}/{repo}/HEAD/{path}`
   Fetched on demand and rendered in a dark code surface with line numbers.
