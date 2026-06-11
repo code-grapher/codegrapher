@@ -62,32 +62,10 @@ var defaultIgnoreDirs = map[string]bool{
 	".cache": true,
 }
 
-// defaultIgnoreDirGlobs are dir-name glob patterns beyond the literal set
-// (the extra globs in DEFAULT_IGNORE_PATTERNS).
-var defaultIgnoreDirGlobs = []*regexp.Regexp{
-	regexp.MustCompile(`^.*\.egg-info$`), // Python packaging metadata
-	regexp.MustCompile(`^cmake-build-.*$`),
-	regexp.MustCompile(`^bazel-.*$`),
-}
-
 // IsSourceFile reports whether a project-relative path has a supported source
 // extension (Go / TypeScript / TSX / JavaScript / JSX in this port).
 func IsSourceFile(relPath string) bool {
 	return extract.DetectLanguage(relPath) != model.LangUnknown
-}
-
-// isIgnoredDirName reports whether a single directory name matches the
-// built-in default ignore set.
-func isIgnoredDirName(name string) bool {
-	if defaultIgnoreDirs[name] {
-		return true
-	}
-	for _, re := range defaultIgnoreDirGlobs {
-		if re.MatchString(name) {
-			return true
-		}
-	}
-	return false
 }
 
 // --- minimal gitignore matcher ----------------------------------------------
