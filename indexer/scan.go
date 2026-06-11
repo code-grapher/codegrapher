@@ -36,9 +36,9 @@ var defaultIgnoreDirs = map[string]bool{
 	"coverage": true, ".nyc_output": true,
 	// Python
 	"__pycache__": true, "__pypackages__": true, ".venv": true, "venv": true, ".pixi": true,
-	".pdm-build": true,
+	".pdm-build":  true,
 	".mypy_cache": true, ".pytest_cache": true, ".ruff_cache": true, ".tox": true, ".nox": true,
-	".hypothesis": true,
+	".hypothesis":        true,
 	".ipynb_checkpoints": true, ".eggs": true,
 	// Rust / JVM (Maven, Gradle, Scala)
 	"target": true, ".gradle": true,

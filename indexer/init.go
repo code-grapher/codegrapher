@@ -1,7 +1,6 @@
 package indexer
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/specscore/codegrapher/internal/extract"
-	"github.com/specscore/codegrapher/lock"
 	"github.com/specscore/codegrapher/model"
 	"github.com/specscore/codegrapher/resolve"
 	"github.com/specscore/codegrapher/store"
@@ -278,9 +276,4 @@ func hasSevereError(errs []model.ExtractionError) bool {
 		}
 	}
 	return false
-}
-
-// isLockUnavailable reports whether err is the cross-process lock conflict.
-func isLockUnavailable(err error) bool {
-	return errors.Is(err, lock.ErrLockUnavailable)
 }

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/specscore/codegrapher/model"
 	"github.com/specscore/codegrapher/store"
@@ -398,5 +399,107 @@ func TestGoldenInit(t *testing.T) {
 
 			assertGoldenState(t, idx.Store(), goldenDir, fixtureCopy)
 		})
+	}
+}
+
+// TestGoldenSyncRoundTrip is the incremental-correctness proof: modify a
+// fixture file → Sync reflects the change (new node, old nodes replaced,
+// edges re-resolved, hash updated) → revert → Sync restores the exact
+// golden DB state.
+func TestGoldenSyncRoundTrip(t *testing.T) {
+	root := repoRootDir(t)
+	fixtureCopy := copyFixture(t, filepath.Join(root, "testdata", "fixtures", "go-small"))
+	goldenDir := filepath.Join(root, "testdata", "golden", "go-small")
+
+	idx, res, err := Init(fixtureCopy, Options{})
+	if err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	defer idx.Close()
+	if !res.Success {
+		t.Fatalf("Init result: %+v", res)
+	}
+	assertGoldenState(t, idx.Store(), goldenDir, fixtureCopy)
+
+	// Modify cmd/app/main.go: add a function. main.go has only outgoing
+	// cross-file edges, so a sync of it alone re-resolves everything it
+	// touches — the same property upstream's changed-file-scoped resolution
+	// relies on.
+	target := filepath.Join(fixtureCopy, "cmd", "app", "main.go")
+	original, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	origFi, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	modified := append(append([]byte{}, original...),
+		[]byte("\nfunc addedBySync() string { return \"added\" }\n")...)
+	backdate(t, target) // defeat the same-millisecond (size, mtime) blind spot
+	if err := os.WriteFile(target, modified, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sres := idx.Sync(Options{})
+	if sres.FilesModified != 1 {
+		t.Fatalf("modify sync: FilesModified = %d, want 1 (%+v)", sres.FilesModified, sres)
+	}
+
+	// New node present.
+	added, err := idx.Store().GetNodesByName("addedBySync")
+	if err != nil || len(added) != 1 {
+		t.Fatalf("addedBySync nodes = %d (%v), want 1", len(added), err)
+	}
+	// File hash updated.
+	rec, err := idx.Store().GetFileByPath("cmd/app/main.go")
+	if err != nil || rec == nil {
+		t.Fatalf("file record: %v", err)
+	}
+	if rec.ContentHash != HashContent(modified) {
+		t.Error("file hash not updated after modify sync")
+	}
+	// Old nodes replaced, edges re-resolved: main's call edges still resolve.
+	mains, err := idx.Store().GetNodesByName("main")
+	if err != nil || len(mains) != 1 {
+		t.Fatalf("main nodes = %d (%v)", len(mains), err)
+	}
+	edges, err := idx.Store().GetOutgoingEdges(mains[0].ID, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	for _, e := range edges {
+		if e.Kind == model.EdgeCalls {
+			calls++
+		}
+	}
+	if calls != 3 { // NewCache, handleGreet, Warm — as in the golden
+		t.Errorf("main call edges after modify sync = %d, want 3", calls)
+	}
+
+	// Revert content (and mtime, to mimic a checkout restoring the file).
+	if err := os.WriteFile(target, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(target, origFi.ModTime(), origFi.ModTime().Add(-time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	rres := idx.Sync(Options{})
+	if rres.FilesModified != 1 {
+		t.Fatalf("revert sync: FilesModified = %d, want 1 (%+v)", rres.FilesModified, rres)
+	}
+
+	// The DB is byte-equal to the golden state again.
+	assertGoldenState(t, idx.Store(), goldenDir, fixtureCopy)
+}
+
+func backdate(t *testing.T, path string) {
+	t.Helper()
+	old := time.Now().Add(-2 * time.Second)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
 	}
 }
