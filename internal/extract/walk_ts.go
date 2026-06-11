@@ -179,6 +179,9 @@ func (e *extractor) extractTSClass(node *tsparse.Node) {
 		return
 	}
 
+	// TODO(upstream-bug UB-2): see KNOWN-BUGS.md — applies to every
+	// `if !e.insideExport` docstring guard in this file. Fix only as a
+	// deliberate divergence from upstream, with a golden re-baseline.
 	// When inside an export_statement, class_declaration has no previousNamedSibling
 	// within export_statement, so the upstream's getPrecedingDocstring returns null.
 	docstring := ""
@@ -797,6 +800,8 @@ func (e *extractor) extractTSTypeAnnotationRefs(node *tsparse.Node, fromID strin
 		}
 	}
 
+	// TODO(upstream-bug UB-3): see KNOWN-BUGS.md — fix only as a deliberate
+	// divergence from upstream, together with a golden re-baseline.
 	// Direct type annotation child (upstream walks this for class fields like
 	// `model: ITextModel`). In the TS grammar a method's return type IS a
 	// type_annotation named child — also reachable via the return_type field

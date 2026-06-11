@@ -205,6 +205,8 @@ func (e *extractor) extractGoTypeSpec(node *tsparse.Node, _ *tsparse.Node) {
 }
 
 func (e *extractor) extractGoStruct(typeSpecNode *tsparse.Node, name string, structType *tsparse.Node) {
+	// TODO(upstream-bug UB-1): see KNOWN-BUGS.md — fix only as a deliberate
+	// divergence from upstream, together with a golden re-baseline.
 	// Docstrings for struct/interface/type_alias are NOT extracted: the upstream's
 	// getPrecedingDocstring(type_spec) returns null because type_spec has no
 	// preceding named sibling within type_declaration. The comment is a sibling of
