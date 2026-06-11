@@ -25,14 +25,30 @@ bother the codegraph project before we know this is real:
 
 The owner lifts this explicitly; don't assume it expired.
 
+## Mandate change (owner decision, 2026-06-11, supersedes bug-for-bug parity)
+
+**Backward compatibility with codegraph is no longer a goal. Speed and
+correct behavior win.** The original-derived goldens proved the port
+faithful (verified baseline achieved); from here:
+
+- Reproduced upstream bugs (KNOWN-BUGS §A) are TO BE FIXED, not preserved.
+- Where our behavior is more correct than codegraph's, keep ours and
+  document it.
+- Goldens get re-baselined against OUR OWN output (deterministic
+  self-goldens = regression net). The original-capture scripts remain for
+  informational comparison only.
+- CLI verbs and JSON shapes stay stable unless there's a concrete reason
+  to change them (don't break consumers gratuitously — but bug-shaped
+  output is a concrete reason).
+
 ## Standing rules
 
-- **Goldens are immutable.** Never hand-edit testdata/golden/**. Legitimate
-  changes are full re-captures from the original via tools/parity/capture-*.sh,
-  run under **Node 22** (`fnm exec --using 22`) — never Node 26 (its unsafe
-  mode corrupts upstream output; see KNOWN-BUGS B-2).
-- **Bug-for-bug parity** until a deliberate, documented divergence (KNOWN-BUGS
-  §A/§D). Exception: bugs that crash, corrupt, or hang are fixed immediately.
+- **Goldens are immutable by hand.** Never hand-edit testdata/golden/**.
+  Changes happen via re-baseline scripts; after the mandate change above,
+  the spec source is our own deterministic output (original captures, when
+  needed for comparison, must use Node 22 — never Node 26, see KNOWN-BUGS
+  B-2).
+- Bugs that crash, corrupt, or hang are fixed immediately, always.
 - **License:** codegrapher is Apache-2.0 (owner decision); the original's MIT
   notice must be preserved in attribution (NOTICE).
 - **CGO_ENABLED=0** is a launch requirement (single static binary,
