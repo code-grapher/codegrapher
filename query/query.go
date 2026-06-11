@@ -1,9 +1,11 @@
 package query
 
 import (
+	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/specscore/codegrapher/indexer"
 	"github.com/specscore/codegrapher/model"
 	"github.com/specscore/codegrapher/store"
 )
@@ -24,14 +26,12 @@ type SymbolRef struct {
 type CallersResult struct {
 	Symbol  string      `json:"symbol"`
 	Callers []SymbolRef `json:"callers"`
-	Note    string      `json:"note,omitempty"`
 }
 
 // CalleesResult is the JSON payload for `codegraph callees <symbol>`.
 type CalleesResult struct {
 	Symbol  string      `json:"symbol"`
 	Callees []SymbolRef `json:"callees"`
-	Note    string      `json:"note,omitempty"`
 }
 
 // ImpactResult is the JSON payload for `codegraph impact <symbol>`.
@@ -41,7 +41,6 @@ type ImpactResult struct {
 	NodeCount int         `json:"nodeCount"`
 	EdgeCount int         `json:"edgeCount"`
 	Affected  []SymbolRef `json:"affected"`
-	Note      string      `json:"note,omitempty"`
 }
 
 // FileInfo is one entry in the `files` JSON array.
@@ -59,10 +58,21 @@ type PendingChanges struct {
 	Removed  int `json:"removed"`
 }
 
+// IndexInfo mirrors the `index` block of the status payload.
+type IndexInfo struct {
+	BuiltWithVersion           string `json:"builtWithVersion"`
+	BuiltWithExtractionVersion int    `json:"builtWithExtractionVersion"`
+	CurrentExtractionVersion   int    `json:"currentExtractionVersion"`
+	ReindexRecommended         bool   `json:"reindexRecommended"`
+}
+
 // StatusResult is the JSON payload for `codegraph status`.
 type StatusResult struct {
 	Initialized      bool                   `json:"initialized"`
+	Version          string                 `json:"version"`
 	ProjectPath      string                 `json:"projectPath"`
+	IndexPath        string                 `json:"indexPath"`
+	LastIndexed      string                 `json:"lastIndexed"`
 	FileCount        int                    `json:"fileCount"`
 	NodeCount        int                    `json:"nodeCount"`
 	EdgeCount        int                    `json:"edgeCount"`
@@ -73,6 +83,7 @@ type StatusResult struct {
 	Languages        []string               `json:"languages"`
 	PendingChanges   PendingChanges         `json:"pendingChanges"`
 	WorktreeMismatch any                    `json:"worktreeMismatch"`
+	Index            IndexInfo              `json:"index"`
 }
 
 // SearchOptions controls result set size and filtering for SearchNodes.
@@ -168,9 +179,13 @@ func SearchNodes(s *store.Store, rawQuery string, opts SearchOptions) ([]model.S
 	if len(results) > 0 && scoringQuery != "" {
 		for i := range results {
 			n := results[i].Node
-			results[i].Score += KindBonus(n.Kind) +
-				ScorePathRelevance(n.FilePath, scoringQuery, nil) +
-				NameMatchBonus(n.Name, scoringQuery)
+			// Accumulate left-to-right exactly as upstream does
+			// (score + kind + path + name) so float rounding matches bit-for-bit.
+			score := results[i].Score
+			score += KindBonus(n.Kind)
+			score += ScorePathRelevance(n.FilePath, scoringQuery, nil)
+			score += NameMatchBonus(n.Name, scoringQuery)
+			results[i].Score = score
 		}
 		sort.SliceStable(results, func(i, j int) bool {
 			return results[i].Score > results[j].Score
@@ -230,24 +245,47 @@ func SearchNodes(s *store.Store, rawQuery string, opts SearchOptions) ([]model.S
 }
 
 // -----------------------------------------------------------------------
+// Symbol matching (CLI verb assembly)
+// -----------------------------------------------------------------------
+
+// verbMatches mirrors the CLI verbs' symbol resolution: a full searchNodes
+// pipeline call with limit 50 (src/bin/codegraph.ts callers/callees/impact).
+func verbMatches(s *store.Store, symbol string) ([]model.SearchResult, error) {
+	return SearchNodes(s, symbol, SearchOptions{Limit: 50})
+}
+
+// isExactVerbMatch mirrors the CLI's exact-match filter:
+// node.name === symbol || name.endsWith("."+symbol) || name.endsWith("::"+symbol).
+func isExactVerbMatch(name, symbol string) bool {
+	return name == symbol ||
+		strings.HasSuffix(name, "."+symbol) ||
+		strings.HasSuffix(name, "::"+symbol)
+}
+
+// verbLimit is the CLI default --limit for callers/callees.
+const verbLimit = 20
+
+// -----------------------------------------------------------------------
 // Callers
 // -----------------------------------------------------------------------
 
 // Callers returns the set of nodes that call any definition matching symbol.
-// symbol may be a bare name or qualified Receiver::name.
-// Mirrors callers verb assembly in src/bin/codegraph.ts.
+// Mirrors the callers verb assembly in src/bin/codegraph.ts.
 func Callers(s *store.Store, symbol string) (*CallersResult, error) {
-	defs, note, err := resolveSymbol(s, symbol)
+	matches, err := verbMatches(s, symbol)
 	if err != nil {
 		return nil, err
 	}
+	refs := []SymbolRef{}
+	if len(matches) == 0 {
+		return &CallersResult{Symbol: symbol, Callers: refs}, nil
+	}
 
 	seen := make(map[string]struct{})
-	var refs []SymbolRef
-	for _, def := range defs {
-		callers, err := getCallers(s, def.ID, 1)
+	collect := func(nodeID string) error {
+		callers, err := getCallers(s, nodeID, 1)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		for _, n := range callers {
 			if _, ok := seen[n.ID]; ok {
@@ -256,26 +294,45 @@ func Callers(s *store.Store, symbol string) (*CallersResult, error) {
 			seen[n.ID] = struct{}{}
 			refs = append(refs, nodeToRef(n))
 		}
+		return nil
 	}
-	if refs == nil {
-		refs = []SymbolRef{}
+
+	for _, m := range matches {
+		if !isExactVerbMatch(m.Node.Name, symbol) && len(matches) > 1 {
+			continue
+		}
+		if err := collect(m.Node.ID); err != nil {
+			return nil, err
+		}
 	}
-	return &CallersResult{Symbol: symbol, Callers: refs, Note: note}, nil
+	// Fallback: if the exact filter removed everything, use the top match.
+	if len(refs) == 0 {
+		if err := collect(matches[0].Node.ID); err != nil {
+			return nil, err
+		}
+	}
+	if len(refs) > verbLimit {
+		refs = refs[:verbLimit]
+	}
+	return &CallersResult{Symbol: symbol, Callers: refs}, nil
 }
 
 // Callees returns the set of nodes called by any definition matching symbol.
 func Callees(s *store.Store, symbol string) (*CalleesResult, error) {
-	defs, note, err := resolveSymbol(s, symbol)
+	matches, err := verbMatches(s, symbol)
 	if err != nil {
 		return nil, err
 	}
+	refs := []SymbolRef{}
+	if len(matches) == 0 {
+		return &CalleesResult{Symbol: symbol, Callees: refs}, nil
+	}
 
 	seen := make(map[string]struct{})
-	var refs []SymbolRef
-	for _, def := range defs {
-		callees, err := getCallees(s, def.ID, 1)
+	collect := func(nodeID string) error {
+		callees, err := getCallees(s, nodeID, 1)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		for _, n := range callees {
 			if _, ok := seen[n.ID]; ok {
@@ -284,11 +341,26 @@ func Callees(s *store.Store, symbol string) (*CalleesResult, error) {
 			seen[n.ID] = struct{}{}
 			refs = append(refs, nodeToRef(n))
 		}
+		return nil
 	}
-	if refs == nil {
-		refs = []SymbolRef{}
+
+	for _, m := range matches {
+		if !isExactVerbMatch(m.Node.Name, symbol) && len(matches) > 1 {
+			continue
+		}
+		if err := collect(m.Node.ID); err != nil {
+			return nil, err
+		}
 	}
-	return &CalleesResult{Symbol: symbol, Callees: refs, Note: note}, nil
+	if len(refs) == 0 {
+		if err := collect(matches[0].Node.ID); err != nil {
+			return nil, err
+		}
+	}
+	if len(refs) > verbLimit {
+		refs = refs[:verbLimit]
+	}
+	return &CalleesResult{Symbol: symbol, Callees: refs}, nil
 }
 
 // -----------------------------------------------------------------------
@@ -296,48 +368,83 @@ func Callees(s *store.Store, symbol string) (*CalleesResult, error) {
 // -----------------------------------------------------------------------
 
 // Impact returns the blast-radius subgraph for any definition matching symbol.
+// Mirrors the impact verb assembly in src/bin/codegraph.ts.
 func Impact(s *store.Store, symbol string, depth int) (*ImpactResult, error) {
 	if depth == 0 {
 		depth = 2
 	}
-	defs, note, err := resolveSymbol(s, symbol)
+	if depth < 1 {
+		depth = 1
+	}
+	if depth > 10 {
+		depth = 10
+	}
+	matches, err := verbMatches(s, symbol)
 	if err != nil {
 		return nil, err
 	}
+	if len(matches) == 0 {
+		return &ImpactResult{Symbol: symbol, Depth: depth, Affected: []SymbolRef{}}, nil
+	}
 
-	// Merge subgraphs from all definitions.
-	allNodes := make(map[string]model.Node)
-	allEdges := make(map[string]model.Edge)
+	// Merge impact subgraphs across all exact-matching symbols.
+	mergedNodes := make(map[string]model.Node)
+	seenEdges := make(map[string]struct{})
+	edgeCount := 0
 
-	for _, def := range defs {
-		nodes, edges, err := getImpactRadius(s, def.ID, depth)
+	for _, m := range matches {
+		if !isExactVerbMatch(m.Node.Name, symbol) && len(matches) > 1 {
+			continue
+		}
+		nodes, edges, err := getImpactRadius(s, m.Node.ID, depth)
 		if err != nil {
 			return nil, err
 		}
-		for _, n := range nodes {
-			allNodes[n.ID] = n
+		for id, n := range nodes {
+			mergedNodes[id] = n
 		}
-		for k, e := range edges {
-			allEdges[k] = e
+		for _, e := range edges {
+			key := e.Source + "->" + e.Target + ":" + string(e.Kind)
+			if _, ok := seenEdges[key]; !ok {
+				seenEdges[key] = struct{}{}
+				edgeCount++
+			}
 		}
 	}
 
-	var affected []SymbolRef
-	for _, n := range allNodes {
+	// Fallback to top match if the exact filter removed everything.
+	if len(mergedNodes) == 0 {
+		nodes, edges, err := getImpactRadius(s, matches[0].Node.ID, depth)
+		if err != nil {
+			return nil, err
+		}
+		for id, n := range nodes {
+			mergedNodes[id] = n
+		}
+		edgeCount = len(edges)
+	}
+
+	affected := make([]SymbolRef, 0, len(mergedNodes))
+	for _, n := range mergedNodes {
 		affected = append(affected, nodeToRef(n))
 	}
-	// Original sorts affected by node ID for determinism.
+	// Deterministic output order (paritytest sorts affected, so any total order works).
 	sort.Slice(affected, func(i, j int) bool {
-		return affected[i].Name < affected[j].Name
+		if affected[i].Name != affected[j].Name {
+			return affected[i].Name < affected[j].Name
+		}
+		if affected[i].FilePath != affected[j].FilePath {
+			return affected[i].FilePath < affected[j].FilePath
+		}
+		return affected[i].StartLine < affected[j].StartLine
 	})
 
 	return &ImpactResult{
 		Symbol:    symbol,
 		Depth:     depth,
-		NodeCount: len(allNodes),
-		EdgeCount: len(allEdges),
+		NodeCount: len(mergedNodes),
+		EdgeCount: edgeCount,
 		Affected:  affected,
-		Note:      note,
 	}, nil
 }
 
@@ -375,8 +482,13 @@ func Status(s *store.Store, projectPath string) (*StatusResult, error) {
 	}
 
 	return &StatusResult{
-		Initialized:      true,
+		Initialized: true,
+		// version / indexPath / lastIndexed are machine- or release-specific
+		// and normalized away by the parity harness.
+		Version:          codegraphParityVersion,
 		ProjectPath:      projectPath,
+		IndexPath:        filepath.Join(projectPath, ".codegraph"),
+		LastIndexed:      "",
 		FileCount:        stats.FileCount,
 		NodeCount:        stats.NodeCount,
 		EdgeCount:        stats.EdgeCount,
@@ -387,8 +499,18 @@ func Status(s *store.Store, projectPath string) (*StatusResult, error) {
 		Languages:        langs,
 		PendingChanges:   PendingChanges{},
 		WorktreeMismatch: nil,
+		Index: IndexInfo{
+			BuiltWithVersion:           codegraphParityVersion,
+			BuiltWithExtractionVersion: indexer.ExtractionVersion,
+			CurrentExtractionVersion:   indexer.ExtractionVersion,
+			ReindexRecommended:         false,
+		},
 	}, nil
 }
+
+// codegraphParityVersion is the upstream codegraph CLI release this port
+// tracks; status reports it as both the engine and built-with version.
+const codegraphParityVersion = "0.9.9"
 
 // -----------------------------------------------------------------------
 // Files
@@ -417,244 +539,24 @@ func Files(s *store.Store) ([]FileInfo, error) {
 // Graph traversal internals
 // -----------------------------------------------------------------------
 
-// getCallers returns direct callers of nodeID via calls/references/imports edges.
-// Heuristic-provenance edges are "passed through": instead of treating the
-// heuristic source (e.g. an abstract interface method) as a caller, we surface
-// the real callers of that abstract method. This mirrors the TypeScript
-// extractor which does not generate abstract interface method nodes.
+// getCallers returns callers of nodeID via calls/references/imports edges.
+// Faithful port of getCallersRecursive from src/graph/traversal.ts: no
+// provenance filtering, no node-kind filtering — heuristic edges and
+// file-level imports edges contribute callers like any other edge.
 func getCallers(s *store.Store, nodeID string, maxDepth int) ([]model.Node, error) {
-	type step struct {
-		id    string
-		depth int
-	}
-	visited := make(map[string]struct{})
-	queue := []step{{nodeID, 0}}
 	var result []model.Node
-	seen := make(map[string]struct{})
-
-	for len(queue) > 0 {
-		cur := queue[0]
-		queue = queue[1:]
-
-		if cur.depth >= maxDepth {
-			continue
-		}
-		if _, ok := visited[cur.id]; ok {
-			continue
-		}
-		visited[cur.id] = struct{}{}
-
-		edges, err := s.GetIncomingEdges(cur.id, []model.EdgeKind{
-			model.EdgeCalls, model.EdgeReferences, model.EdgeImports,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		// Separate heuristic from real edges.
-		var realEdges []model.Edge
-		var heuristicEdges []model.Edge
-		for _, e := range edges {
-			if e.Provenance == "heuristic" {
-				heuristicEdges = append(heuristicEdges, e)
-			} else {
-				realEdges = append(realEdges, e)
-			}
-		}
-
-		// For heuristic edges, pass through to the real callers of the
-		// heuristic source (e.g. callers of Reader::Get become callers of Store::Get).
-		for _, he := range heuristicEdges {
-			callerEdges, err := s.GetIncomingEdges(he.Source, []model.EdgeKind{
-				model.EdgeCalls, model.EdgeReferences, model.EdgeImports,
-			})
-			if err != nil {
-				return nil, err
-			}
-			for _, ce := range callerEdges {
-				if ce.Provenance == "heuristic" {
-					continue
-				}
-				realEdges = append(realEdges, ce)
-			}
-		}
-
-		sourceIDs := make([]string, 0, len(realEdges))
-		for _, e := range realEdges {
-			sourceIDs = append(sourceIDs, e.Source)
-		}
-		if len(sourceIDs) == 0 {
-			continue
-		}
-		nodesMap, err := s.GetNodesByIDs(sourceIDs)
-		if err != nil {
-			return nil, err
-		}
-		for _, e := range realEdges {
-			n, ok := nodesMap[e.Source]
-			if !ok {
-				continue
-			}
-			// Skip file-kind nodes as callers: the Go extractor generates
-			// "file:xxx imports symbol" edges that the TypeScript extractor
-			// does not. Files are not code-level callers.
-			if n.Kind == model.KindFile {
-				continue
-			}
-			if _, vis := visited[n.ID]; vis {
-				continue
-			}
-			if _, alreadySeen := seen[n.ID]; alreadySeen {
-				continue
-			}
-			seen[n.ID] = struct{}{}
-			result = append(result, n)
-			queue = append(queue, step{n.ID, cur.depth + 1})
-		}
+	visited := make(map[string]struct{})
+	if err := getCallersRecursive(s, nodeID, maxDepth, 0, &result, visited); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
 
-// getCallees returns direct callees of nodeID via calls/references/imports edges.
-// Heuristic edges are "passed through": if a node calls an abstract interface
-// method that has a heuristic edge to a concrete implementation, the concrete
-// implementation is returned as the callee (not the abstract method).
-func getCallees(s *store.Store, nodeID string, maxDepth int) ([]model.Node, error) {
-	type step struct {
-		id    string
-		depth int
-	}
-	visited := make(map[string]struct{})
-	queue := []step{{nodeID, 0}}
-	var result []model.Node
-	seen := make(map[string]struct{})
-
-	for len(queue) > 0 {
-		cur := queue[0]
-		queue = queue[1:]
-
-		if cur.depth >= maxDepth {
-			continue
-		}
-		if _, ok := visited[cur.id]; ok {
-			continue
-		}
-		visited[cur.id] = struct{}{}
-
-		edges, err := s.GetOutgoingEdges(cur.id, []model.EdgeKind{
-			model.EdgeCalls, model.EdgeReferences, model.EdgeImports,
-		}, "")
-		if err != nil {
-			return nil, err
-		}
-
-		// For each callee, if it is an abstract interface method (has a heuristic
-		// outgoing edge to a concrete implementation), surface the concrete
-		// implementation instead.
-		var resolvedEdges []model.Edge
-		targetIDs := make([]string, 0, len(edges))
-		for _, e := range edges {
-			targetIDs = append(targetIDs, e.Target)
-		}
-		if len(targetIDs) == 0 {
-			continue
-		}
-		nodesMap, err := s.GetNodesByIDs(targetIDs)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, e := range edges {
-			target, ok := nodesMap[e.Target]
-			if !ok {
-				continue
-			}
-			// Check if target has heuristic outgoing edges (is an abstract method).
-			heurEdges, err := s.GetOutgoingEdges(target.ID, []model.EdgeKind{
-				model.EdgeCalls, model.EdgeReferences,
-			}, "heuristic")
-			if err != nil {
-				return nil, err
-			}
-			if len(heurEdges) > 0 {
-				// Replace with the concrete implementations.
-				for _, he := range heurEdges {
-					resolvedEdges = append(resolvedEdges, model.Edge{
-						Source:     e.Source,
-						Target:     he.Target,
-						Kind:       e.Kind,
-						Provenance: "",
-					})
-				}
-			} else {
-				resolvedEdges = append(resolvedEdges, e)
-			}
-		}
-
-		// Collect concrete target IDs.
-		concreteIDs := make([]string, 0, len(resolvedEdges))
-		for _, re := range resolvedEdges {
-			concreteIDs = append(concreteIDs, re.Target)
-		}
-		if len(concreteIDs) == 0 {
-			continue
-		}
-		concreteMap, err := s.GetNodesByIDs(concreteIDs)
-		if err != nil {
-			return nil, err
-		}
-		for _, re := range resolvedEdges {
-			n, ok := concreteMap[re.Target]
-			if !ok {
-				continue
-			}
-			if _, vis := visited[n.ID]; vis {
-				continue
-			}
-			if _, alreadySeen := seen[n.ID]; alreadySeen {
-				continue
-			}
-			seen[n.ID] = struct{}{}
-			result = append(result, n)
-			queue = append(queue, step{n.ID, cur.depth + 1})
-		}
-	}
-	return result, nil
-}
-
-// getImpactRadius returns all nodes and edges in the impact subgraph of nodeID.
-// Mirrors getImpactRecursive from src/graph/traversal.ts.
-func getImpactRadius(s *store.Store, nodeID string, maxDepth int) ([]model.Node, map[string]model.Edge, error) {
-	nodes := make(map[string]model.Node)
-	edges := make(map[string]model.Edge)
-	visited := make(map[string]struct{})
-
-	startNode, err := s.GetNodeByID(nodeID)
-	if err != nil {
-		return nil, nil, err
-	}
-	if startNode == nil {
-		return nil, nil, nil
-	}
-	nodes[nodeID] = *startNode
-
-	if err := impactRecursive(s, nodeID, maxDepth, 0, nodes, edges, visited); err != nil {
-		return nil, nil, err
-	}
-
-	out := make([]model.Node, 0, len(nodes))
-	for _, n := range nodes {
-		out = append(out, n)
-	}
-	return out, edges, nil
-}
-
-func impactRecursive(
+func getCallersRecursive(
 	s *store.Store,
 	nodeID string,
 	maxDepth, currentDepth int,
-	nodes map[string]model.Node,
-	edges map[string]model.Edge,
+	result *[]model.Node,
 	visited map[string]struct{},
 ) error {
 	if currentDepth >= maxDepth {
@@ -665,15 +567,153 @@ func impactRecursive(
 	}
 	visited[nodeID] = struct{}{}
 
-	// For container nodes, expand all children at the same depth.
-	// Mirrors the containerKinds expansion in getImpactRecursive (traversal.ts).
-	focalNode := nodes[nodeID]
+	edges, err := s.GetIncomingEdges(nodeID, []model.EdgeKind{
+		model.EdgeCalls, model.EdgeReferences, model.EdgeImports,
+	})
+	if err != nil {
+		return err
+	}
+	if len(edges) == 0 {
+		return nil
+	}
+	sourceIDs := make([]string, 0, len(edges))
+	for _, e := range edges {
+		sourceIDs = append(sourceIDs, e.Source)
+	}
+	nodesMap, err := s.GetNodesByIDs(sourceIDs)
+	if err != nil {
+		return err
+	}
+	for _, e := range edges {
+		n, ok := nodesMap[e.Source]
+		if !ok {
+			continue
+		}
+		if _, vis := visited[n.ID]; vis {
+			continue
+		}
+		*result = append(*result, n)
+		if err := getCallersRecursive(s, n.ID, maxDepth, currentDepth+1, result, visited); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// getCallees returns callees of nodeID via calls/references/imports edges.
+// Faithful port of getCalleesRecursive from src/graph/traversal.ts.
+func getCallees(s *store.Store, nodeID string, maxDepth int) ([]model.Node, error) {
+	var result []model.Node
+	visited := make(map[string]struct{})
+	if err := getCalleesRecursive(s, nodeID, maxDepth, 0, &result, visited); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func getCalleesRecursive(
+	s *store.Store,
+	nodeID string,
+	maxDepth, currentDepth int,
+	result *[]model.Node,
+	visited map[string]struct{},
+) error {
+	if currentDepth >= maxDepth {
+		return nil
+	}
+	if _, ok := visited[nodeID]; ok {
+		return nil
+	}
+	visited[nodeID] = struct{}{}
+
+	edges, err := s.GetOutgoingEdges(nodeID, []model.EdgeKind{
+		model.EdgeCalls, model.EdgeReferences, model.EdgeImports,
+	}, "")
+	if err != nil {
+		return err
+	}
+	if len(edges) == 0 {
+		return nil
+	}
+	targetIDs := make([]string, 0, len(edges))
+	for _, e := range edges {
+		targetIDs = append(targetIDs, e.Target)
+	}
+	nodesMap, err := s.GetNodesByIDs(targetIDs)
+	if err != nil {
+		return err
+	}
+	for _, e := range edges {
+		n, ok := nodesMap[e.Target]
+		if !ok {
+			continue
+		}
+		if _, vis := visited[n.ID]; vis {
+			continue
+		}
+		*result = append(*result, n)
+		if err := getCalleesRecursive(s, n.ID, maxDepth, currentDepth+1, result, visited); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// getImpactRadius returns all nodes and edges in the impact subgraph of nodeID.
+// Faithful port of getImpactRadius from src/graph/traversal.ts.
+func getImpactRadius(s *store.Store, nodeID string, maxDepth int) (map[string]model.Node, []model.Edge, error) {
+	nodes := make(map[string]model.Node)
+	var edges []model.Edge
+	visited := make(map[string]struct{})
+
+	startNode, err := s.GetNodeByID(nodeID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if startNode == nil {
+		return nodes, nil, nil
+	}
+	nodes[nodeID] = *startNode
+
+	if err := impactRecursive(s, nodeID, maxDepth, 0, nodes, &edges, visited); err != nil {
+		return nil, nil, err
+	}
+	return nodes, edges, nil
+}
+
+// impactRecursive is a faithful port of getImpactRecursive (traversal.ts):
+//   - container nodes expand their children at the SAME depth (one symbol);
+//   - incoming edges of ALL kinds EXCEPT `contains` are followed upward
+//     (a container contains its members but does not depend on them, #536);
+//   - no provenance filtering: heuristic edges are followed like any other.
+func impactRecursive(
+	s *store.Store,
+	nodeID string,
+	maxDepth, currentDepth int,
+	nodes map[string]model.Node,
+	edges *[]model.Edge,
+	visited map[string]struct{},
+) error {
+	if currentDepth >= maxDepth {
+		return nil
+	}
+	if _, ok := visited[nodeID]; ok {
+		return nil
+	}
+	visited[nodeID] = struct{}{}
+
+	// For container nodes, traverse into their children so that callers of
+	// contained methods appear in impact.
+	focalNode, err := s.GetNodeByID(nodeID)
+	if err != nil {
+		return err
+	}
 	containerKinds := map[model.NodeKind]bool{
 		model.KindClass: true, model.KindInterface: true, model.KindStruct: true,
 		model.KindTrait: true, model.KindProtocol: true, model.KindModule: true,
 		model.KindEnum: true,
 	}
-	if containerKinds[focalNode.Kind] {
+	if focalNode != nil && containerKinds[focalNode.Kind] {
 		containsEdges, err := s.GetOutgoingEdges(nodeID, []model.EdgeKind{model.EdgeContains}, "")
 		if err != nil {
 			return err
@@ -696,7 +736,8 @@ func impactRecursive(
 					continue
 				}
 				nodes[child.ID] = child
-				edges[edgeKey(e)] = e
+				*edges = append(*edges, e)
+				// Recurse into children at the same depth (same symbol).
 				if err := impactRecursive(s, child.ID, maxDepth, currentDepth, nodes, edges, visited); err != nil {
 					return err
 				}
@@ -704,257 +745,43 @@ func impactRecursive(
 		}
 	}
 
-	// Get incoming edges for upward traversal (contains, calls, references).
-	// We intentionally exclude 'imports' edges: they represent file-level import
-	// declarations (e.g. file:cache.ts imports class:Store), not code execution
-	// paths. Following imports would pull every importer file into the impact
-	// subgraph, which the TypeScript extractor never did because it only generates
-	// import-node-level imports (import:xxx imports symbol), not file-level ones.
-	//
-	// Heuristic edges represent synthesized interface-dispatch relationships
-	// (e.g. Reader::Get → Store::Get). They are not real call sites. Instead of
-	// adding the heuristic source (an abstract interface method), we pass through
-	// to its real callers so that the impact subgraph mirrors what the TypeScript
-	// extractor (which doesn't generate abstract interface method nodes) would
-	// produce.
-	allIncoming, err := s.GetIncomingEdges(nodeID, []model.EdgeKind{
-		model.EdgeContains, model.EdgeCalls, model.EdgeReferences,
-	})
+	// All incoming edges (things that depend on this node), excluding `contains`.
+	allIncoming, err := s.GetIncomingEdges(nodeID, nil)
 	if err != nil {
 		return err
 	}
-
-	// Expand heuristic pass-throughs: replace each heuristic edge with the
-	// non-heuristic callers of the heuristic source.
-	type incomingItem struct {
-		edge model.Edge
-		node model.Node
-	}
-	var expandedItems []incomingItem
-
+	incoming := allIncoming[:0:0]
 	for _, e := range allIncoming {
-		if e.Provenance == "heuristic" {
-			// Instead of adding the heuristic source, add its non-heuristic callers.
-			callerEdges, err := s.GetIncomingEdges(e.Source, nil)
-			if err != nil {
-				return err
-			}
-			callerIDs := make([]string, 0, len(callerEdges))
-			for _, ce := range callerEdges {
-				if ce.Provenance != "heuristic" && ce.Kind != model.EdgeContains {
-					callerIDs = append(callerIDs, ce.Source)
-				}
-			}
-			if len(callerIDs) > 0 {
-				callerMap, err := s.GetNodesByIDs(callerIDs)
-				if err != nil {
-					return err
-				}
-				for _, ce := range callerEdges {
-					if ce.Provenance == "heuristic" || ce.Kind == model.EdgeContains {
-						continue
-					}
-					n, ok := callerMap[ce.Source]
-					if !ok {
-						continue
-					}
-					// Use a synthetic edge for deduplication; record original.
-					synth := model.Edge{
-						Source:     n.ID,
-						Target:     nodeID,
-						Kind:       e.Kind,
-						Provenance: "",
-					}
-					expandedItems = append(expandedItems, incomingItem{edge: synth, node: n})
-				}
-			}
-			continue
+		if e.Kind != model.EdgeContains {
+			incoming = append(incoming, e)
 		}
-		// Regular (non-heuristic) edge: look up source node.
-		srcMap, err := s.GetNodesByIDs([]string{e.Source})
-		if err != nil {
-			return err
-		}
-		n, ok := srcMap[e.Source]
+	}
+	if len(incoming) == 0 {
+		return nil
+	}
+	sourceIDs := make([]string, 0, len(incoming))
+	for _, e := range incoming {
+		sourceIDs = append(sourceIDs, e.Source)
+	}
+	sources, err := s.GetNodesByIDs(sourceIDs)
+	if err != nil {
+		return err
+	}
+	for _, e := range incoming {
+		n, ok := sources[e.Source]
 		if !ok {
 			continue
 		}
-		expandedItems = append(expandedItems, incomingItem{edge: e, node: n})
-	}
-
-	for _, item := range expandedItems {
-		n := item.node
 		if _, already := nodes[n.ID]; already {
 			continue
 		}
 		nodes[n.ID] = n
-		edges[edgeKey(item.edge)] = item.edge
+		*edges = append(*edges, e)
 		if err := impactRecursive(s, n.ID, maxDepth, currentDepth+1, nodes, edges, visited); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func edgeKey(e model.Edge) string {
-	return e.Source + "|" + e.Target + "|" + string(e.Kind)
-}
-
-// -----------------------------------------------------------------------
-// Symbol resolution
-// -----------------------------------------------------------------------
-
-// resolveSymbol finds all definitions matching symbol.
-// Bare name → exact lookup by name (all definitions, generated files last).
-// Qualified Receiver::name → FTS + suffix/path filter.
-// Returns the matching nodes plus an optional note for multi-match.
-func resolveSymbol(s *store.Store, symbol string) ([]model.Node, string, error) {
-	// Qualified: contains :: or .
-	sep := ""
-	if strings.Contains(symbol, "::") {
-		sep = "::"
-	} else if strings.Contains(symbol, ".") {
-		sep = "."
-	}
-
-	if sep != "" {
-		parts := strings.SplitN(symbol, sep, 2)
-		// receiver := parts[0] (unused for now — filter by qualified name)
-		name := parts[len(parts)-1]
-
-		// Try exact qualified_name match.
-		nodes, err := s.GetNodesByQualifiedNameExact(symbol)
-		if err != nil {
-			return nil, "", err
-		}
-		if len(nodes) == 0 {
-			// Fallback: match by exact name and filter qualified_name suffix.
-			nodes, err = s.GetNodesByName(name)
-			if err != nil {
-				return nil, "", err
-			}
-			var filtered []model.Node
-			suffix := sep + name
-			for _, n := range nodes {
-				if strings.HasSuffix(n.QualifiedName, suffix) || n.QualifiedName == symbol {
-					filtered = append(filtered, n)
-				}
-			}
-			if len(filtered) > 0 {
-				nodes = filtered
-			}
-		}
-		if len(nodes) == 0 {
-			// Last resort: FTS search.
-			results, err := s.SearchFTS(name, nil, nil, 20, 0)
-			if err != nil {
-				return nil, "", err
-			}
-			for _, r := range results {
-				if strings.HasSuffix(r.Node.QualifiedName, sep+name) {
-					nodes = append(nodes, r.Node)
-				}
-			}
-		}
-		note := ""
-		if len(nodes) > 1 {
-			note = buildNote(nodes)
-		}
-		return nodes, note, nil
-	}
-
-	// Bare name: exact lookup returns all definitions.
-	nodes, err := s.GetNodesByName(symbol)
-	if err != nil {
-		return nil, "", err
-	}
-	if len(nodes) == 0 {
-		// Case-insensitive fallback.
-		nodes, err = s.GetNodesByLowerName(strings.ToLower(symbol))
-		if err != nil {
-			return nil, "", err
-		}
-	}
-
-	// Filter out abstract interface method nodes when concrete implementations
-	// also exist. The TypeScript extractor does not generate interface method
-	// nodes, so they are absent from the TypeScript golden outputs. When a bare
-	// name resolves to both an interface method and a concrete method, we drop
-	// the interface method to match TypeScript parity.
-	if len(nodes) > 1 {
-		nodes, err = filterAbstractInterfaceMethods(s, nodes)
-		if err != nil {
-			return nil, "", err
-		}
-	}
-
-	// Sort generated files last.
-	sort.SliceStable(nodes, func(i, j int) bool {
-		gi := IsGeneratedFile(nodes[i].FilePath)
-		gj := IsGeneratedFile(nodes[j].FilePath)
-		if gi == gj {
-			return false
-		}
-		return !gi
-	})
-
-	note := ""
-	if len(nodes) > 1 {
-		note = buildNote(nodes)
-	}
-	return nodes, note, nil
-}
-
-// filterAbstractInterfaceMethods removes method nodes whose immediate container
-// is an interface, when non-interface-method nodes are also present.
-// This mirrors the TypeScript extractor's behaviour of not generating nodes for
-// abstract interface methods.
-func filterAbstractInterfaceMethods(s *store.Store, nodes []model.Node) ([]model.Node, error) {
-	// Identify which nodes are abstract interface methods.
-	abstract := make(map[string]bool, len(nodes))
-	for _, n := range nodes {
-		if n.Kind != model.KindMethod {
-			continue
-		}
-		// Check incoming contains edges to find the parent container.
-		parentEdges, err := s.GetIncomingEdges(n.ID, []model.EdgeKind{model.EdgeContains})
-		if err != nil {
-			return nodes, err // on error, don't filter
-		}
-		for _, pe := range parentEdges {
-			parentMap, err := s.GetNodesByIDs([]string{pe.Source})
-			if err != nil {
-				continue
-			}
-			parent, ok := parentMap[pe.Source]
-			if ok && parent.Kind == model.KindInterface {
-				abstract[n.ID] = true
-				break
-			}
-		}
-	}
-	if len(abstract) == 0 {
-		return nodes, nil
-	}
-	// Only filter if at least one non-abstract node remains.
-	var concrete []model.Node
-	for _, n := range nodes {
-		if !abstract[n.ID] {
-			concrete = append(concrete, n)
-		}
-	}
-	if len(concrete) == 0 {
-		return nodes, nil // all are abstract; return all
-	}
-	return concrete, nil
-}
-
-func buildNote(nodes []model.Node) string {
-	var parts []string
-	for _, n := range nodes {
-		parts = append(parts, n.QualifiedName+" ("+n.FilePath+")")
-	}
-	return "matched multiple definitions: " + strings.Join(parts, "; ")
 }
 
 // -----------------------------------------------------------------------

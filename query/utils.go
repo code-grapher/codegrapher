@@ -1,6 +1,7 @@
 package query
 
 import (
+	"math"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -88,10 +89,11 @@ func NameMatchBonus(nodeName, query string) float64 {
 		}
 	}
 
-	// Name starts with query — scale by length ratio.
+	// Name starts with query — scale by length ratio (rounded, as upstream
+	// uses Math.round).
 	if strings.HasPrefix(nameLower, queryLower) && len(nameLower) > 0 {
 		ratio := float64(len(queryLower)) / float64(len(nameLower))
-		return 10 + 30*ratio
+		return math.Round(10 + 30*ratio)
 	}
 
 	// All camelCase-split terms appear in the name.
@@ -185,9 +187,13 @@ func ScorePathRelevance(filePath, query string, projectNameTokens map[string]str
 		if len(subtokens) == 0 {
 			continue
 		}
+		// Exact filename match (strongest) — independent of the dir/path checks
+		// below (upstream stacks filename + dir bonuses).
 		if anyContains(fileName, subtokens) {
 			score += 10
-		} else if anyContains(dirName, subtokens) {
+		}
+		// Directory match, else general path match.
+		if anyContains(dirName, subtokens) {
 			score += 5
 		} else if anyContains(pathLower, subtokens) {
 			score += 3
