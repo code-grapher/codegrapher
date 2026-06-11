@@ -41,6 +41,13 @@ faithful (verified baseline achieved); from here:
   to change them (don't break consumers gratuitously — but bug-shaped
   output is a concrete reason).
 
+## Current focus (owner, 2026-06-11): Go first
+
+Go language support is the priority; TypeScript effort is PARKED for now
+(budget). Park list: TS-side bug fixes (UB-2/UB-3), TS edge-cluster work
+beyond what the Go repo needs, typescript-go adoption (task #15). Don't
+spend tokens/agents on TS until the owner unparks it.
+
 ## Standing rules
 
 - **Goldens are immutable by hand.** Never hand-edit testdata/golden/**.
