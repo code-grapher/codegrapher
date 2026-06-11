@@ -40,7 +40,7 @@ snapshot files directly in the browser (fetched from the repo checkout, raw
 GitHub, or any static host) and offers quick symbol search/browse with
 client-side filtering:
 
-- INGR's fixed-line format parses in a few lines of JS; a nodes table at
+- Parsing via the official **github.com/ingr-io/ingr-js** library; a nodes table at
   specscore-cli scale (~8K records) filters instantly client-side; even
   ~100K-node repos are a few MB gzipped (highly repetitive lines).
 - The edges table enables callers/callees navigation in the viewer.
