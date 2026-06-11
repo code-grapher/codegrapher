@@ -1,0 +1,79 @@
+package cli
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+
+	"github.com/specscore/codegrapher/indexer"
+	"github.com/spf13/cobra"
+)
+
+func newCallersCmd() *cobra.Command {
+	var jsonOut bool
+	var limit int
+	var pathFlag string
+
+	cmd := &cobra.Command{
+		Use:   "callers <symbol>",
+		Short: "Find all functions/methods that call a specific symbol",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			symbol := args[0]
+			var projectPath string
+			if pathFlag != "" {
+				projectPath = resolveArg([]string{pathFlag}, 0)
+			} else {
+				cwd, _ := os.Getwd()
+				projectPath = findNearestOrReturn(cwd)
+			}
+
+			if !indexer.IsInitialized(projectPath) {
+				printError(fmt.Sprintf("CodeGraph not initialized in %s", projectPath))
+				os.Exit(1)
+			}
+
+			idx, err := indexer.Open(projectPath, indexer.Options{})
+			if err != nil {
+				printError(fmt.Sprintf("Failed to open index: %s", err))
+				os.Exit(1)
+			}
+			defer idx.Close()
+
+			q := NewStoreQuerier(idx.Store())
+			result, err := q.Callers(symbol)
+			if err != nil {
+				printError(fmt.Sprintf("callers failed: %s", err))
+				os.Exit(1)
+			}
+
+			// Apply limit.
+			if limit > 0 && len(result.Callers) > limit {
+				result.Callers = result.Callers[:limit]
+			}
+
+			if jsonOut {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				return enc.Encode(result)
+			}
+
+			if len(result.Callers) == 0 {
+				printInfo(fmt.Sprintf("No callers found for %q", symbol))
+				return nil
+			}
+			fmt.Println(bold(fmt.Sprintf("\nCallers of %q (%d):\n", symbol, len(result.Callers))))
+			for _, n := range result.Callers {
+				fmt.Printf("%s %s\n", cyan(padRight(string(n.Kind), 12)), n.Name)
+				fmt.Println(dim(fmt.Sprintf("  %s:%d", n.FilePath, n.StartLine)))
+				fmt.Println()
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "Output as JSON")
+	cmd.Flags().IntVarP(&limit, "limit", "l", 20, "Maximum results")
+	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
+	return cmd
+}
