@@ -157,7 +157,7 @@ func resolveGoRef(
 	case model.EdgeImports:
 		return resolveGoImportsRef(ref, s)
 	case model.EdgeInstantiates:
-		return resolveGoInstantiatesRef(ref, s)
+		return resolveGoInstantiatesRef(ref, s, projectRoot, goModulePath, importCache)
 	case model.EdgeReferences:
 		return resolveGoReferencesRef(ref, s, projectRoot, goModulePath, importCache)
 	case model.EdgeCalls:
@@ -189,12 +189,60 @@ func resolveGoImportsRef(ref model.UnresolvedReference, s *store.Store) *model.E
 }
 
 // resolveGoInstantiatesRef resolves composite-literal instantiation refs.
-// Finds a struct/class/interface with the given name, preferring same package.
-func resolveGoInstantiatesRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+// Handles both bare names ("SpecConfig") and qualified names ("projectdef.SpecConfig").
+// For qualified names, resolves cross-package via the import map (upstream
+// resolveGoCrossPackageReference in import-resolver.ts).
+func resolveGoInstantiatesRef(
+	ref model.UnresolvedReference,
+	s *store.Store,
+	projectRoot string,
+	goModulePath string,
+	importCache map[string][]importMapping,
+) *model.Edge {
 	name := ref.ReferenceName
 	if goBuiltIns[name] {
 		return nil
 	}
+
+	// Qualified name (e.g. "projectdef.SpecConfig"): resolve cross-package.
+	if dotIdx := strings.Index(name, "."); dotIdx > 0 {
+		pkgAlias := name[:dotIdx]
+		typeName := name[dotIdx+1:]
+		if goBuiltIns[pkgAlias] || goStdlibPackages[pkgAlias] || goBuiltIns[typeName] {
+			return nil
+		}
+		mappings := getImportMappings(ref.FilePath, projectRoot, importCache)
+		importPath := findImportByAlias(pkgAlias, mappings)
+		if importPath == "" || isStdlibImport(importPath) {
+			return nil
+		}
+		relDir := importPathToRelDir(importPath, goModulePath)
+		if relDir == "" {
+			return nil
+		}
+		candidates, err := s.GetNodesByName(typeName)
+		if err != nil || len(candidates) == 0 {
+			return nil
+		}
+		for i := range candidates {
+			n := &candidates[i]
+			if n.Language != model.LangGo {
+				continue
+			}
+			nodeDir := filepath.Dir(filepath.ToSlash(n.FilePath))
+			if nodeDir == relDir || strings.HasPrefix(nodeDir+"/", relDir+"/") {
+				return &model.Edge{
+					Source: ref.FromNodeID,
+					Target: n.ID,
+					Kind:   model.EdgeInstantiates,
+					Line:   ref.Line,
+					Column: ref.Column,
+				}
+			}
+		}
+		return nil
+	}
+
 	candidates, err := s.GetNodesByName(name)
 	if err != nil || len(candidates) == 0 {
 		return nil
@@ -299,7 +347,7 @@ func resolveGoCallsRef(
 
 		// Prefix is not an import — treat as instance receiver.
 		// Find by exact method name, preferring same language.
-		return resolveGoMethodCall(ref, s, symbol)
+		return resolveGoMethodCall(ref, s, symbol, prefix)
 	}
 
 	// Bare name: try same package first, then global best-match.
@@ -359,10 +407,14 @@ func resolveCrossPackageGoCall(
 	}
 }
 
-// resolveGoMethodCall resolves a dotted call where the prefix is a lowercase
-// instance receiver (not an imported package). Searches for methods with the
-// given name in the same language, returning the best (or only) match.
-func resolveGoMethodCall(ref model.UnresolvedReference, s *store.Store, methodName string) *model.Edge {
+// resolveGoMethodCall resolves a dotted call where the prefix is an instance
+// receiver (not an imported package). Mirrors upstream matchMethodCall Strategy 3:
+//   - only considers kind=method (not function)
+//   - single candidate → resolve directly
+//   - multiple candidates → require word-overlap score ≥ 2 between receiver
+//     words and the method's qualified-name words (splitCamelCase, length > 1),
+//     plus a +1 language bonus; returns nil if no candidate reaches the threshold
+func resolveGoMethodCall(ref model.UnresolvedReference, s *store.Store, methodName, receiverName string) *model.Edge {
 	if goBuiltIns[methodName] {
 		return nil
 	}
@@ -371,21 +423,51 @@ func resolveGoMethodCall(ref model.UnresolvedReference, s *store.Store, methodNa
 		return nil
 	}
 
-	// Filter to same-language method/function nodes.
-	var goNodes []model.Node
+	// Filter to same-language method nodes only (upstream Strategy 3 uses kind='method').
+	var goMethods []model.Node
 	for _, n := range candidates {
-		if n.Language == model.LangGo && (n.Kind == model.KindMethod || n.Kind == model.KindFunction) {
-			goNodes = append(goNodes, n)
+		if n.Language == model.LangGo && n.Kind == model.KindMethod {
+			goMethods = append(goMethods, n)
 		}
 	}
-	if len(goNodes) == 0 {
+	if len(goMethods) == 0 {
 		return nil
 	}
 
-	// If only one Go method with this name, use it.
-	target := pickBestNode(goNodes, ref.FilePath)
-	if target == nil {
-		return nil
+	var target *model.Node
+	if len(goMethods) == 1 {
+		// Single candidate: resolve directly (upstream confidence 0.7).
+		target = &goMethods[0]
+	} else {
+		// Multiple candidates: score by word overlap between receiver name and
+		// method's qualified name (splitCamelCase filters words length ≤ 1).
+		// Also add +1 language bonus (all are already Go here, so every candidate
+		// gets +1 — effectively the threshold is 1 overlap word + 1 language = 2).
+		receiverWords := splitCamelCase(receiverName)
+		var bestMatch *model.Node
+		bestScore := 0
+		for i := range goMethods {
+			m := &goMethods[i]
+			classWords := splitCamelCase(m.QualifiedName)
+			score := 0
+			for _, rw := range receiverWords {
+				for _, cw := range classWords {
+					if strings.EqualFold(rw, cw) {
+						score++
+						break
+					}
+				}
+			}
+			score++ // language bonus (method is Go, matching ref.Language=Go)
+			if score > bestScore {
+				bestScore = score
+				bestMatch = m
+			}
+		}
+		if bestMatch == nil || bestScore < 2 {
+			return nil
+		}
+		target = bestMatch
 	}
 
 	kind := model.EdgeKind(ref.ReferenceKind)
@@ -400,6 +482,37 @@ func resolveGoMethodCall(ref model.UnresolvedReference, s *store.Store, methodNa
 		Line:   ref.Line,
 		Column: ref.Column,
 	}
+}
+
+// splitCamelCase splits a camelCase/PascalCase/qualified name into words,
+// filtering out words of length ≤ 1. Mirrors upstream splitCamelCase in
+// name-matcher.ts used for receiver-overlap scoring.
+func splitCamelCase(s string) []string {
+	// Insert spaces before uppercase letters that follow lowercase (camelCase split).
+	var b strings.Builder
+	runes := []rune(s)
+	for i, r := range runes {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			prev := runes[i-1]
+			if prev >= 'a' && prev <= 'z' {
+				b.WriteRune(' ')
+			} else if i+1 < len(runes) && runes[i+1] >= 'a' && runes[i+1] <= 'z' && prev >= 'A' && prev <= 'Z' {
+				b.WriteRune(' ')
+			}
+		}
+		b.WriteRune(r)
+	}
+	// Split on whitespace, dots, underscores, colons, slashes, backslashes.
+	raw := strings.FieldsFunc(b.String(), func(r rune) bool {
+		return r == ' ' || r == '.' || r == '_' || r == ':' || r == '/' || r == '\\'
+	})
+	var out []string
+	for _, w := range raw {
+		if len(w) > 1 {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 // resolveGoBareName resolves a bare name (no dot notation) by finding a

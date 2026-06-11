@@ -59,6 +59,11 @@ type extractor struct {
 	// insideExport is true when we are descending through an export_statement.
 	// Used by isTSExported to correctly mark declarations as exported.
 	insideExport bool
+
+	// seenNodeIDs tracks node IDs already emitted to prevent duplicates when
+	// gotreesitter's ERROR root causes walkGo to visit the same AST node via
+	// multiple paths (direct child + inside ERROR subtree).
+	seenNodeIDs map[string]bool
 }
 
 // ExtractFile parses content as lang, extracts a file node (and, eventually,
@@ -166,6 +171,7 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 	// goTreeError is true when the tree-sitter parse produced an error tree or
 	// timed out; in either case walkGoFallback (go/parser) fills in the gaps.
 	goTreeError := lang == model.LangGo && tree == nil // timeout: tree is nil
+	goFullFallback := goTreeError                      // D-2: no tree-sitter walk at all
 	if tree != nil {
 		root := tree.RootNode()
 		switch lang {
@@ -185,8 +191,11 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 
 	// go/parser supplemental pass: fills in any top-level declarations that
 	// the gotreesitter walk missed due to its []struct{...} parsing bug or timeout.
+	// goFullFallback=true for D-2 (timeout): all function bodies are walked by
+	// go/parser since tree-sitter produced nothing. For D-3 (ERROR root, goFullFallback=false)
+	// only newly-added function bodies are walked to avoid double-emitting refs.
 	if goTreeError {
-		e.walkGoFallback(content)
+		e.walkGoFallback(content, goFullFallback)
 	}
 
 	// For Go files, also run the framework route extractor.
@@ -287,6 +296,16 @@ func (e *extractor) createNode(kind model.NodeKind, name string, n *tsparse.Node
 	}
 	startLine := int(n.StartPoint().Row) + 1
 	id := model.GenerateNodeID(e.filePath, kind, name, startLine)
+
+	// Prevent duplicate nodes (and their contains edges) when gotreesitter's
+	// ERROR root causes walkGo to visit the same declaration via multiple paths.
+	if e.seenNodeIDs == nil {
+		e.seenNodeIDs = make(map[string]bool)
+	}
+	if e.seenNodeIDs[id] {
+		return nil
+	}
+	e.seenNodeIDs[id] = true
 
 	qualName := e.buildQualifiedName(name)
 	if extra.qualifiedName != "" {

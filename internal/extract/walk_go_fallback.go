@@ -27,7 +27,13 @@ import (
 // go/parser and merges any NEW nodes (by ID) into e.nodes/e.edges. Nodes
 // already present (extracted by the partial tree-sitter walk) are not
 // duplicated.
-func (e *extractor) walkGoFallback(src []byte) {
+//
+// fullFallback=true for D-2 (timeout): tree-sitter produced nothing, so ALL
+// function bodies are walked by go/parser to emit call/instantiate refs.
+// fullFallback=false for D-3 (ERROR root): only newly-added functions get body
+// walking; functions already extracted by tree-sitter are left as-is to avoid
+// double-emitting refs that the partial tree-sitter walk may have already found.
+func (e *extractor) walkGoFallback(src []byte, fullFallback bool) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, e.filePath, src, parser.ParseComments)
 	if err != nil {
@@ -47,7 +53,7 @@ func (e *extractor) walkGoFallback(src []byte) {
 	for _, decl := range f.Decls {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
-			e.fallbackFunc(d, fset, existingIDs)
+			e.fallbackFunc(d, fset, existingIDs, fullFallback)
 		case *ast.GenDecl:
 			e.fallbackGenDecl(d, fset, existingIDs)
 		}
@@ -55,7 +61,9 @@ func (e *extractor) walkGoFallback(src []byte) {
 }
 
 // fallbackFunc extracts a single top-level function or method declaration.
-func (e *extractor) fallbackFunc(d *ast.FuncDecl, fset *token.FileSet, existing map[string]bool) {
+// When fullFallback is true (D-2 timeout) or the node is newly added (not in
+// existing), it also walks the function body to emit call/instantiate refs.
+func (e *extractor) fallbackFunc(d *ast.FuncDecl, fset *token.FileSet, existing map[string]bool, fullFallback bool) {
 	if d.Name == nil {
 		return
 	}
@@ -73,43 +81,52 @@ func (e *extractor) fallbackFunc(d *ast.FuncDecl, fset *token.FileSet, existing 
 	}
 
 	id := model.GenerateNodeID(e.filePath, kind, name, startLine)
-	if existing[id] {
-		return
-	}
+	isNew := !existing[id]
 
-	isExported := isGoExported(name)
-	endLine := fset.Position(d.End()).Line
+	if isNew {
+		isExported := isGoExported(name)
+		endLine := fset.Position(d.End()).Line
 
-	node := model.Node{
-		ID:            id,
-		Kind:          kind,
-		Name:          name,
-		QualifiedName: fallbackQualName(qualName, name),
-		FilePath:      e.filePath,
-		Language:      e.lang,
-		StartLine:     startLine,
-		EndLine:       endLine,
-		IsExported:    isExported,
-	}
-	e.nodes = append(e.nodes, node)
-	existing[id] = true
-
-	// containment edge from file node (first node = file node)
-	if len(e.nodes) > 1 {
-		fileID := e.nodes[0].ID
-		e.edges = append(e.edges, model.Edge{
-			Source: fileID,
-			Target: id,
-			Kind:   model.EdgeContains,
-		})
-	}
-
-	// If it's a method, also try to add a contains edge from the receiver struct.
-	if kind == model.KindMethod && d.Recv != nil && len(d.Recv.List) > 0 {
-		recvType := fallbackReceiverType(d.Recv)
-		if recvType != "" {
-			e.addReceiverContains(recvType, id)
+		node := model.Node{
+			ID:            id,
+			Kind:          kind,
+			Name:          name,
+			QualifiedName: fallbackQualName(qualName, name),
+			FilePath:      e.filePath,
+			Language:      e.lang,
+			StartLine:     startLine,
+			EndLine:       endLine,
+			IsExported:    isExported,
 		}
+		e.nodes = append(e.nodes, node)
+		existing[id] = true
+
+		// containment edge from file node (first node = file node)
+		if len(e.nodes) > 1 {
+			fileID := e.nodes[0].ID
+			e.edges = append(e.edges, model.Edge{
+				Source: fileID,
+				Target: id,
+				Kind:   model.EdgeContains,
+			})
+		}
+
+		// If it's a method, also try to add a contains edge from the receiver struct.
+		if kind == model.KindMethod && d.Recv != nil && len(d.Recv.List) > 0 {
+			recvType := fallbackReceiverType(d.Recv)
+			if recvType != "" {
+				e.addReceiverContains(recvType, id)
+			}
+		}
+	}
+
+	// Walk the function body to emit call/instantiate unresolved refs.
+	// For D-2 (fullFallback=true): always walk — tree-sitter produced nothing.
+	// For D-3 (fullFallback=false): only walk for newly-added functions; tree-sitter
+	// already walked bodies of existing functions (possibly partially), and re-walking
+	// would create duplicate refs for any calls tree-sitter did find.
+	if d.Body != nil && (fullFallback || isNew) {
+		e.fallbackWalkBody(d.Body, id, fset)
 	}
 }
 
@@ -244,6 +261,91 @@ func (e *extractor) fallbackImportSpec(s *ast.ImportSpec, fset *token.FileSet, e
 			Kind:   model.EdgeContains,
 		})
 	}
+}
+
+// fallbackWalkBody walks a function body AST using go/ast to emit
+// call and instantiate unresolved references. Mirrors the logic of visitBodyGo
+// (walk_go.go) but uses the standard library parser's AST.
+func (e *extractor) fallbackWalkBody(body *ast.BlockStmt, fromNodeID string, fset *token.FileSet) {
+	ast.Inspect(body, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.CallExpr:
+			calleeName := fallbackCallName(node)
+			if calleeName != "" {
+				pos := fset.Position(node.Pos())
+				e.unresolvedRefs = append(e.unresolvedRefs, model.UnresolvedReference{
+					FromNodeID:    fromNodeID,
+					ReferenceName: calleeName,
+					ReferenceKind: model.EdgeCalls,
+					Line:          pos.Line,
+					Column:        pos.Column - 1,
+				})
+			}
+		case *ast.CompositeLit:
+			goType := fallbackCompositeLitType(node)
+			if goType != "" {
+				pos := fset.Position(node.Pos())
+				e.unresolvedRefs = append(e.unresolvedRefs, model.UnresolvedReference{
+					FromNodeID:    fromNodeID,
+					ReferenceName: goType,
+					ReferenceKind: model.EdgeInstantiates,
+					Line:          pos.Line,
+					Column:        pos.Column - 1,
+				})
+			}
+		}
+		return true
+	})
+}
+
+// fallbackCallName extracts the callee name from a go/ast CallExpr,
+// mirroring the logic in extractGoCall (walk_go.go).
+func fallbackCallName(call *ast.CallExpr) string {
+	switch fn := call.Fun.(type) {
+	case *ast.Ident:
+		return fn.Name
+	case *ast.SelectorExpr:
+		methodName := fn.Sel.Name
+		switch recv := fn.X.(type) {
+		case *ast.Ident:
+			if recv.Name == "self" || recv.Name == "this" || recv.Name == "cls" || recv.Name == "super" {
+				return methodName
+			}
+			return recv.Name + "." + methodName
+		case *ast.CallExpr:
+			// Chained: New().Method()
+			if inner, ok := recv.Fun.(*ast.Ident); ok {
+				return inner.Name + "()." + methodName
+			}
+			return methodName
+		default:
+			return methodName
+		}
+	default:
+		return ""
+	}
+}
+
+// fallbackCompositeLitType extracts the type name from a go/ast CompositeLit,
+// mirroring extractGoCompositeInstantiation (walk_go.go). Returns "" for
+// non-struct literals (slices, maps, anonymous structs).
+func fallbackCompositeLitType(lit *ast.CompositeLit) string {
+	if lit.Type == nil {
+		return ""
+	}
+	switch t := lit.Type.(type) {
+	case *ast.Ident:
+		// Bare struct: SpecConfig{}
+		name := t.Name
+		// Strip generic args not present in go/ast Ident, but handle ArrayType etc.
+		return name
+	case *ast.SelectorExpr:
+		// Qualified: projectdef.SpecConfig{}
+		if pkg, ok := t.X.(*ast.Ident); ok {
+			return pkg.Name + "." + t.Sel.Name
+		}
+	}
+	return ""
 }
 
 // fallbackReceiverType extracts the receiver type name from a method's
