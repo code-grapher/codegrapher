@@ -201,11 +201,6 @@ func copyFixture(t *testing.T, fixtureDir string) string {
 
 // assertGoldenState dumps the store and compares nodes (minus updated_at),
 // contains edges, non-contains edges, and file records against the goldens.
-//
-// Deviation note: golden rows with provenance "heuristic" (2 in go-small) are
-// produced by upstream's conformance synthesizer, which the resolve package
-// deliberately did not port — its own parity tests exclude them. They are
-// excluded from the exact-equality comparison here for the same reason.
 func assertGoldenState(t *testing.T, s *store.Store, goldenDir, fixtureCopy string) {
 	t.Helper()
 
@@ -239,12 +234,11 @@ func assertGoldenState(t *testing.T, s *store.Store, goldenDir, fixtureCopy stri
 	}
 
 	// --- non-contains edges (extraction + resolution) ---
+	// Full golden comparison including heuristic edges (struct→interface implements
+	// and interface-method→concrete-method calls).
 	allWant := loadJSON[goldenResEdge](t, filepath.Join(goldenDir, "resolution-edges.json"))
 	var wantRes []goldenResEdge
 	for _, e := range allWant {
-		if e.Provenance != nil && *e.Provenance == "heuristic" {
-			continue // see deviation note above
-		}
 		wantRes = append(wantRes, e)
 	}
 	var gotRes []goldenResEdge

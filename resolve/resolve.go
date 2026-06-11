@@ -51,6 +51,26 @@ func Resolve(s *store.Store, projectRoot string) (Stats, error) {
 		return stats, err
 	}
 
+	// Heuristic pass 1: Go implicit interface satisfaction (struct → interface).
+	// Must be inserted before pass 2 so the interface-override pass can read them.
+	implEdges, err := synthesizeGoImplementsEdges(s)
+	if err != nil {
+		return stats, err
+	}
+	if err := s.InsertEdges(implEdges); err != nil {
+		return stats, err
+	}
+
+	// Heuristic pass 2: interface-method → concrete-method call edges.
+	// Reads the implements edges inserted in pass 1.
+	overrideEdges, err := synthesizeGoInterfaceOverrideEdges(s)
+	if err != nil {
+		return stats, err
+	}
+	if err := s.InsertEdges(overrideEdges); err != nil {
+		return stats, err
+	}
+
 	if err := s.ClearUnresolvedReferences(); err != nil {
 		return stats, err
 	}
@@ -791,4 +811,198 @@ func loadGoModulePath(projectRoot string) string {
 		}
 	}
 	return ""
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Heuristic synthesis passes (ported from callback-synthesizer.ts)
+// ──────────────────────────────────────────────────────────────────────────────
+
+// goMethodNameSet returns the set of method names directly contained by nodeID
+// (i.e. via "contains" edges whose target is a method node).
+func goMethodNameSet(s *store.Store, nodeID string) (map[string][]model.Node, error) {
+	containsEdges, err := s.GetOutgoingEdges(nodeID, []model.EdgeKind{model.EdgeContains}, "")
+	if err != nil {
+		return nil, err
+	}
+	byName := make(map[string][]model.Node)
+	for _, e := range containsEdges {
+		n, err := s.GetNodeByID(e.Target)
+		if err != nil || n == nil || n.Kind != model.KindMethod {
+			continue
+		}
+		byName[n.Name] = append(byName[n.Name], *n)
+	}
+	return byName, nil
+}
+
+// collectNodesByKind collects all nodes of a given kind into a slice.
+// This avoids holding a sql.Rows cursor open while issuing nested queries.
+func collectNodesByKind(s *store.Store, kind model.NodeKind) ([]model.Node, error) {
+	var nodes []model.Node
+	err := s.IterateNodesByKind(kind, func(n model.Node) error {
+		nodes = append(nodes, n)
+		return nil
+	})
+	return nodes, err
+}
+
+// synthesizeGoImplementsEdges synthesizes heuristic "implements" edges for Go:
+// a struct implicitly satisfies an interface when its method-name set covers the
+// interface's method-name set (structural typing). Ported from goImplementsEdges
+// in callback-synthesizer.ts. Line is set to struct.StartLine, col is 0 (null).
+func synthesizeGoImplementsEdges(s *store.Store) ([]model.Edge, error) {
+	// Collect nodes first so we never issue nested queries while a cursor is open.
+	allInterfaces, err := collectNodesByKind(s, model.KindInterface)
+	if err != nil {
+		return nil, err
+	}
+	allStructs, err := collectNodesByKind(s, model.KindStruct)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build method-name sets for all Go interfaces.
+	type ifaceInfo struct {
+		node    model.Node
+		methods map[string]struct{}
+	}
+	var ifaces []ifaceInfo
+	for _, n := range allInterfaces {
+		if n.Language != model.LangGo {
+			continue
+		}
+		byName, err := goMethodNameSet(s, n.ID)
+		if err != nil {
+			return nil, err
+		}
+		if len(byName) == 0 {
+			continue // empty interface (e.g. `any`) — would match everything
+		}
+		names := make(map[string]struct{}, len(byName))
+		for name := range byName {
+			names[name] = struct{}{}
+		}
+		ifaces = append(ifaces, ifaceInfo{node: n, methods: names})
+	}
+	if len(ifaces) == 0 {
+		return nil, nil
+	}
+
+	var edges []model.Edge
+	seen := make(map[string]struct{})
+
+	for _, structNode := range allStructs {
+		if structNode.Language != model.LangGo {
+			continue
+		}
+		structMethods, err := goMethodNameSet(s, structNode.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, iface := range ifaces {
+			// Struct must have all methods the interface requires.
+			if len(structMethods) < len(iface.methods) {
+				continue
+			}
+			all := true
+			for m := range iface.methods {
+				if _, ok := structMethods[m]; !ok {
+					all = false
+					break
+				}
+			}
+			if !all {
+				continue
+			}
+			key := structNode.ID + ">" + iface.node.ID
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			edges = append(edges, model.Edge{
+				Source:     structNode.ID,
+				Target:     iface.node.ID,
+				Kind:       model.EdgeImplements,
+				Line:       structNode.StartLine,
+				Provenance: "heuristic",
+			})
+		}
+	}
+	return edges, nil
+}
+
+// synthesizeGoInterfaceOverrideEdges synthesizes heuristic "calls" edges from
+// each interface method to the matching concrete method on implementing structs.
+// Requires synthesizeGoImplementsEdges to have been run first (reads "implements"
+// edges from the store). Ported from interfaceOverrideEdges in
+// callback-synthesizer.ts. Line is set to the interface method's StartLine.
+func synthesizeGoInterfaceOverrideEdges(s *store.Store) ([]model.Edge, error) {
+	// Collect all Go structs first (avoid nested cursors).
+	allStructs, err := collectNodesByKind(s, model.KindStruct)
+	if err != nil {
+		return nil, err
+	}
+
+	var edges []model.Edge
+	seen := make(map[string]struct{})
+
+	for _, structNode := range allStructs {
+		if structNode.Language != model.LangGo {
+			continue
+		}
+		// Find implements edges for this struct (inserted by pass 1).
+		implEdges, err := s.GetOutgoingEdges(structNode.ID, []model.EdgeKind{model.EdgeImplements}, "")
+		if err != nil {
+			return nil, err
+		}
+		if len(implEdges) == 0 {
+			continue
+		}
+
+		// Build a name→methods map for struct's own methods.
+		structMethodsByName, err := goMethodNameSet(s, structNode.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, implEdge := range implEdges {
+			iface, err := s.GetNodeByID(implEdge.Target)
+			if err != nil || iface == nil || iface.Language != model.LangGo {
+				continue
+			}
+			// For each method declared on the interface, link to the matching struct method.
+			ifaceContains, err := s.GetOutgoingEdges(iface.ID, []model.EdgeKind{model.EdgeContains}, "")
+			if err != nil {
+				return nil, err
+			}
+			for _, ce := range ifaceContains {
+				ifaceMethod, err := s.GetNodeByID(ce.Target)
+				if err != nil || ifaceMethod == nil || ifaceMethod.Kind != model.KindMethod {
+					continue
+				}
+				concreteMethods, ok := structMethodsByName[ifaceMethod.Name]
+				if !ok {
+					continue
+				}
+				for _, cm := range concreteMethods {
+					if ifaceMethod.ID == cm.ID {
+						continue
+					}
+					key := ifaceMethod.ID + ">" + cm.ID
+					if _, dup := seen[key]; dup {
+						continue
+					}
+					seen[key] = struct{}{}
+					edges = append(edges, model.Edge{
+						Source:     ifaceMethod.ID,
+						Target:     cm.ID,
+						Kind:       model.EdgeCalls,
+						Line:       ifaceMethod.StartLine,
+						Provenance: "heuristic",
+					})
+				}
+			}
+		}
+	}
+	return edges, nil
 }

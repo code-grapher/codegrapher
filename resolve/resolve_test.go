@@ -35,12 +35,12 @@ func goldenEdgeKey(e goldenEdge) string {
 }
 
 // TestResolutionParityGoSmall extracts go-small, resolves, and compares the
-// non-heuristic edges against the golden.
+// full edge set against the golden (including heuristic edges).
 func TestResolutionParityGoSmall(t *testing.T) {
 	fixtureDir := filepath.Join(repoRoot, "testdata", "fixtures", "go-small")
 	goldenFile := filepath.Join(repoRoot, "testdata", "golden", "go-small", "resolution-edges.json")
 
-	// Load golden edges, keeping only non-heuristic ones.
+	// Load all golden edges.
 	rawGolden, err := os.ReadFile(goldenFile)
 	if err != nil {
 		t.Fatalf("read golden: %v", err)
@@ -51,9 +51,6 @@ func TestResolutionParityGoSmall(t *testing.T) {
 	}
 	goldenNonHeuristic := make(map[string]goldenEdge)
 	for _, g := range allGolden {
-		if g.Provenance != nil && *g.Provenance == "heuristic" {
-			continue
-		}
 		goldenNonHeuristic[goldenEdgeKey(g)] = g
 	}
 
@@ -165,7 +162,9 @@ func TestResolutionParityGoSmall(t *testing.T) {
 }
 
 // TestResolutionParityTsSmall extracts ts-small, resolves, and compares the
-// non-heuristic edges against the golden.
+// full edge set against the golden.
+// Note: ts-small's golden has 2 byte-identical duplicate rows (23 rows, 21 unique);
+// the map keying by source|target|kind naturally deduplicates them.
 func TestResolutionParityTsSmall(t *testing.T) {
 	fixtureDir := filepath.Join(repoRoot, "testdata", "fixtures", "ts-small")
 	goldenFile := filepath.Join(repoRoot, "testdata", "golden", "ts-small", "resolution-edges.json")
@@ -180,9 +179,6 @@ func TestResolutionParityTsSmall(t *testing.T) {
 	}
 	goldenNonHeuristic := make(map[string]goldenEdge)
 	for _, g := range allGolden {
-		if g.Provenance != nil && *g.Provenance == "heuristic" {
-			continue
-		}
 		goldenNonHeuristic[goldenEdgeKey(g)] = g
 	}
 
