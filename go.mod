@@ -22,3 +22,5 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace github.com/odvcencio/gotreesitter => github.com/trakhimenok/gotreesitter v0.20.3-0.20260611095614-14527fe8bf96

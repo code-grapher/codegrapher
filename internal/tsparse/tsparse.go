@@ -8,6 +8,9 @@ package tsparse
 
 import (
 	"fmt"
+	"os"
+	"strconv"
+	"time"
 
 	gts "github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
@@ -132,9 +135,27 @@ func NewParser(lang Language) (*Parser, error) {
 	}
 }
 
+// parseTimeout bounds a single file's parse. gotreesitter has pathological
+// blow-ups on rare literal-heavy files (its issue #110: minutes of CPU and
+// gigabytes of heap on a file the C tree-sitter parses instantly) — without a
+// budget one such file hangs indexing and can OOM the machine. On expiry the
+// file degrades to a per-file parse error (logged; index stays usable), a
+// deliberate divergence documented in KNOWN-BUGS.md D-2.
+var parseTimeout = func() time.Duration {
+	if v := os.Getenv("CODEGRAPH_PARSE_TIMEOUT_MS"); v != "" {
+		if ms, err := strconv.Atoi(v); err == nil && ms >= 0 {
+			return time.Duration(ms) * time.Millisecond
+		}
+	}
+	return 30 * time.Second
+}()
+
 // Parse parses src and returns the syntax tree.
 func (p *Parser) Parse(src []byte) (*Tree, error) {
 	inner := gts.NewParser(p.lang)
+	if parseTimeout > 0 {
+		inner.SetTimeoutMicros(uint64(parseTimeout / time.Microsecond))
+	}
 	tree, err := inner.Parse(src)
 	if err != nil {
 		return nil, fmt.Errorf("tsparse: parse: %w", err)
