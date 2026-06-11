@@ -83,3 +83,26 @@ func TestCanonicalize_PreservesQueryOrder(t *testing.T) {
 func readFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
+
+func TestSortArray_ContentNotPositionOrder(t *testing.T) {
+	// Regression: keys must follow items during sorting. With a detached key
+	// slice, sort.SliceStable compares stale positions and the result depends
+	// on input order — two permutations of the same set normalized unequal.
+	perm1 := []byte(`{"affected":[{"name":"lookup"},{"name":"report"},{"name":"Cache"},{"name":"main"}]}`)
+	perm2 := []byte(`{"affected":[{"name":"Cache"},{"name":"lookup"},{"name":"main"},{"name":"report"}]}`)
+	a, err := Canonicalize(perm1, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := Canonicalize(perm2, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(a) != string(b) {
+		t.Errorf("permutations of the same affected set must normalize equal:\n%s\n%s", a, b)
+	}
+	want := `{"affected":[{"name":"Cache"},{"name":"lookup"},{"name":"main"},{"name":"report"}]}`
+	if string(a) != want {
+		t.Errorf("expected canonical key order:\ngot  %s\nwant %s", a, want)
+	}
+}

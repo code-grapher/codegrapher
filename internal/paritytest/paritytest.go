@@ -73,18 +73,26 @@ func normalize(v any, key string, topLevelUnordered bool) any {
 }
 
 // sortArray orders array elements by their canonical JSON encoding — stable,
-// total, and implementation-independent.
+// total, and implementation-independent. Keys are paired with their items
+// before sorting (sorting items while indexing a detached key slice compares
+// stale positions once elements move).
 func sortArray(items []any) {
-	keys := make([]string, len(items))
+	type keyed struct {
+		key  string
+		item any
+	}
+	ks := make([]keyed, len(items))
 	for i, item := range items {
 		b, err := json.Marshal(item)
 		if err != nil {
-			keys[i] = ""
-			continue
+			b = nil
 		}
-		keys[i] = string(b)
+		ks[i] = keyed{key: string(b), item: item}
 	}
-	sort.SliceStable(items, func(i, j int) bool { return keys[i] < keys[j] })
+	sort.SliceStable(ks, func(i, j int) bool { return ks[i].key < ks[j].key })
+	for i, k := range ks {
+		items[i] = k.item
+	}
 }
 
 // Diff compares got against the golden file at goldenPath after canonicalizing
