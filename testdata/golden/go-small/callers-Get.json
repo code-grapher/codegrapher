@@ -6,6 +6,12 @@
       "kind": "method",
       "filePath": "internal/store/cache.go",
       "startLine": 15
+    },
+    {
+      "name": "Get",
+      "kind": "method",
+      "filePath": "internal/store/store.go",
+      "startLine": 20
     }
   ]
 }

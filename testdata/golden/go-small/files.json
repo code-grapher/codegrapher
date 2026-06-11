@@ -1,1 +1,20 @@
-[{"language":"go","nodeCount":14,"path":"internal/store/store.go","size":1235},{"language":"go","nodeCount":5,"path":"internal/store/cache.go","size":545},{"language":"go","nodeCount":9,"path":"cmd/app/main.go","size":731}]
+[
+  {
+    "path": "cmd/app/main.go",
+    "language": "go",
+    "nodeCount": 9,
+    "size": 731
+  },
+  {
+    "path": "internal/store/cache.go",
+    "language": "go",
+    "nodeCount": 5,
+    "size": 545
+  },
+  {
+    "path": "internal/store/store.go",
+    "language": "go",
+    "nodeCount": 14,
+    "size": 1235
+  }
+]

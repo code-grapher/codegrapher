@@ -1,4 +1,11 @@
 {
   "symbol": "Get",
-  "callees": []
+  "callees": [
+    {
+      "name": "Get",
+      "kind": "method",
+      "filePath": "internal/store/store.go",
+      "startLine": 29
+    }
+  ]
 }

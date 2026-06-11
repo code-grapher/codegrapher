@@ -1,8 +1,8 @@
 {
   "symbol": "Cache::lookup",
   "depth": 2,
-  "nodeCount": 4,
-  "edgeCount": 3,
+  "nodeCount": 3,
+  "edgeCount": 2,
   "affected": [
     {
       "name": "lookup",
@@ -21,12 +21,6 @@
       "kind": "function",
       "filePath": "src/main.ts",
       "startLine": 3
-    },
-    {
-      "name": "Cache",
-      "kind": "class",
-      "filePath": "src/cache.ts",
-      "startLine": 4
     }
   ]
 }

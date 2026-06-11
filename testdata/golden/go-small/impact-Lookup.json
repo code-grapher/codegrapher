@@ -1,8 +1,8 @@
 {
   "symbol": "Lookup",
   "depth": 2,
-  "nodeCount": 8,
-  "edgeCount": 7,
+  "nodeCount": 3,
+  "edgeCount": 2,
   "affected": [
     {
       "name": "Lookup",
@@ -21,36 +21,6 @@
       "kind": "function",
       "filePath": "cmd/app/main.go",
       "startLine": 11
-    },
-    {
-      "name": "main.go",
-      "kind": "file",
-      "filePath": "cmd/app/main.go",
-      "startLine": 1
-    },
-    {
-      "name": "cache.go",
-      "kind": "file",
-      "filePath": "internal/store/cache.go",
-      "startLine": 1
-    },
-    {
-      "name": "Cache",
-      "kind": "struct",
-      "filePath": "internal/store/cache.go",
-      "startLine": 4
-    },
-    {
-      "name": "Warm",
-      "kind": "method",
-      "filePath": "internal/store/cache.go",
-      "startLine": 24
-    },
-    {
-      "name": "NewCache",
-      "kind": "function",
-      "filePath": "internal/store/cache.go",
-      "startLine": 10
     }
   ]
 }

@@ -1,14 +1,14 @@
 {
   "symbol": "Get",
   "depth": 2,
-  "nodeCount": 11,
-  "edgeCount": 10,
+  "nodeCount": 4,
+  "edgeCount": 3,
   "affected": [
     {
       "name": "Get",
       "kind": "method",
       "filePath": "internal/store/store.go",
-      "startLine": 29
+      "startLine": 20
     },
     {
       "name": "Lookup",
@@ -23,52 +23,10 @@
       "startLine": 22
     },
     {
-      "name": "cache.go",
-      "kind": "file",
-      "filePath": "internal/store/cache.go",
-      "startLine": 1
-    },
-    {
-      "name": "Cache",
-      "kind": "struct",
-      "filePath": "internal/store/cache.go",
-      "startLine": 4
-    },
-    {
-      "name": "store.go",
-      "kind": "file",
-      "filePath": "internal/store/store.go",
-      "startLine": 1
-    },
-    {
-      "name": "Store",
-      "kind": "struct",
-      "filePath": "internal/store/store.go",
-      "startLine": 13
-    },
-    {
-      "name": "Set",
+      "name": "Get",
       "kind": "method",
       "filePath": "internal/store/store.go",
-      "startLine": 40
-    },
-    {
-      "name": "Warm",
-      "kind": "method",
-      "filePath": "internal/store/cache.go",
-      "startLine": 24
-    },
-    {
-      "name": "Len",
-      "kind": "method",
-      "filePath": "internal/store/store.go",
-      "startLine": 47
-    },
-    {
-      "name": "New",
-      "kind": "function",
-      "filePath": "internal/store/store.go",
-      "startLine": 24
+      "startLine": 29
     }
   ]
 }

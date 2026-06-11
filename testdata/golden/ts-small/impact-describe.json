@@ -1,8 +1,8 @@
 {
   "symbol": "describe",
   "depth": 2,
-  "nodeCount": 5,
-  "edgeCount": 4,
+  "nodeCount": 4,
+  "edgeCount": 3,
   "affected": [
     {
       "name": "describe",
@@ -23,15 +23,9 @@
       "startLine": 3
     },
     {
-      "name": "Cache",
-      "kind": "class",
-      "filePath": "src/cache.ts",
-      "startLine": 4
-    },
-    {
-      "name": "store.ts",
+      "name": "cache.ts",
       "kind": "file",
-      "filePath": "src/store.ts",
+      "filePath": "src/cache.ts",
       "startLine": 1
     }
   ]

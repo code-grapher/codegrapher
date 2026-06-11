@@ -6,6 +6,12 @@
       "kind": "method",
       "filePath": "src/cache.ts",
       "startLine": 23
+    },
+    {
+      "name": "cache.ts",
+      "kind": "file",
+      "filePath": "src/cache.ts",
+      "startLine": 1
     }
   ]
 }

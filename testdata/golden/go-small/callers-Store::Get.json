@@ -2,10 +2,10 @@
   "symbol": "Store::Get",
   "callers": [
     {
-      "name": "Lookup",
+      "name": "Get",
       "kind": "method",
-      "filePath": "internal/store/cache.go",
-      "startLine": 15
+      "filePath": "internal/store/store.go",
+      "startLine": 20
     }
   ]
 }
