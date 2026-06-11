@@ -1,0 +1,181 @@
+package indexer
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/specscore/codegrapher/lock"
+	"github.com/specscore/codegrapher/model"
+	"github.com/specscore/codegrapher/store"
+)
+
+// PackageVersion stamps the index with the engine that built it
+// (indexed_with_version metadata, mirroring CodeGraphPackageVersion).
+const PackageVersion = "0.1.0"
+
+// ExtractionVersion mirrors EXTRACTION_VERSION in
+// src/extraction/extraction-version.ts at the time of the port.
+const ExtractionVersion = 14
+
+// Phase identifies a stage of an indexing operation.
+type Phase string
+
+// Progress phases, mirroring IndexProgress.phase in src/extraction/index.ts.
+const (
+	PhaseScanning  Phase = "scanning"
+	PhaseParsing   Phase = "parsing"
+	PhaseStoring   Phase = "storing"
+	PhaseResolving Phase = "resolving"
+)
+
+// IndexProgress is reported to the OnProgress callback during indexing.
+type IndexProgress struct {
+	Phase       Phase
+	Current     int
+	Total       int
+	CurrentFile string
+}
+
+// IndexResult is the outcome of a full or partial indexing operation.
+type IndexResult struct {
+	Success      bool
+	FilesIndexed int
+	FilesSkipped int
+	FilesErrored int
+	NodesCreated int
+	EdgesCreated int
+	Errors       []model.ExtractionError
+	DurationMs   int64
+}
+
+// SyncResult is the outcome of an incremental sync.
+type SyncResult struct {
+	FilesChecked     int
+	FilesAdded       int
+	FilesModified    int
+	FilesRemoved     int
+	NodesUpdated     int
+	DurationMs       int64
+	ChangedFilePaths []string
+}
+
+// ChangedFiles classifies pending filesystem changes against the index.
+type ChangedFiles struct {
+	Added    []string
+	Modified []string
+	Removed  []string
+}
+
+// Options configures indexing operations. The zero value is usable.
+type Options struct {
+	// Workers bounds the extraction goroutine pool (0 = DefaultWorkers).
+	Workers int
+
+	// OnProgress, when non-nil, receives progress updates.
+	OnProgress func(IndexProgress)
+
+	// Clock returns the current time in Unix milliseconds. Injectable for
+	// deterministic tests (0/nil = time.Now).
+	Clock func() int64
+}
+
+// DefaultWorkers is the default extraction pool size.
+const DefaultWorkers = 8
+
+func (o Options) workers() int {
+	if o.Workers > 0 {
+		return o.Workers
+	}
+	return DefaultWorkers
+}
+
+func (o Options) clock() func() int64 {
+	if o.Clock != nil {
+		return o.Clock
+	}
+	return func() int64 { return time.Now().UnixMilli() }
+}
+
+func (o Options) progress(p IndexProgress) {
+	if o.OnProgress != nil {
+		o.OnProgress(p)
+	}
+}
+
+// Indexer is an open codegraph project: the seam embedding consumers use to
+// build and maintain the index. Construct with Init or Open.
+type Indexer struct {
+	root  string
+	store *store.Store
+	lock  *lock.FileLock
+
+	// mu serializes in-process indexing operations (the indexMutex in
+	// src/index.ts); the file lock serializes across processes.
+	mu sync.Mutex
+}
+
+// Open opens an existing CodeGraph project.
+func Open(projectRoot string, opts Options) (*Indexer, error) {
+	root, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	if !IsInitialized(root) {
+		return nil, fmt.Errorf("CodeGraph not initialized in %s. Run Init first", root)
+	}
+	storeOpts := []store.Option{}
+	if opts.Clock != nil {
+		storeOpts = append(storeOpts, store.WithNowFunc(opts.Clock))
+	}
+	s, err := store.Open(DatabasePath(root), storeOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return newIndexer(root, s), nil
+}
+
+func newIndexer(root string, s *store.Store) *Indexer {
+	return &Indexer{
+		root:  root,
+		store: s,
+		lock:  lock.New(filepath.Join(GetCodeGraphDir(root), "codegraph.lock")),
+	}
+}
+
+// ProjectRoot returns the project root directory.
+func (idx *Indexer) ProjectRoot() string { return idx.root }
+
+// Store exposes the underlying store for query consumers.
+func (idx *Indexer) Store() *store.Store { return idx.store }
+
+// Close releases the file lock (if held) and closes the database.
+func (idx *Indexer) Close() error {
+	idx.lock.Release()
+	return idx.store.Close()
+}
+
+// Uninit closes the index and removes the project's .codegraph directory.
+func (idx *Indexer) Uninit() error {
+	if err := idx.Close(); err != nil {
+		return err
+	}
+	return RemoveDirectory(idx.root)
+}
+
+// Uninit removes the .codegraph directory of a project that isn't open.
+func Uninit(projectRoot string) error {
+	root, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return err
+	}
+	return RemoveDirectory(root)
+}
+
+// statMtimeMs returns the file's mtime in whole milliseconds, matching the
+// Math.floor(stats.mtimeMs) comparison in the original.
+func statMtimeMs(fi os.FileInfo) int64 {
+	return fi.ModTime().UnixMilli()
+}
