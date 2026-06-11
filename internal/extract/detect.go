@@ -11,24 +11,37 @@ import (
 )
 
 // DetectLanguage returns the model.Language for the given file path,
-// based solely on the file extension. Only Go, TypeScript, TSX, JavaScript,
-// and JSX are recognised; everything else returns model.LangUnknown.
+// based solely on the file extension. Mirrors EXTENSION_MAP in
+// src/extraction/grammars.ts. File-level-only languages (yaml, twig,
+// properties) return their own Language constant so the indexer records a
+// file row with zero nodes, matching the original's behaviour.
 func DetectLanguage(filePath string) model.Language {
 	ext := strings.ToLower(filepath.Ext(filePath))
 	switch ext {
 	case ".go":
 		return model.LangGo
-	case ".ts":
+	case ".ts", ".mts", ".cts":
 		return model.LangTypeScript
 	case ".tsx":
 		return model.LangTSX
-	case ".js":
+	case ".js", ".mjs", ".cjs":
 		return model.LangJavaScript
 	case ".jsx":
 		return model.LangJSX
+	// File-level-only languages: tracked in the files table with zero
+	// symbol nodes, matching isFileLevelOnlyLanguage() in grammars.ts.
+	case ".yml", ".yaml":
+		return model.LangYAML
 	default:
 		return model.LangUnknown
 	}
+}
+
+// IsFileLevelOnly reports whether lang is tracked at the file-record level
+// only — stored in the files table with zero symbol nodes. Mirrors
+// isFileLevelOnlyLanguage() in src/extraction/grammars.ts.
+func IsFileLevelOnly(lang model.Language) bool {
+	return lang == model.LangYAML
 }
 
 // generatedPatterns is ported from src/extraction/generated-detection.ts.

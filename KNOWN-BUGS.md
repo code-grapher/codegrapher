@@ -74,6 +74,9 @@ and duplicating rows in raw edge listings.
 | 5 | `internal/extract` | TS type-annotation references weren't emitted at all (then later: emitted once instead of upstream's twice — see UB-3). | `64bd571`, `1eabfb4` |
 | 6 | `resolve` | Dotted references (`cache.warm`) were looked up verbatim and never matched; upstream resolves the member name with proximity ranking. | `64bd571` |
 | 7 | `resolve` | Heuristic synthesis passes (Go struct→interface `implements` conformance; interface-method→implementation `calls`) were silently missing; parity tests had quietly excluded `provenance="heuristic"` edges. Exclusions removed, passes ported, and edge identity in parity tests tightened to include provenance + line. | `03592f3`, `26e6c61` |
+| 8 | `internal/extract` | Grouped `var (...)` declarations produced zero nodes: `extractGoVarConst` iterated direct children looking for `var_spec`, but gotreesitter wraps grouped var blocks in an intermediate `var_spec_list` node. Fixed by unwrapping `var_spec_list` before collecting specs. | current |
+| 9 | `internal/extract` | 30 Go files containing `[]struct{...}` table-driven test patterns caused gotreesitter to return a root with `Kind()=="ERROR"` instead of `"source_file"`, losing all top-level declarations after the first problematic construct. Fixed by detecting an ERROR/HasError root and supplementing with a `walkGoFallback` pass using the standard library `go/parser` (which parses all valid Go correctly). Documented as D-3. | current |
+| 10 | `indexer/scan.go` | `.yml`/`.yaml` files returned `LangUnknown` from `DetectLanguage`, so they were never scanned. Fixed by adding `LangYAML` detection and an `IsFileLevelOnly` guard in `ExtractFile` that returns zero nodes (matching upstream's `isFileLevelOnlyLanguage`). | current |
 
 Process lesson encoded in the harness: **goldens are immutable**. Every
 guideline-violating "fix the golden to match the port" so far has been masking
@@ -93,6 +96,31 @@ adding new capture dimensions) are full re-captures from the original via
 ---
 
 ## D. Deliberate divergences from upstream
+
+### D-2: gotreesitter parse timeout falls back to go/parser
+
+gotreesitter has a known pathological GLR blow-up (upstream issue #110) on
+certain literal-heavy Go files (notably `pkg/lint/coverage_test.go` at 211 KB).
+The `SetTimeoutMicros` mechanism doesn't fire because the per-iteration check
+runs too infrequently relative to the iteration count for such files.
+
+Divergence (`internal/extract/extract.go`): the gotreesitter `Parse` call runs
+in a goroutine with a 30-second hard deadline (configurable via
+`CODEGRAPH_PARSE_TIMEOUT_MS`). On timeout the goroutine is abandoned (Go has no
+cancellation) and `walkGoFallback` (go/parser) extracts the file. The upstream
+uses the C tree-sitter via WASM and never hits this limitation; for us go/parser
+produces identical node IDs and line numbers (same `token.FileSet` numbering
+matches gotreesitter's row+1 convention). The leaked goroutine eventually
+completes on its own and is GC'd; it holds no database handles.
+
+### D-3: go/parser supplemental pass for gotreesitter ERROR roots
+
+Files where gotreesitter produces `root.Kind()=="ERROR"` (the `[]struct{...}`
+anonymous struct slice pattern in function bodies) get a supplemental extraction
+pass via `walkGoFallback` (`internal/extract/walk_go_fallback.go`). go/parser
+correctly parses all valid Go and produces identical node IDs. New nodes only
+(by ID) are merged — nodes the partial tree-sitter walk already emitted
+correctly are never duplicated.
 
 ### D-1: FileLock no longer reclaims young locks with invalid content
 

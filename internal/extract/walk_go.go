@@ -394,15 +394,39 @@ func (e *extractor) extractGoImport(node *tsparse.Node) {
 }
 
 // extractGoVarConst handles var_declaration and const_declaration nodes.
+//
+// Grammar notes:
+//   - const (A=1; B=2) → const_declaration with direct const_spec children
+//   - var (x=1; y=2)   → var_declaration with a var_spec_list child, which
+//     in turn holds the individual var_spec nodes. Single-var declarations
+//     (var x = 1) still place var_spec directly under var_declaration.
 func (e *extractor) extractGoVarConst(node *tsparse.Node) {
 	isConst := node.Kind() == "const_declaration"
 	docstring := e.lookupDoc(node)
 
+	// Collect specs: const_spec / var_spec children, unwrapping var_spec_list
+	// when the Go grammar wraps a multi-var block in a list node.
+	var specs []*tsparse.Node
 	for i := 0; i < node.NamedChildCount(); i++ {
-		spec := node.NamedChild(i)
-		if spec == nil {
+		child := node.NamedChild(i)
+		if child == nil {
 			continue
 		}
+		switch child.Kind() {
+		case "const_spec", "var_spec":
+			specs = append(specs, child)
+		case "var_spec_list":
+			// Grouped var (...) block — unwrap the list
+			for j := 0; j < child.NamedChildCount(); j++ {
+				sub := child.NamedChild(j)
+				if sub != nil && sub.Kind() == "var_spec" {
+					specs = append(specs, sub)
+				}
+			}
+		}
+	}
+
+	for _, spec := range specs {
 		specKind := spec.Kind()
 		if specKind != "var_spec" && specKind != "const_spec" {
 			continue
