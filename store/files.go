@@ -85,11 +85,17 @@ func scanFiles(rows *sql.Rows) ([]model.FileRecord, error) {
 			f        model.FileRecord
 			language string
 			errs     sql.NullString
+			// Timestamps scan via float64: indexes written by the original
+			// Node implementation store Date.now() as REAL (e.g. 1.77e+12),
+			// which database/sql refuses to coerce into int64 directly.
+			modifiedAt, indexedAt sql.NullFloat64
 		)
 		if err := rows.Scan(&f.Path, &f.ContentHash, &language, &f.Size,
-			&f.ModifiedAt, &f.IndexedAt, &f.NodeCount, &errs); err != nil {
+			&modifiedAt, &indexedAt, &f.NodeCount, &errs); err != nil {
 			return nil, err
 		}
+		f.ModifiedAt = int64(modifiedAt.Float64)
+		f.IndexedAt = int64(indexedAt.Float64)
 		f.Language = model.Language(language)
 		if errs.Valid && errs.String != "" {
 			var ee []model.ExtractionError
