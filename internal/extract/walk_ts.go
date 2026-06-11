@@ -797,6 +797,20 @@ func (e *extractor) extractTSTypeAnnotationRefs(node *tsparse.Node, fromID strin
 		}
 	}
 
+	// Direct type annotation child (upstream walks this for class fields like
+	// `model: ITextModel`). In the TS grammar a method's return type IS a
+	// type_annotation named child — also reachable via the return_type field
+	// above — so return types are deliberately emitted TWICE, reproducing
+	// upstream's duplicate references rows (bug-for-bug parity; see the two
+	// duplicate rows in testdata/golden/ts-small/resolution-edges.json).
+	for i := 0; i < node.NamedChildCount(); i++ {
+		ch := node.NamedChild(i)
+		if ch != nil && ch.Kind() == "type_annotation" {
+			e.collectTSTypeRefs(ch, fromID)
+			break // upstream uses .find() — first match only
+		}
+	}
+
 	// Type alias value: type Foo = Bar | Baz
 	if node.Kind() == "type_alias_declaration" {
 		val := node.ChildByFieldName("value")
