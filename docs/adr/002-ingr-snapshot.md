@@ -33,6 +33,24 @@ instead of re-indexing from scratch.
   published spec (the format is deliberately trivial); no new heavy deps,
   CGO_ENABLED=0 preserved.
 
+## Extension: in-browser code browsing (owner idea, 2026-06-11)
+
+A static, serverless web viewer that loads the repo's committed `.ingr`
+snapshot files directly in the browser (fetched from the repo checkout, raw
+GitHub, or any static host) and offers quick symbol search/browse with
+client-side filtering:
+
+- INGR's fixed-line format parses in a few lines of JS; a nodes table at
+  specscore-cli scale (~8K records) filters instantly client-side; even
+  ~100K-node repos are a few MB gzipped (highly repetitive lines).
+- The edges table enables callers/callees navigation in the viewer.
+- Scope guard: this is a browse/filter UX (substring/prefix, maybe tiny
+  fuzzy) — it does NOT promise parity with the CLI's FTS5+BM25 `query`
+  scoring.
+- Open: snapshot directory name/layout (shared concern with the ingitdb
+  ecosystem direction), where the viewer lives (codegrapher.dev tool page
+  vs. a static index.html shipped next to the snapshot).
+
 ## Alternatives considered
 
 - **Graph DB** (Kùzu/Neo4j/...): rejected — workload is 1–3 hop traversals
