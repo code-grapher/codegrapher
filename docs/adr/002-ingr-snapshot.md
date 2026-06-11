@@ -47,9 +47,21 @@ client-side filtering:
 - Scope guard: this is a browse/filter UX (substring/prefix, maybe tiny
   fuzzy) — it does NOT promise parity with the CLI's FTS5+BM25 `query`
   scoring.
-- Open: snapshot directory name/layout (shared concern with the ingitdb
-  ecosystem direction), where the viewer lives (codegrapher.dev tool page
-  vs. a static index.html shipped next to the snapshot).
+- DECIDED (owner, 2026-06-11) — this is the END GOAL of the current effort,
+  first target repo: specscore-cli (Go focus):
+  - Viewer lives at codegrapher.dev with D-0001-style canonical routes:
+    `https://codegrapher.dev/{git_host}/{org}/{repo}[/{path}][?q=pattern]`
+    (first-segment dispatch: contains "." → forge route; literal → site
+    page; forge-host allow-list, github.com first). See
+    specscore-studio-app/spec/features/studio-url-scheme for the pattern.
+  - Directory/file tree derives from the committed files.ingr (split paths
+    client-side) — NO separate go-tree.yaml (single source of truth), NO
+    GitHub API for the tree. nodes.ingr extends the tree into symbols and
+    powers symbol search. Scope: indexed files only (it's a code browser).
+  - File CONTENT fetched on demand from raw.githubusercontent.com (public
+    repos; API/token only if private repos arrive later).
+  - Entry point: a link in the target repo's root README →
+    codegrapher.dev/github.com/{org}/{repo}.
 
 ## Alternatives considered
 
