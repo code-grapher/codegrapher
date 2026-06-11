@@ -89,3 +89,27 @@ adding new capture dimensions) are full re-captures from the original via
 |---|---|
 | MCP daemon/proxy modes (`daemon.sock`, `daemon.pid`, ppid watchdog) | Not implemented; direct (stdio) mode only. `codegraph serve --mcp` serves direct stdio; `CODEGRAPH_DAEMON_INTERNAL` is rejected with a clear error and the daemon-default transport falls back to direct mode with a stderr notice. |
 | Windows `lock` alive-probe | Stale-lock detection on Windows uses the 2-minute mtime timeout only (no PID liveness probe) to stay pure-Go. Conservative: locks are never reclaimed early. |
+
+---
+
+## D. Deliberate divergences from upstream
+
+### D-1: FileLock no longer reclaims young locks with invalid content
+
+Upstream's `FileLock.acquire` treats a lock file whose content is empty or
+unparsable as stale **regardless of age** and unlinks it. But every acquirer
+necessarily passes through that state: the `O_EXCL` create and the PID write
+are separate operations, so the file is momentarily empty. A concurrent
+acquirer hitting that window deletes the half-born lock and acquires too —
+**two winners**, and two writers can corrupt the SQLite index. Our
+`TestRaceAcquire` (20 concurrent acquirers) reproduced this intermittently.
+
+Divergence (`lock/lock.go` → `handleExistingLock`): a lock with invalid
+content is reclaimed only once it is older than `StaleTimeout` (2 min);
+young-but-invalid is treated as held. Locks naming a valid dead PID are still
+reclaimed immediately (crashed owner), and the age rule alone still reclaims
+anything older than the timeout — both exactly as upstream. Only the
+pathological microsecond interleaving changes. A sub-microsecond TOCTOU
+between the freshness stat and the unlink remains (closing it fully needs
+flock-style OS primitives); it is narrower than upstream's by ~5 orders of
+magnitude.

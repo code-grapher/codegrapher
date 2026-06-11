@@ -127,10 +127,9 @@ func (fl *FileLock) Acquire() error {
 // and removes it if so. Returns a non-nil error (wrapping ErrLockUnavailable)
 // if the lock is actively held.
 func (fl *FileLock) handleExistingLock() error {
-	content, err := os.ReadFile(fl.path)
-	if err != nil {
-		// Unreadable — treat as stale and try to remove.
-		_ = os.Remove(fl.path)
+	content, readErr := os.ReadFile(fl.path)
+	if readErr != nil && os.IsNotExist(readErr) {
+		// Disappeared between the caller's Stat and our read — fine.
 		return nil
 	}
 
@@ -141,10 +140,29 @@ func (fl *FileLock) handleExistingLock() error {
 	}
 
 	pid, pidErr := strconv.Atoi(strings.TrimSpace(string(content)))
+	if readErr != nil {
+		pidErr = readErr // unreadable content == invalid content
+	}
 	lockAge := fl.now().Sub(info.ModTime())
 
-	isStale := lockAge >= StaleTimeout || pidErr != nil || !fl.alive(pid)
+	// Stale when older than the timeout (regardless of PID — upstream rule),
+	// or when it names a VALID pid whose process is dead (crashed owner:
+	// reclaim immediately, like upstream).
+	//
+	// DELIBERATE DIVERGENCE from upstream (see KNOWN-BUGS.md D-1): upstream
+	// additionally reclaims locks with empty/unparsable content regardless of
+	// age. That races against a concurrent acquirer between its O_EXCL create
+	// and PID write — the file is momentarily empty — letting two processes
+	// both "win" and corrupt the index. A young lock with invalid content is
+	// therefore treated as held here: it is either mid-acquisition (resolves
+	// in microseconds) or garbage that becomes reclaimable via the age rule
+	// in at most 2 minutes. Observable behavior is otherwise identical.
+	isStale := lockAge >= StaleTimeout || (pidErr == nil && !fl.alive(pid))
 	if !isStale {
+		if pidErr != nil {
+			return fmt.Errorf("%w (lock file has no readable PID): if this is stale, run 'codegraph unlock' or delete %s",
+				ErrLockUnavailable, fl.path)
+		}
 		return fmt.Errorf("%w (PID %d): if this is stale, run 'codegraph unlock' or delete %s",
 			ErrLockUnavailable, pid, fl.path)
 	}
