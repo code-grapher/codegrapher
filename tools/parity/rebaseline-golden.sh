@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # rebaseline-golden.sh — regenerate all testdata/golden/{go-small,ts-small} goldens
-# from OUR binary (CGO_ENABLED=0 go build ./cmd/codegraph).
+# from OUR binary (CGO_ENABLED=0 go build ./cmd/codegrapher).
 #
 # Goldens are now self-baselined: our output IS the spec. The original capture-*.sh
 # scripts are retained for comparison only (they require the upstream Node 22 CLI).
@@ -15,11 +15,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 FIXTURES="$ROOT/testdata/fixtures"
 GOLDEN="$ROOT/testdata/golden"
-BIN="/tmp/codegraph-rebaseline"
+BIN="/tmp/codegrapher-rebaseline"
 
 # Build our binary.
-echo "Building codegraph binary..."
-CGO_ENABLED=0 go build -o "$BIN" "$ROOT/cmd/codegraph"
+echo "Building codegrapher binary..."
+CGO_ENABLED=0 go build -o "$BIN" "$ROOT/cmd/codegrapher"
 echo "Built: $BIN"
 
 command -v sqlite3 >/dev/null || { echo "sqlite3 not found on PATH" >&2; exit 1; }

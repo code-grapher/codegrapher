@@ -13,7 +13,7 @@ instead of re-indexing from scratch.
   **INGR** (https://ingr.io — compact, deterministic, git-friendly record
   format; one JSON-encoded field per line, self-describing header,
   record-count/digest footer; v1.0.0-RC).
-- Workflow: snapshot is committed to the repo (e.g. `.codegraph-snapshot/`).
+- Workflow: snapshot is committed to the repo (default dir: `ingitdb/codegrapher/`).
   CI/teammates run `import` to seed the store, then the existing
   content-hash `sync` reconciles any drift — turning cold-start indexing
   into "import + sync seconds".

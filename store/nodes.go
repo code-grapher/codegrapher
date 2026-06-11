@@ -171,6 +171,15 @@ func (s *Store) GetNodesByQualifiedNameExact(qualifiedName string) ([]model.Node
 	return scanNodes(rows)
 }
 
+// AllNodes returns every node in the store ordered by id.
+func (s *Store) AllNodes() ([]model.Node, error) {
+	rows, err := s.db.Query(`SELECT ` + nodeColumns + ` FROM nodes ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	return scanNodes(rows)
+}
+
 // GetNodesByLowerName returns nodes matching lower(name) = lowerName
 // (uses the idx_nodes_lower_name expression index).
 func (s *Store) GetNodesByLowerName(lowerName string) ([]model.Node, error) {

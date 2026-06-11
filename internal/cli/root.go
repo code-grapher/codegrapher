@@ -11,9 +11,9 @@ var Version = "0.1.0"
 // attached. It does NOT call Execute() — the caller does.
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "codegraph",
+		Use:   "codegrapher",
 		Short: "Code intelligence and knowledge graph for any codebase",
-		Long: `codegraph builds and queries a SQLite knowledge graph of every symbol,
+		Long: `codegrapher builds and queries a SQLite knowledge graph of every symbol,
 edge, and file in a codebase. Use it to search for symbols, trace call
 chains, analyse blast radius, and keep the index in sync.`,
 		SilenceUsage:  true,
@@ -35,6 +35,8 @@ chains, analyse blast radius, and keep the index in sync.`,
 		newVersionCmd(),
 		newAffectedCmd(),
 		newServeCmd(),
+		newExportCmd(),
+		newImportCmd(),
 	)
 
 	return root

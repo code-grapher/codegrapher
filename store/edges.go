@@ -60,6 +60,15 @@ func (s *Store) InsertEdges(edges []model.Edge) error {
 	})
 }
 
+// AllEdges returns every edge in the store.
+func (s *Store) AllEdges() ([]model.Edge, error) {
+	rows, err := s.db.Query(`SELECT ` + edgeColumns + ` FROM edges`)
+	if err != nil {
+		return nil, err
+	}
+	return scanEdges(rows)
+}
+
 // DeleteEdgesBySource removes all outgoing edges of a node.
 func (s *Store) DeleteEdgesBySource(sourceID string) error {
 	_, err := s.db.Exec(`DELETE FROM edges WHERE source = ?`, sourceID)
