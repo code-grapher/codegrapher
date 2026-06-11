@@ -29,9 +29,9 @@ instead of re-indexing from scratch.
   edits rewrite the affected file's records. INGR keeps those diffs
   line-surgical; the volume is inherent to the data model and acceptable
   for the seed+sync use case.
-- Implementation: small in-house pure-Go INGR writer/reader against the
-  published spec (the format is deliberately trivial); no new heavy deps,
-  CGO_ENABLED=0 preserved.
+- Implementation: use the official Go library
+  **github.com/ingr-io/ingr-go** (MIT, pure Go, zero dependencies —
+  CGO_ENABLED=0 preserved). No in-house writer/parser.
 
 ## Extension: in-browser code browsing (owner idea, 2026-06-11)
 
