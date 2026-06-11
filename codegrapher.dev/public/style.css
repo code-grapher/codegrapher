@@ -641,3 +641,309 @@ button:focus-visible {
   .terminal-body { font-size: 12px; padding: 16px 16px; }
   .footer-grid { flex-direction: column; }
 }
+
+/* ============================================================
+   Viewer — repo tree + file browser
+   Appended section; uses the same CSS variables as the landing.
+   ============================================================ */
+
+/* Screen-reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Layout */
+.viewer-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 64px - 1px); /* subtract header */
+  padding-top: 20px;
+  padding-bottom: 48px;
+  gap: 0;
+}
+
+.viewer-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.viewer-search {
+  flex: 1;
+  max-width: 480px;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 13.5px;
+  color: var(--ink);
+  outline: none;
+  transition: border-color .15s;
+}
+.viewer-search:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+
+.viewer-search-hint {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+.viewer-body {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  min-height: 600px;
+}
+
+/* Tree panel */
+.viewer-tree {
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+  padding: 12px 0;
+  background: var(--bg);
+}
+
+/* Tree nodes */
+.tree-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 16px;
+}
+.viewer-tree > .tree-list {
+  padding-left: 8px;
+}
+
+.tree-dir,
+.tree-file {
+  line-height: 1;
+}
+
+.tree-dir-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 5px 8px;
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink);
+  transition: background .1s;
+}
+.tree-dir-btn:hover { background: var(--line-soft); }
+.tree-dir-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.tree-icon {
+  font-size: 10px;
+  color: var(--ink-faint);
+  flex: none;
+  width: 10px;
+}
+
+.tree-name {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.tree-file-link {
+  display: block;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  text-decoration: none;
+  transition: background .1s, color .1s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree-file-link:hover {
+  background: var(--line-soft);
+  color: var(--ink);
+  text-decoration: none;
+}
+.tree-file-active {
+  background: var(--accent-tint);
+  color: var(--accent);
+  font-weight: 600;
+}
+.tree-file-active:hover {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+/* Content panel */
+.viewer-content {
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.viewer-welcome {
+  padding: 32px 24px;
+  color: var(--ink-faint);
+  font-size: 14px;
+}
+
+.viewer-loading,
+.viewer-empty,
+.viewer-error {
+  padding: 20px 16px;
+  font-size: 13.5px;
+  color: var(--ink-faint);
+  font-family: var(--mono);
+}
+.viewer-error { color: #c0392b; }
+
+/* No-snapshot state */
+.viewer-no-snapshot {
+  padding: 24px 16px;
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+.viewer-no-snapshot strong { color: var(--ink); }
+.viewer-no-snapshot code {
+  background: var(--line-soft);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.no-snapshot-cmd {
+  background: var(--term-bg);
+  color: var(--term-text);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  margin: 10px 0;
+  white-space: pre;
+  overflow-x: auto;
+}
+.viewer-hint {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+/* File view */
+.file-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.file-path {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.file-meta {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.file-code {
+  overflow: auto;
+  flex: 1;
+  background: var(--term-bg);
+}
+
+.code-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--term-text);
+}
+.code-table td { padding: 0; }
+
+.ln {
+  min-width: 48px;
+  padding: 0 14px 0 12px;
+  text-align: right;
+  user-select: none;
+  vertical-align: top;
+  color: var(--term-dim);
+  border-right: 1px solid var(--term-line);
+  background: var(--term-bar);
+}
+.ln a {
+  color: inherit;
+  text-decoration: none;
+  display: block;
+}
+.ln a:hover { color: var(--term-text); }
+
+.lc {
+  padding: 0 16px;
+  white-space: pre;
+  vertical-align: top;
+}
+
+/* Line highlight on anchor */
+tr:target .ln,
+tr:target .lc {
+  background: rgba(79, 70, 229, 0.18);
+}
+tr:target .ln { color: var(--accent); }
+
+/* Nav in viewer mode */
+.nav-links strong { font-weight: 700; }
+
+/* ── Viewer responsive ── */
+@media (max-width: 860px) {
+  .viewer-body {
+    grid-template-columns: 220px 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .viewer-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .viewer-tree {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .viewer-content {
+    min-height: 400px;
+  }
+}
