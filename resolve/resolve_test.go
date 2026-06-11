@@ -2,6 +2,7 @@ package resolve_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -25,13 +26,19 @@ type goldenEdge struct {
 	Col        *int    `json:"col"`
 }
 
-// edgeKey returns a stable sort key for an edge.
+// edgeKey returns a stable identity key for an edge. Provenance and line are
+// part of the identity: the golden records them and downstream verbs (callers)
+// expose them, so endpoint-only matching would hide drift.
 func edgeKey(e model.Edge) string {
-	return e.Source + "|" + e.Target + "|" + string(e.Kind)
+	return fmt.Sprintf("%s|%s|%s|%s|%d", e.Source, e.Target, e.Kind, e.Provenance, e.Line)
 }
 
 func goldenEdgeKey(e goldenEdge) string {
-	return e.Source + "|" + e.Target + "|" + e.Kind
+	prov := ""
+	if e.Provenance != nil {
+		prov = *e.Provenance
+	}
+	return fmt.Sprintf("%s|%s|%s|%s|%d", e.Source, e.Target, e.Kind, prov, e.Line)
 }
 
 // TestResolutionParityGoSmall extracts go-small, resolves, and compares the
@@ -141,7 +148,7 @@ func TestResolutionParityGoSmall(t *testing.T) {
 	}
 	sort.Strings(gotKeys)
 
-	// Check: every golden non-heuristic edge is present.
+	// Check: every golden edge is present (heuristic included).
 	t.Run("golden_edges_present", func(t *testing.T) {
 		for key, g := range goldenNonHeuristic {
 			if _, ok := gotEdges[key]; !ok {
@@ -150,7 +157,7 @@ func TestResolutionParityGoSmall(t *testing.T) {
 		}
 	})
 
-	// Check: no extra non-contains edges that aren't in golden (excluding heuristic).
+	// Check: no extra non-contains edges that aren't in golden.
 	t.Run("no_extra_edges", func(t *testing.T) {
 		for _, key := range gotKeys {
 			e := gotEdges[key]
