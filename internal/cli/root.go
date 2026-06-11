@@ -34,6 +34,7 @@ chains, analyse blast radius, and keep the index in sync.`,
 		newUnlockCmd(),
 		newVersionCmd(),
 		newAffectedCmd(),
+		newServeCmd(),
 	)
 
 	return root

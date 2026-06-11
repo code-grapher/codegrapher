@@ -1,862 +1,879 @@
 package mcp
 
 import (
-	"context"
+	"encoding/json"
 	"fmt"
-	"path/filepath"
+	"os"
+	"regexp"
 	"sort"
 	"strings"
 
-	mcplib "github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 	"github.com/specscore/codegrapher/model"
+	"github.com/specscore/codegrapher/query"
 )
 
-// toolHandlers holds all tool handler functions bound to a backend.
+// -----------------------------------------------------------------------
+// Tool definitions and handlers — faithful port of src/mcp/tools.ts.
+// -----------------------------------------------------------------------
+
+const maxOutputLength = 15000
+const maxInputLength = 10000
+const maxPathLength = 4096
+
+// toolResult mirrors ToolResult: text content blocks plus an error flag.
+type toolResult struct {
+	Content []contentBlock `json:"content"`
+	IsError bool           `json:"isError,omitempty"`
+}
+
+type contentBlock struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+func textResultOf(text string) toolResult {
+	return toolResult{Content: []contentBlock{{Type: "text", Text: text}}}
+}
+
+func errorResult(message string) toolResult {
+	return toolResult{
+		Content: []contentBlock{{Type: "text", Text: "Error: " + message}},
+		IsError: true,
+	}
+}
+
+// toolDef is one tools/list entry. InputSchema is raw JSON copied verbatim
+// from the upstream tool definitions so the listed schema matches the
+// original byte-for-byte (after JSON canonicalization).
+type toolDef struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"inputSchema"`
+}
+
+const projectPathProperty = `{
+  "type": "string",
+  "description": "Path to a different project with .codegraph/ initialized. If omitted, uses current project. Use this to query other codebases."
+}`
+
+// toolDefs mirrors the upstream `tools` array (same order).
+var toolDefs = []toolDef{
+	{
+		Name:        "codegraph_search",
+		Description: `Quick symbol search by name. Returns locations only (no code). Use codegraph_explore instead to get the actual source / understand an area in one call.`,
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"query": {"type": "string", "description": "Symbol name or partial name (e.g., \"auth\", \"signIn\", \"UserService\")"},
+				"kind": {"type": "string", "description": "Filter by node kind", "enum": ["function", "method", "class", "interface", "type", "variable", "route", "component"]},
+				"limit": {"type": "number", "description": "Maximum results (default: 10)", "default": 10},
+				"projectPath": ` + projectPathProperty + `
+			},
+			"required": ["query"]
+		}`),
+	},
+	{
+		Name:        "codegraph_callers",
+		Description: `List functions that call <symbol>. For the full flow, use codegraph_explore.`,
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"symbol": {"type": "string", "description": "Name of the function, method, or class to find callers for"},
+				"limit": {"type": "number", "description": "Maximum number of callers to return (default: 20)", "default": 20},
+				"projectPath": ` + projectPathProperty + `
+			},
+			"required": ["symbol"]
+		}`),
+	},
+	{
+		Name:        "codegraph_callees",
+		Description: `List functions that <symbol> calls. For the full flow, use codegraph_explore.`,
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"symbol": {"type": "string", "description": "Name of the function, method, or class to find callees for"},
+				"limit": {"type": "number", "description": "Maximum number of callees to return (default: 20)", "default": 20},
+				"projectPath": ` + projectPathProperty + `
+			},
+			"required": ["symbol"]
+		}`),
+	},
+	{
+		Name:        "codegraph_impact",
+		Description: `List symbols affected by changing <symbol>. Use before a refactor.`,
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"symbol": {"type": "string", "description": "Name of the symbol to analyze impact for"},
+				"depth": {"type": "number", "description": "How many levels of dependencies to traverse (default: 2)", "default": 2},
+				"projectPath": ` + projectPathProperty + `
+			},
+			"required": ["symbol"]
+		}`),
+	},
+	{
+		Name:        "codegraph_node",
+		Description: "Two modes. (1) READ A FILE — use INSTEAD of the Read tool: pass `file` (a path or basename) with no `symbol` and it returns that file's current on-disk source with line numbers, exactly the shape Read gives you (`<n>\\t<line>`, safe to Edit from), narrowable with `offset`/`limit` just like Read — PLUS a one-line note of which files depend on it. Same bytes as Read, faster (served from the index), with the blast radius attached. Use it whenever you would Read a source file. (2) ONE SYMBOL you can name — its location, signature, verbatim source (includeCode=true) and caller/callee trail in one call, so before changing it you see what calls it and what your edit would break. For an AMBIGUOUS name it returns EVERY matching definition's body in one call (so you never Read a file to find the right overload); pass `file`/`line` to pin one. Use codegraph_explore for several related symbols or the full flow.",
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"symbol": {"type": "string", "description": "Name of the symbol to read (symbol mode). Omit it and pass ` + "`file`" + ` alone to read a whole file like Read."},
+				"includeCode": {"type": "boolean", "description": "Symbol mode: include the symbol's full body (default: false). Ignored in file mode, which always returns source unless ` + "`symbolsOnly`" + ` is set.", "default": false},
+				"file": {"type": "string", "description": "A file path or basename (e.g. \"harness.rs\", \"src/auth/session.ts\"). Pass it ALONE (no symbol) to READ the file like the Read tool — its full source with line numbers + which files depend on it. Or pass it WITH a symbol to disambiguate an overloaded name to the definition in this file."},
+				"offset": {"type": "number", "description": "File mode: 1-based line to start reading from, exactly like Read's offset. Defaults to the start of the file."},
+				"limit": {"type": "number", "description": "File mode: maximum number of lines to return, exactly like Read's limit. Defaults to the whole file (capped at 2000 lines, like Read)."},
+				"symbolsOnly": {"type": "boolean", "description": "File mode: return just the file's symbol map + dependents (a cheap structural overview) instead of its source.", "default": false},
+				"line": {"type": "number", "description": "Symbol mode only: disambiguate to the definition at/around this line (use with the file:line a trail showed you)."},
+				"projectPath": ` + projectPathProperty + `
+			},
+			"required": []
+		}`),
+	},
+	{
+		Name:        "codegraph_explore",
+		Description: `PRIMARY TOOL — call FIRST for almost any question OR before an edit: how does X work, architecture, a bug, where/what is X, surveying an area, or the symbols you are about to change. Returns the verbatim source of the relevant symbols grouped by file in ONE capped call (Read-equivalent — treat the shown source as already Read; do NOT re-open those files), plus the call path among them. Query can be a natural-language question OR a bag of symbol/file names. Usually the ONLY call you need — more accurate context, in far fewer tokens and round-trips than a search/Read/Grep loop.`,
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"query": {"type": "string", "description": "Symbol names, file names, or short code terms to explore (e.g., \"AuthService loginUser session-manager\", \"GraphTraverser BFS impact traversal.ts\"). Use codegraph_search first to find relevant names."},
+				"maxFiles": {"type": "number", "description": "Maximum number of files to include source code from (default: 12)", "default": 12},
+				"projectPath": ` + projectPathProperty + `
+			},
+			"required": ["query"]
+		}`),
+	},
+	{
+		Name:        "codegraph_status",
+		Description: `Index health check (files / nodes / edges). Skip unless debugging.`,
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"projectPath": ` + projectPathProperty + `
+			}
+		}`),
+	},
+	{
+		Name:        "codegraph_files",
+		Description: `Indexed file tree with language + symbol counts. Faster than Glob for project layout.`,
+		InputSchema: json.RawMessage(`{
+			"type": "object",
+			"properties": {
+				"path": {"type": "string", "description": "Filter to files under this directory path (e.g., \"src/components\"). Returns all files if not specified."},
+				"pattern": {"type": "string", "description": "Filter files matching this glob pattern (e.g., \"*.tsx\", \"**/*.test.ts\")"},
+				"format": {"type": "string", "description": "Output format: \"tree\" (hierarchical, default), \"flat\" (simple list), \"grouped\" (by language)", "enum": ["tree", "flat", "grouped"], "default": "tree"},
+				"includeMetadata": {"type": "boolean", "description": "Include file metadata like language and symbol count (default: true)", "default": true},
+				"maxDepth": {"type": "number", "description": "Maximum directory depth to show (default: unlimited)"},
+				"projectPath": ` + projectPathProperty + `
+			}
+		}`),
+	},
+}
+
+// tinyRepoCoreTools mirrors TINY_REPO_CORE_TOOLS (ITER4 set).
+var tinyRepoCoreTools = map[string]bool{
+	"codegraph_explore": true,
+	"codegraph_search":  true,
+	"codegraph_node":    true,
+}
+
+const tinyRepoFileThreshold = 500
+
+// toolHandlers binds the tool handlers to a backend.
 type toolHandlers struct {
 	backend GraphBackend
 }
 
-func (h *toolHandlers) handleStatus(_ context.Context, _ mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+// toolAllowlist mirrors the CODEGRAPH_MCP_TOOLS allowlist.
+func toolAllowlist() map[string]bool {
+	raw := strings.TrimSpace(os.Getenv("CODEGRAPH_MCP_TOOLS"))
+	if raw == "" {
+		return nil
+	}
+	set := make(map[string]bool)
+	for _, s := range strings.Split(raw, ",") {
+		short := strings.TrimPrefix(strings.TrimSpace(s), "codegraph_")
+		if short != "" {
+			set[short] = true
+		}
+	}
+	if len(set) == 0 {
+		return nil
+	}
+	return set
+}
+
+func isToolAllowed(name string) bool {
+	allow := toolAllowlist()
+	return allow == nil || allow[strings.TrimPrefix(name, "codegraph_")]
+}
+
+// getTools mirrors ToolHandler.getTools: allowlist filtering, tiny-repo
+// gating, and the dynamic explore budget suffix.
+func (h *toolHandlers) getTools() []toolDef {
+	allow := toolAllowlist()
+	var visible []toolDef
+	for _, t := range toolDefs {
+		if allow == nil || allow[strings.TrimPrefix(t.Name, "codegraph_")] {
+			visible = append(visible, t)
+		}
+	}
+
 	stats, err := h.backend.GetStats()
 	if err != nil {
-		return mcplib.NewToolResultError(fmt.Sprintf("failed to get stats: %v", err)), nil
+		return visible
 	}
+	budget := getExploreBudget(stats.FileCount)
 
-	sizeMB := float64(stats.DBSizeBytes) / (1024 * 1024)
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "## CodeGraph Status\n\n")
-	fmt.Fprintf(&sb, "**Files indexed:** %d\n", stats.FileCount)
-	fmt.Fprintf(&sb, "**Total nodes:** %d\n", stats.NodeCount)
-	fmt.Fprintf(&sb, "**Total edges:** %d\n", stats.EdgeCount)
-	fmt.Fprintf(&sb, "**Database size:** %.2f MB\n", sizeMB)
-	fmt.Fprintf(&sb, "**Backend:** modernc.org/sqlite — pure Go, WAL + FTS5\n")
-	fmt.Fprintf(&sb, "**Journal mode:** %s (concurrent reads safe)\n", stats.JournalMode)
-
-	if len(stats.NodesByKind) > 0 {
-		fmt.Fprintf(&sb, "\n### Nodes by Kind:\n")
-		// Sort keys for stable output.
-		kinds := make([]string, 0, len(stats.NodesByKind))
-		for k := range stats.NodesByKind {
-			kinds = append(kinds, string(k))
-		}
-		sort.Strings(kinds)
-		for _, k := range kinds {
-			fmt.Fprintf(&sb, "- %s: %d\n", k, stats.NodesByKind[model.NodeKind(k)])
-		}
-	}
-
-	return mcplib.NewToolResultText(sb.String()), nil
-}
-
-func (h *toolHandlers) handleFiles(_ context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-	pathFilter := mcplib.ParseString(req, "path", "")
-	format := mcplib.ParseString(req, "format", "tree")
-
-	files, err := h.backend.GetFiles()
-	if err != nil {
-		return mcplib.NewToolResultError(fmt.Sprintf("failed to get files: %v", err)), nil
-	}
-
-	// Apply path filter.
-	if pathFilter != "" {
-		var filtered []FileInfo
-		for _, f := range files {
-			if strings.HasPrefix(f.Path, pathFilter) {
-				filtered = append(filtered, f)
+	if stats.FileCount < tinyRepoFileThreshold {
+		gated := visible[:0:0]
+		for _, t := range visible {
+			if tinyRepoCoreTools[t.Name] {
+				gated = append(gated, t)
 			}
 		}
-		files = filtered
+		visible = gated
 	}
 
-	if format == "flat" {
-		return mcplib.NewToolResultText(formatFilesFlat(files)), nil
+	out := make([]toolDef, len(visible))
+	for i, t := range visible {
+		if t.Name == "codegraph_explore" {
+			t.Description = fmt.Sprintf("%s Budget: make at most %d calls for this project (%s files indexed).",
+				t.Description, budget, localeString(stats.FileCount))
+		}
+		out[i] = t
 	}
-	if format == "grouped" {
-		return mcplib.NewToolResultText(formatFilesGrouped(files)), nil
-	}
-	return mcplib.NewToolResultText(formatFilesTree(files)), nil
+	return out
 }
 
-func (h *toolHandlers) handleSearch(_ context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-	query := mcplib.ParseString(req, "query", "")
-	kind := mcplib.ParseString(req, "kind", "")
-	limit := mcplib.ParseInt(req, "limit", 10)
-
-	if query == "" {
-		return mcplib.NewToolResultError("query is required"), nil
+// validateString mirrors ToolHandler.validateString.
+func (h *toolHandlers) validateString(value any, name string) (string, *toolResult) {
+	s, ok := value.(string)
+	if !ok || s == "" {
+		r := errorResult(fmt.Sprintf("%s must be a non-empty string", name))
+		return "", &r
 	}
-
-	var kinds []string
-	if kind != "" {
-		kinds = []string{kind}
+	if len(s) > maxInputLength {
+		r := errorResult(fmt.Sprintf("%s exceeds maximum length of %d characters (got %d)", name, maxInputLength, len(s)))
+		return "", &r
 	}
-
-	results, err := h.backend.SearchNodes(query, kinds, limit)
-	if err != nil {
-		return mcplib.NewToolResultError(fmt.Sprintf("search failed: %v", err)), nil
-	}
-
-	return mcplib.NewToolResultText(formatSearchResults(query, results)), nil
+	return s, nil
 }
 
-func (h *toolHandlers) handleCallers(_ context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-	symbol := mcplib.ParseString(req, "symbol", "")
-	limit := mcplib.ParseInt(req, "limit", 20)
+// validateOptionalPath mirrors ToolHandler.validateOptionalPath.
+func validateOptionalPath(value any, name string) *toolResult {
+	if value == nil {
+		return nil
+	}
+	s, ok := value.(string)
+	if !ok {
+		r := errorResult(fmt.Sprintf("%s must be a string", name))
+		return &r
+	}
+	if len(s) > maxPathLength {
+		r := errorResult(fmt.Sprintf("%s exceeds maximum length of %d characters (got %d)", name, maxPathLength, len(s)))
+		return &r
+	}
+	return nil
+}
 
-	if symbol == "" {
-		return mcplib.NewToolResultError("symbol is required"), nil
+// intArg reads a numeric argument with a default (Number(x) || def semantics).
+func intArg(args map[string]any, key string, def int) int {
+	v, ok := args[key]
+	if !ok {
+		return def
+	}
+	switch n := v.(type) {
+	case float64:
+		if n == 0 {
+			return def
+		}
+		return int(n)
+	case int:
+		if n == 0 {
+			return def
+		}
+		return n
+	default:
+		return def
+	}
+}
+
+// execute mirrors ToolHandler.execute.
+func (h *toolHandlers) execute(toolName string, args map[string]any) toolResult {
+	if !isToolAllowed(toolName) {
+		return errorResult(fmt.Sprintf("Tool %s is disabled via CODEGRAPH_MCP_TOOLS", toolName))
+	}
+	if r := validateOptionalPath(args["projectPath"], "projectPath"); r != nil {
+		return *r
+	}
+	if _, ok := args["path"]; ok {
+		if r := validateOptionalPath(args["path"], "path"); r != nil {
+			return *r
+		}
+	}
+	if _, ok := args["pattern"]; ok {
+		if r := validateOptionalPath(args["pattern"], "pattern"); r != nil {
+			return *r
+		}
 	}
 
-	nodes, err := h.backend.GetNodesByName(symbol)
+	switch toolName {
+	case "codegraph_search":
+		return h.handleSearch(args)
+	case "codegraph_callers":
+		return h.handleCallers(args)
+	case "codegraph_callees":
+		return h.handleCallees(args)
+	case "codegraph_impact":
+		return h.handleImpact(args)
+	case "codegraph_explore":
+		return h.handleExplore(args)
+	case "codegraph_node":
+		return h.handleNode(args)
+	case "codegraph_status":
+		return h.handleStatus(args)
+	case "codegraph_files":
+		return h.handleFiles(args)
+	default:
+		return errorResult(fmt.Sprintf("Unknown tool: %s", toolName))
+	}
+}
+
+// -----------------------------------------------------------------------
+// codegraph_search
+// -----------------------------------------------------------------------
+
+func (h *toolHandlers) handleSearch(args map[string]any) toolResult {
+	queryStr, errRes := h.validateString(args["query"], "query")
+	if errRes != nil {
+		return *errRes
+	}
+	var kinds []model.NodeKind
+	if kind, ok := args["kind"].(string); ok && kind != "" {
+		kinds = []model.NodeKind{model.NodeKind(kind)}
+	}
+	limit := clamp(intArg(args, "limit", 10), 1, 100)
+
+	results, err := h.backend.SearchNodes(queryStr, kinds, limit)
 	if err != nil {
-		return mcplib.NewToolResultError(fmt.Sprintf("lookup failed: %v", err)), nil
+		return errorResult(fmt.Sprintf("Tool execution failed: %s", err))
 	}
-	if len(nodes) == 0 {
-		return mcplib.NewToolResultText(fmt.Sprintf("No symbols found named %q.", symbol)), nil
+	if len(results) == 0 {
+		return textResultOf(fmt.Sprintf("No results found for %q", queryStr))
 	}
 
-	// Aggregate callers across all matching nodes.
-	var allCallers []NodeInfo
+	// Down-rank generated files (stable).
+	ranked := append([]model.SearchResult(nil), results...)
+	sort.SliceStable(ranked, func(i, j int) bool {
+		gi, gj := 0, 0
+		if query.IsGeneratedFile(ranked[i].Node.FilePath) {
+			gi = 1
+		}
+		if query.IsGeneratedFile(ranked[j].Node.FilePath) {
+			gj = 1
+		}
+		return gi < gj
+	})
+
+	return textResultOf(truncateOutput(formatSearchResults(ranked)))
+}
+
+func formatSearchResults(results []model.SearchResult) string {
+	lines := []string{fmt.Sprintf("## Search Results (%d found)", len(results)), ""}
+	for _, r := range results {
+		n := r.Node
+		location := ""
+		if n.StartLine != 0 {
+			location = fmt.Sprintf(":%d", n.StartLine)
+		}
+		lines = append(lines, fmt.Sprintf("### %s (%s)", n.Name, n.Kind))
+		lines = append(lines, n.FilePath+location)
+		if n.Signature != "" {
+			lines = append(lines, "`"+n.Signature+"`")
+		}
+		lines = append(lines, "")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// -----------------------------------------------------------------------
+// codegraph_callers / codegraph_callees / codegraph_impact
+// -----------------------------------------------------------------------
+
+func (h *toolHandlers) handleCallers(args map[string]any) toolResult {
+	symbol, errRes := h.validateString(args["symbol"], "symbol")
+	if errRes != nil {
+		return *errRes
+	}
+	limit := clamp(intArg(args, "limit", 20), 1, 100)
+
+	allMatches := h.findAllSymbols(symbol)
+	if len(allMatches.nodes) == 0 {
+		return textResultOf(fmt.Sprintf("Symbol %q not found in the codebase", symbol))
+	}
+
 	seen := make(map[string]struct{})
-	for _, n := range nodes {
-		callers, err := h.backend.GetCallers(n.ID)
+	var allCallers []model.Node
+	for _, node := range allMatches.nodes {
+		callers, err := h.backend.GetCallers(node.ID)
 		if err != nil {
 			continue
 		}
 		for _, c := range callers {
-			if _, ok := seen[c.ID]; ok {
-				continue
-			}
-			seen[c.ID] = struct{}{}
-			allCallers = append(allCallers, c)
-			if len(allCallers) >= limit {
-				break
+			if _, ok := seen[c.Node.ID]; !ok {
+				seen[c.Node.ID] = struct{}{}
+				allCallers = append(allCallers, c.Node)
 			}
 		}
-		if len(allCallers) >= limit {
-			break
-		}
 	}
-
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "## Callers of %s (%d found)\n\n", symbol, len(allCallers))
-	for _, c := range allCallers {
-		fmt.Fprintf(&sb, "- %s (%s) - %s:%d\n", c.Name, c.Kind, c.FilePath, c.StartLine)
+	if len(allCallers) == 0 {
+		return textResultOf(fmt.Sprintf("No callers found for %q%s", symbol, allMatches.note))
 	}
-	if len(nodes) > 1 {
-		parts := make([]string, len(nodes))
-		for i, n := range nodes {
-			parts[i] = fmt.Sprintf("%s at %s:%d", n.Kind, n.FilePath, n.StartLine)
-		}
-		fmt.Fprintf(&sb, "\n> **Note:** Aggregated results across %d symbols named %q: %s",
-			len(nodes), symbol, strings.Join(parts, ", "))
+	if len(allCallers) > limit {
+		allCallers = allCallers[:limit]
 	}
-	return mcplib.NewToolResultText(sb.String()), nil
+	return textResultOf(truncateOutput(formatNodeList(allCallers, "Callers of "+symbol) + allMatches.note))
 }
 
-func (h *toolHandlers) handleCallees(_ context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-	symbol := mcplib.ParseString(req, "symbol", "")
-	limit := mcplib.ParseInt(req, "limit", 20)
+func (h *toolHandlers) handleCallees(args map[string]any) toolResult {
+	symbol, errRes := h.validateString(args["symbol"], "symbol")
+	if errRes != nil {
+		return *errRes
+	}
+	limit := clamp(intArg(args, "limit", 20), 1, 100)
 
-	if symbol == "" {
-		return mcplib.NewToolResultError("symbol is required"), nil
+	allMatches := h.findAllSymbols(symbol)
+	if len(allMatches.nodes) == 0 {
+		return textResultOf(fmt.Sprintf("Symbol %q not found in the codebase", symbol))
 	}
 
-	nodes, err := h.backend.GetNodesByName(symbol)
-	if err != nil {
-		return mcplib.NewToolResultError(fmt.Sprintf("lookup failed: %v", err)), nil
-	}
-	if len(nodes) == 0 {
-		return mcplib.NewToolResultText(fmt.Sprintf("No symbols found named %q.", symbol)), nil
-	}
-
-	// Aggregate callees across all matching nodes.
-	var allCallees []NodeInfo
 	seen := make(map[string]struct{})
-	for _, n := range nodes {
-		callees, err := h.backend.GetCallees(n.ID)
+	var allCallees []model.Node
+	for _, node := range allMatches.nodes {
+		callees, err := h.backend.GetCallees(node.ID)
 		if err != nil {
 			continue
 		}
 		for _, c := range callees {
-			if _, ok := seen[c.ID]; ok {
-				continue
-			}
-			seen[c.ID] = struct{}{}
-			allCallees = append(allCallees, c)
-			if len(allCallees) >= limit {
-				break
+			if _, ok := seen[c.Node.ID]; !ok {
+				seen[c.Node.ID] = struct{}{}
+				allCallees = append(allCallees, c.Node)
 			}
 		}
-		if len(allCallees) >= limit {
-			break
-		}
 	}
-
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "## Callees of %s (%d found)\n\n", symbol, len(allCallees))
-	for _, c := range allCallees {
-		fmt.Fprintf(&sb, "- %s (%s) - %s:%d\n", c.Name, c.Kind, c.FilePath, c.StartLine)
+	if len(allCallees) == 0 {
+		return textResultOf(fmt.Sprintf("No callees found for %q%s", symbol, allMatches.note))
 	}
-	if len(nodes) > 1 {
-		parts := make([]string, len(nodes))
-		for i, n := range nodes {
-			parts[i] = fmt.Sprintf("%s at %s:%d", n.Kind, n.FilePath, n.StartLine)
-		}
-		fmt.Fprintf(&sb, "\n> **Note:** Aggregated results across %d symbols named %q: %s",
-			len(nodes), symbol, strings.Join(parts, ", "))
+	if len(allCallees) > limit {
+		allCallees = allCallees[:limit]
 	}
-	return mcplib.NewToolResultText(sb.String()), nil
+	return textResultOf(truncateOutput(formatNodeList(allCallees, "Callees of "+symbol) + allMatches.note))
 }
 
-func (h *toolHandlers) handleImpact(_ context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-	symbol := mcplib.ParseString(req, "symbol", "")
-	depth := mcplib.ParseInt(req, "depth", 2)
+func (h *toolHandlers) handleImpact(args map[string]any) toolResult {
+	symbol, errRes := h.validateString(args["symbol"], "symbol")
+	if errRes != nil {
+		return *errRes
+	}
+	depth := clamp(intArg(args, "depth", 2), 1, 10)
 
-	if symbol == "" {
-		return mcplib.NewToolResultError("symbol is required"), nil
+	allMatches := h.findAllSymbols(symbol)
+	if len(allMatches.nodes) == 0 {
+		return textResultOf(fmt.Sprintf("Symbol %q not found in the codebase", symbol))
 	}
 
-	nodes, err := h.backend.GetNodesByName(symbol)
-	if err != nil {
-		return mcplib.NewToolResultError(fmt.Sprintf("lookup failed: %v", err)), nil
-	}
-	if len(nodes) == 0 {
-		return mcplib.NewToolResultText(fmt.Sprintf("No symbols found named %q.", symbol)), nil
-	}
-
-	// Aggregate impact across all matching nodes.
-	allImpact := map[string]NodeInfo{}
-	for _, n := range nodes {
-		entries, err := h.backend.GetImpact(n.ID, depth)
+	merged := NewSubgraph()
+	seenEdges := make(map[string]struct{})
+	for _, node := range allMatches.nodes {
+		impact, err := h.backend.GetImpactRadius(node.ID, depth)
 		if err != nil {
 			continue
 		}
-		for _, e := range entries {
-			allImpact[e.Node.ID] = e.Node
+		for _, n := range impact.Values() {
+			merged.Set(n)
+		}
+		for _, e := range impact.Edges {
+			key := fmt.Sprintf("%s->%s:%s", e.Source, e.Target, e.Kind)
+			if _, ok := seenEdges[key]; !ok {
+				seenEdges[key] = struct{}{}
+				merged.Edges = append(merged.Edges, e)
+			}
 		}
 	}
 
-	// Group by file.
-	byFile := map[string][]NodeInfo{}
-	for _, n := range allImpact {
-		byFile[n.FilePath] = append(byFile[n.FilePath], n)
-	}
-	// Sort within each file by line.
-	for fp := range byFile {
-		sort.Slice(byFile[fp], func(i, j int) bool {
-			return byFile[fp][i].StartLine < byFile[fp][j].StartLine
-		})
-	}
+	return textResultOf(truncateOutput(formatImpact(symbol, merged) + allMatches.note))
+}
 
-	// Sort files for stable output.
-	files := make([]string, 0, len(byFile))
-	for fp := range byFile {
-		files = append(files, fp)
+func formatNodeList(nodes []model.Node, title string) string {
+	lines := []string{fmt.Sprintf("## %s (%d found)", title, len(nodes)), ""}
+	for _, node := range nodes {
+		location := ""
+		if node.StartLine != 0 {
+			location = fmt.Sprintf(":%d", node.StartLine)
+		}
+		lines = append(lines, fmt.Sprintf("- %s (%s) - %s%s", node.Name, node.Kind, node.FilePath, location))
 	}
-	sort.Strings(files)
+	return strings.Join(lines, "\n")
+}
 
-	total := len(allImpact)
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "## Impact: %q affects %d symbols\n\n", symbol, total)
-	for _, fp := range files {
-		fmt.Fprintf(&sb, "**%s:**\n", fp)
-		parts := make([]string, 0, len(byFile[fp]))
-		for _, n := range byFile[fp] {
+func formatImpact(symbol string, impact *Subgraph) string {
+	lines := []string{
+		fmt.Sprintf("## Impact: %q affects %d symbols", symbol, impact.Len()),
+		"",
+	}
+	var fileOrder []string
+	byFile := make(map[string][]model.Node)
+	for _, node := range impact.Values() {
+		if _, ok := byFile[node.FilePath]; !ok {
+			fileOrder = append(fileOrder, node.FilePath)
+		}
+		byFile[node.FilePath] = append(byFile[node.FilePath], node)
+	}
+	for _, file := range fileOrder {
+		lines = append(lines, fmt.Sprintf("**%s:**", file))
+		var parts []string
+		for _, n := range byFile[file] {
 			parts = append(parts, fmt.Sprintf("%s:%d", n.Name, n.StartLine))
 		}
-		fmt.Fprintf(&sb, "%s\n\n", strings.Join(parts, ", "))
+		lines = append(lines, strings.Join(parts, ", "))
+		lines = append(lines, "")
 	}
-
-	if len(nodes) > 1 {
-		parts := make([]string, len(nodes))
-		for i, n := range nodes {
-			parts[i] = fmt.Sprintf("%s at %s:%d", n.Kind, n.FilePath, n.StartLine)
-		}
-		fmt.Fprintf(&sb, "\n> **Note:** Aggregated results across %d symbols named %q: %s",
-			len(nodes), symbol, strings.Join(parts, ", "))
-	}
-	return mcplib.NewToolResultText(sb.String()), nil
+	return strings.Join(lines, "\n")
 }
 
-func (h *toolHandlers) handleNode(_ context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-	symbol := mcplib.ParseString(req, "symbol", "")
-	includeCode := mcplib.ParseBoolean(req, "includeCode", false)
-	fileArg := mcplib.ParseString(req, "file", "")
+// -----------------------------------------------------------------------
+// Symbol resolution helpers
+// -----------------------------------------------------------------------
 
-	// File mode: no symbol, just file path.
-	if symbol == "" && fileArg != "" {
-		return h.handleNodeFileMode(fileArg, req)
+var reQualified = regexp.MustCompile(`[./]|::`)
+
+// rustPathPrefixes mirrors RUST_PATH_PREFIXES.
+var rustPathPrefixes = map[string]bool{"crate": true, "super": true, "self": true}
+
+// matchesSymbol mirrors ToolHandler.matchesSymbol.
+func matchesSymbol(node model.Node, symbol string) bool {
+	if node.Name == symbol {
+		return true
+	}
+	if node.Kind == model.KindFile {
+		if base := regexp.MustCompile(`\.[^.]+$`).ReplaceAllString(node.Name, ""); base == symbol {
+			return true
+		}
+	}
+	if !reQualified.MatchString(symbol) {
+		return false
+	}
+	var parts []string
+	for _, p := range reQualSplit.Split(symbol, -1) {
+		if p != "" {
+			parts = append(parts, p)
+		}
+	}
+	if len(parts) < 2 {
+		return false
+	}
+	lastPart := parts[len(parts)-1]
+	if node.Name != lastPart {
+		return false
 	}
 
-	if symbol == "" {
-		return mcplib.NewToolResultError("symbol or file is required"), nil
+	colonSuffix := strings.Join(parts, "::")
+	if strings.Contains(node.QualifiedName, colonSuffix) {
+		return true
 	}
 
-	nodes, err := h.backend.GetNodesByName(symbol)
-	if err != nil {
-		return mcplib.NewToolResultError(fmt.Sprintf("lookup failed: %v", err)), nil
+	var containerHints []string
+	for _, p := range parts[:len(parts)-1] {
+		if !rustPathPrefixes[p] {
+			containerHints = append(containerHints, p)
+		}
 	}
-
-	// Filter by file if provided.
-	if fileArg != "" {
-		var filtered []NodeInfo
-		for _, n := range nodes {
-			if strings.HasSuffix(n.FilePath, fileArg) || strings.Contains(n.FilePath, fileArg) {
-				filtered = append(filtered, n)
+	if len(containerHints) == 0 {
+		return false
+	}
+	var segments []string
+	for _, s := range strings.Split(node.FilePath, "/") {
+		if s != "" {
+			segments = append(segments, s)
+		}
+	}
+	for _, hint := range containerHints {
+		found := false
+		for _, seg := range segments {
+			if seg == hint || regexp.MustCompile(`\.[^.]+$`).ReplaceAllString(seg, "") == hint {
+				found = true
+				break
 			}
 		}
-		if len(filtered) > 0 {
-			nodes = filtered
+		if !found {
+			return false
 		}
 	}
-
-	if len(nodes) == 0 {
-		return mcplib.NewToolResultText(fmt.Sprintf("No symbols found named %q.", symbol)), nil
-	}
-
-	var sb strings.Builder
-	if len(nodes) > 1 {
-		fmt.Fprintf(&sb, "**%d definitions named %q**\nReturning %d in full — pick the one you need (no Read required).\n\n",
-			len(nodes), symbol, len(nodes))
-	}
-
-	for i, n := range nodes {
-		if i > 0 {
-			sb.WriteString("\n---\n\n")
-		}
-		fmt.Fprintf(&sb, "## %s (%s)\n\n", n.Name, n.Kind)
-		fmt.Fprintf(&sb, "**Location:** %s:%d\n", n.FilePath, n.StartLine)
-		if n.Signature != "" {
-			fmt.Fprintf(&sb, "**Signature:** `%s`\n", n.Signature)
-		}
-		if n.Docstring != "" {
-			fmt.Fprintf(&sb, "\n%s\n", n.Docstring)
-		}
-
-		if includeCode {
-			src, err := h.readNodeSource(n)
-			if err == nil && src != "" {
-				lang := languageID(n.Language)
-				fmt.Fprintf(&sb, "\n```%s\n%s\n```\n", lang, src)
-			}
-		}
-
-		// Trail: callers and callees.
-		callers, _ := h.backend.GetCallers(n.ID)
-		callees, _ := h.backend.GetCallees(n.ID)
-		if len(callers) > 0 || len(callees) > 0 {
-			sb.WriteString("### Trail — codegraph_node any of these to follow it (no Read needed)\n")
-			for _, c := range callees {
-				fmt.Fprintf(&sb, "**Calls →** %s (%s:%d)\n", c.Name, c.FilePath, c.StartLine)
-			}
-			for _, c := range callers {
-				fmt.Fprintf(&sb, "**Called by ←** %s (%s:%d)\n", c.Name, c.FilePath, c.StartLine)
-			}
-		}
-	}
-
-	return mcplib.NewToolResultText(sb.String()), nil
+	return true
 }
 
-func (h *toolHandlers) handleNodeFileMode(filePath string, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-	offset := mcplib.ParseInt(req, "offset", 0)
-	limit := mcplib.ParseInt(req, "limit", 2000)
+// findSymbolMatches mirrors ToolHandler.findSymbolMatches.
+func (h *toolHandlers) findSymbolMatches(symbol string) []model.Node {
+	isQualified := reQualified.MatchString(symbol)
 
-	src, err := h.backend.ReadFile(filePath)
-	if err != nil {
-		return mcplib.NewToolResultError(fmt.Sprintf("failed to read file: %v", err)), nil
-	}
-
-	lines := strings.Split(src, "\n")
-	total := len(lines)
-
-	start := 0
-	if offset > 0 {
-		start = offset - 1
-	}
-	if start >= total {
-		start = total - 1
-	}
-	end := total
-	if limit > 0 && start+limit < total {
-		end = start + limit
-	}
-	lines = lines[start:end]
-
-	var sb strings.Builder
-	for i, line := range lines {
-		fmt.Fprintf(&sb, "%d\t%s\n", start+i+1, line)
-	}
-
-	// Dependents.
-	deps, _ := h.backend.GetFileDependents(filePath)
-	if len(deps) > 0 {
-		fmt.Fprintf(&sb, "\n> Depended on by: %s", strings.Join(deps, ", "))
-	}
-
-	return mcplib.NewToolResultText(sb.String()), nil
-}
-
-func (h *toolHandlers) handleExplore(_ context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-	query := mcplib.ParseString(req, "query", "")
-	maxFiles := mcplib.ParseInt(req, "maxFiles", 4) // small-project default
-
-	if query == "" {
-		return mcplib.NewToolResultError("query is required"), nil
-	}
-
-	sg, err := h.backend.FindRelevantContext(query, maxFiles*10)
-	if err != nil {
-		return mcplib.NewToolResultError(fmt.Sprintf("explore failed: %v", err)), nil
-	}
-
-	if sg == nil || len(sg.Nodes) == 0 {
-		return mcplib.NewToolResultText(fmt.Sprintf("## Exploration: %s\n\nNo relevant symbols found.", query)), nil
-	}
-
-	// Limit to maxFiles files.
-	fileOrder := orderedFiles(sg.FileNodes, maxFiles)
-
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "## Exploration: %s\n\n", query)
-	fmt.Fprintf(&sb, "Found %d symbols across %d files.\n\n", len(sg.Nodes), len(sg.FileNodes))
-
-	// Blast radius section: show top nodes with caller info.
-	topNodes := topNodesByFile(sg, fileOrder)
-	if len(topNodes) > 0 {
-		sb.WriteString("### Blast radius — what depends on these (update/verify before editing)\n\n")
-		for _, n := range topNodes {
-			callers, _ := h.backend.GetCallers(n.ID)
-			callerInfo := ""
-			if len(callers) > 0 {
-				// Count unique files.
-				callerFiles := map[string]struct{}{}
-				for _, c := range callers {
-					callerFiles[c.FilePath] = struct{}{}
+	if !isQualified {
+		exact, err := h.backend.GetNodesByName(symbol)
+		if err == nil && len(exact) > 0 {
+			out := append([]model.Node(nil), exact...)
+			sort.SliceStable(out, func(i, j int) bool {
+				gi, gj := 0, 0
+				if query.IsGeneratedFile(out[i].FilePath) {
+					gi = 1
 				}
-				callerInfo = fmt.Sprintf(" — %d caller in `%s`", len(callers), fileFromPath(callers[0].FilePath))
-				if len(callerFiles) > 1 {
-					callerInfo = fmt.Sprintf(" — %d callers across %d files", len(callers), len(callerFiles))
+				if query.IsGeneratedFile(out[j].FilePath) {
+					gj = 1
 				}
-			}
-			fmt.Fprintf(&sb, "- `%s` (%s:%d)%s; ⚠️ no covering tests found\n",
-				n.Name, n.FilePath, n.StartLine, callerInfo)
+				return gi < gj
+			})
+			return out
 		}
-		sb.WriteString("\n")
+		fuzzy, err := h.backend.SearchNodes(symbol, nil, 10)
+		if err == nil && len(fuzzy) > 0 {
+			return []model.Node{fuzzy[0].Node}
+		}
+		return nil
 	}
 
-	// Source code section.
-	sb.WriteString("### Source Code\n\n")
-	sb.WriteString("> The code below is the **verbatim, current on-disk source** of these files — re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.\n\n")
-
-	for _, fp := range fileOrder {
-		nodes := sg.FileNodes[fp]
-		src, ok := sg.FileSource[fp]
-		if !ok {
-			continue
+	const limit = 50
+	results, err := h.backend.SearchNodes(symbol, nil, limit)
+	if err != nil {
+		return nil
+	}
+	if len(results) == 0 {
+		if tail := lastQualifierPart(symbol); tail != "" && tail != symbol {
+			results, _ = h.backend.SearchNodes(tail, nil, limit)
 		}
-
-		// File header with node names.
-		symNames := make([]string, 0, len(nodes))
-		for _, n := range nodes {
-			symNames = append(symNames, fmt.Sprintf("%s(%s)", n.Name, n.Kind))
-		}
-		extra := 0
-		if len(symNames) > 5 {
-			extra = len(symNames) - 5
-			symNames = symNames[:5]
-		}
-		header := strings.Join(symNames, ", ")
-		if extra > 0 {
-			header += fmt.Sprintf(", +%d more", extra)
-		}
-
-		lang := languageIDFromPath(fp)
-		fmt.Fprintf(&sb, "#### %s — %s\n\n", fp, header)
-		sb.WriteString("```" + lang + "\n")
-		sb.WriteString(numberedSource(src))
-		sb.WriteString("```\n\n")
+	}
+	if len(results) == 0 {
+		return nil
 	}
 
-	return mcplib.NewToolResultText(sb.String()), nil
-}
-
-// ---- formatting helpers ----
-
-func formatSearchResults(query string, results []SearchResult) string {
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "## Search Results (%d found)\n\n", len(results))
+	var exactMatches []model.Node
 	for _, r := range results {
-		n := r.Node
-		fmt.Fprintf(&sb, "### %s (%s)\n", n.Name, n.Kind)
-		fmt.Fprintf(&sb, "%s:%d\n", n.FilePath, n.StartLine)
-		if n.Signature != "" {
-			fmt.Fprintf(&sb, "`%s`\n", n.Signature)
-		}
-		sb.WriteString("\n")
-	}
-	_ = query
-	return strings.TrimRight(sb.String(), "\n")
-}
-
-func formatFilesTree(files []FileInfo) string {
-	if len(files) == 0 {
-		return "## Project Structure (0 files)\n\n(no files indexed)"
-	}
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "## Project Structure (%d files)\n\n", len(files))
-
-	// Build tree.
-	type node struct {
-		name     string
-		children map[string]*node
-		file     *FileInfo
-	}
-	root := &node{children: make(map[string]*node)}
-	for i := range files {
-		f := &files[i]
-		parts := strings.Split(f.Path, "/")
-		cur := root
-		for j, p := range parts {
-			if _, ok := cur.children[p]; !ok {
-				cur.children[p] = &node{name: p, children: make(map[string]*node)}
-			}
-			cur = cur.children[p]
-			if j == len(parts)-1 {
-				cur.file = f
-			}
+		if matchesSymbol(r.Node, symbol) {
+			exactMatches = append(exactMatches, r.Node)
 		}
 	}
-
-	var printNode func(n *node, prefix string, last bool)
-	printNode = func(n *node, prefix string, last bool) {
-		if n.file != nil {
-			connector := "├── "
-			if last {
-				connector = "└── "
-			}
-			fmt.Fprintf(&sb, "%s%s%s (%s, %d symbols)\n",
-				prefix, connector, n.name,
-				n.file.Language, n.file.NodeCount)
-		} else if n.name != "" {
-			connector := "├── "
-			if last {
-				connector = "└── "
-			}
-			fmt.Fprintf(&sb, "%s%s%s\n", prefix, connector, n.name+"/")
+	if len(exactMatches) == 0 {
+		return nil // qualified lookup must not fall back to a fuzzy hit
+	}
+	sort.SliceStable(exactMatches, func(i, j int) bool {
+		gi, gj := 0, 0
+		if query.IsGeneratedFile(exactMatches[i].FilePath) {
+			gi = 1
 		}
-
-		childPrefix := prefix
-		if n.name != "" {
-			if last {
-				childPrefix += "    "
-			} else {
-				childPrefix += "│   "
-			}
+		if query.IsGeneratedFile(exactMatches[j].FilePath) {
+			gj = 1
 		}
-
-		// Sort children: dirs first, then files.
-		keys := make([]string, 0, len(n.children))
-		for k := range n.children {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for i, k := range keys {
-			printNode(n.children[k], childPrefix, i == len(keys)-1)
-		}
-	}
-
-	// Sort root children.
-	keys := make([]string, 0, len(root.children))
-	for k := range root.children {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for i, k := range keys {
-		printNode(root.children[k], "", i == len(keys)-1)
-	}
-
-	return strings.TrimRight(sb.String(), "\n")
-}
-
-func formatFilesFlat(files []FileInfo) string {
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "## Files (%d)\n\n", len(files))
-	for _, f := range files {
-		fmt.Fprintf(&sb, "%s (%s, %d symbols)\n", f.Path, f.Language, f.NodeCount)
-	}
-	return strings.TrimRight(sb.String(), "\n")
-}
-
-func formatFilesGrouped(files []FileInfo) string {
-	byLang := map[string][]FileInfo{}
-	for _, f := range files {
-		byLang[string(f.Language)] = append(byLang[string(f.Language)], f)
-	}
-	langs := make([]string, 0, len(byLang))
-	for l := range byLang {
-		langs = append(langs, l)
-	}
-	sort.Strings(langs)
-
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "## Files (%d)\n\n", len(files))
-	for _, l := range langs {
-		fmt.Fprintf(&sb, "### %s (%d files)\n", l, len(byLang[l]))
-		for _, f := range byLang[l] {
-			fmt.Fprintf(&sb, "- %s (%d symbols)\n", f.Path, f.NodeCount)
-		}
-		sb.WriteString("\n")
-	}
-	return strings.TrimRight(sb.String(), "\n")
-}
-
-// readNodeSource reads the source lines for a node.
-func (h *toolHandlers) readNodeSource(n NodeInfo) (string, error) {
-	src, err := h.backend.ReadFile(n.FilePath)
-	if err != nil {
-		return "", err
-	}
-	lines := strings.Split(src, "\n")
-	start := n.StartLine - 1
-	end := n.EndLine
-	if start < 0 {
-		start = 0
-	}
-	if end > len(lines) {
-		end = len(lines)
-	}
-	if end <= start {
-		return "", nil
-	}
-	var sb strings.Builder
-	for i, line := range lines[start:end] {
-		fmt.Fprintf(&sb, "%d\t%s\n", start+i+1, line)
-	}
-	return strings.TrimRight(sb.String(), "\n"), nil
-}
-
-func languageID(lang model.Language) string {
-	switch lang {
-	case model.LangGo:
-		return "go"
-	case model.LangTypeScript, model.LangTSX:
-		return "typescript"
-	case model.LangJavaScript, model.LangJSX:
-		return "javascript"
-	default:
-		return string(lang)
-	}
-}
-
-func languageIDFromPath(path string) string {
-	ext := strings.ToLower(filepath.Ext(path))
-	switch ext {
-	case ".go":
-		return "go"
-	case ".ts", ".tsx":
-		return "typescript"
-	case ".js", ".jsx":
-		return "javascript"
-	case ".py":
-		return "python"
-	case ".rs":
-		return "rust"
-	default:
-		return ""
-	}
-}
-
-func numberedSource(src string) string {
-	lines := strings.Split(src, "\n")
-	var sb strings.Builder
-	for i, line := range lines {
-		fmt.Fprintf(&sb, "%d\t%s\n", i+1, line)
-	}
-	return sb.String()
-}
-
-// orderedFiles returns file paths ordered by relevance (most nodes first), limited to maxFiles.
-func orderedFiles(fileNodes map[string][]NodeInfo, maxFiles int) []string {
-	type fp struct {
-		path  string
-		count int
-	}
-	fps := make([]fp, 0, len(fileNodes))
-	for p, ns := range fileNodes {
-		fps = append(fps, fp{p, len(ns)})
-	}
-	sort.Slice(fps, func(i, j int) bool {
-		if fps[i].count != fps[j].count {
-			return fps[i].count > fps[j].count
-		}
-		return fps[i].path < fps[j].path
+		return gi < gj
 	})
-	if len(fps) > maxFiles {
-		fps = fps[:maxFiles]
-	}
-	out := make([]string, len(fps))
-	for i, f := range fps {
-		out[i] = f.path
-	}
-	return out
+	return exactMatches
 }
 
-// topNodesByFile returns the most relevant nodes for the blast radius section.
-func topNodesByFile(sg *Subgraph, fileOrder []string) []NodeInfo {
-	var out []NodeInfo
-	seen := make(map[string]struct{})
-	for _, fp := range fileOrder {
-		nodes := sg.FileNodes[fp]
-		for _, n := range nodes {
-			if _, ok := seen[n.ID]; ok {
-				continue
-			}
-			seen[n.ID] = struct{}{}
-			// Only include functions/methods/structs (not imports, files, etc).
-			switch n.Kind {
-			case model.KindFunction, model.KindMethod, model.KindStruct,
-				model.KindClass, model.KindInterface:
-				out = append(out, n)
-			}
+type symbolMatches struct {
+	nodes []model.Node
+	note  string
+}
+
+// findAllSymbols mirrors ToolHandler.findAllSymbols.
+func (h *toolHandlers) findAllSymbols(symbol string) symbolMatches {
+	results, err := h.backend.SearchNodes(symbol, nil, 50)
+	if err != nil {
+		return symbolMatches{}
+	}
+	if len(results) == 0 && reQualified.MatchString(symbol) {
+		if tail := lastQualifierPart(symbol); tail != "" && tail != symbol {
+			results, _ = h.backend.SearchNodes(tail, nil, 50)
 		}
 	}
-	// Limit.
-	if len(out) > 6 {
-		out = out[:6]
+	if len(results) == 0 {
+		return symbolMatches{}
 	}
-	return out
+
+	var exactMatches []model.SearchResult
+	for _, r := range results {
+		if matchesSymbol(r.Node, symbol) {
+			exactMatches = append(exactMatches, r)
+		}
+	}
+
+	if len(exactMatches) <= 1 {
+		node := results[0].Node
+		if len(exactMatches) == 1 {
+			node = exactMatches[0].Node
+		}
+		return symbolMatches{nodes: []model.Node{node}}
+	}
+
+	ranked := append([]model.SearchResult(nil), exactMatches...)
+	sort.SliceStable(ranked, func(i, j int) bool {
+		gi, gj := 0, 0
+		if query.IsGeneratedFile(ranked[i].Node.FilePath) {
+			gi = 1
+		}
+		if query.IsGeneratedFile(ranked[j].Node.FilePath) {
+			gj = 1
+		}
+		return gi < gj
+	})
+
+	var locations []string
+	nodes := make([]model.Node, len(ranked))
+	for i, r := range ranked {
+		nodes[i] = r.Node
+		locations = append(locations, fmt.Sprintf("%s at %s:%d", r.Node.Kind, r.Node.FilePath, r.Node.StartLine))
+	}
+	note := fmt.Sprintf("\n\n> **Note:** Aggregated results across %d symbols named %q: %s",
+		len(ranked), symbol, strings.Join(locations, ", "))
+	return symbolMatches{nodes: nodes, note: note}
 }
 
-func fileFromPath(p string) string {
-	return filepath.Base(p)
+// truncateOutput mirrors ToolHandler.truncateOutput.
+func truncateOutput(text string) string {
+	if len(text) <= maxOutputLength {
+		return text
+	}
+	truncated := text[:maxOutputLength]
+	lastNewline := strings.LastIndex(truncated, "\n")
+	cutPoint := maxOutputLength
+	if float64(lastNewline) > float64(maxOutputLength)*0.8 {
+		cutPoint = lastNewline
+	}
+	return truncated[:cutPoint] + "\n\n... (output truncated)"
 }
 
-// registerTools registers all tools onto the MCP server.
-// Only the tiny-repo tools (search, node, explore) are registered when
-// fileCount < 500 (matches the TS tiny-repo gating).
-func registerTools(s *server.MCPServer, h *toolHandlers, fileCount int) {
-	tinyRepo := fileCount < 500
+// -----------------------------------------------------------------------
+// synthEdgeNote — dynamic-dispatch edge annotation
+// -----------------------------------------------------------------------
 
-	// codegraph_search — always registered.
-	s.AddTool(mcplib.NewTool("codegraph_search",
-		mcplib.WithDescription("Quick symbol search by name. Returns locations only (no code). Use codegraph_explore instead to get the actual source / understand an area in one call."),
-		mcplib.WithString("query",
-			mcplib.Description("Symbol name or partial name (e.g., \"auth\", \"signIn\", \"UserService\")"),
-			mcplib.Required(),
-		),
-		mcplib.WithString("kind",
-			mcplib.Description("Filter by node kind"),
-			mcplib.Enum("function", "method", "class", "interface", "type", "variable", "route", "component"),
-		),
-		mcplib.WithNumber("limit",
-			mcplib.Description("Maximum results (default: 10)"),
-		),
-	), h.handleSearch)
+type synthNote struct {
+	label        string
+	compact      string
+	registeredAt string
+}
 
-	// codegraph_node — always registered.
-	s.AddTool(mcplib.NewTool("codegraph_node",
-		mcplib.WithDescription("Two modes. (1) READ A FILE — use INSTEAD of the Read tool: pass `file` (a path or basename) with no `symbol` and it returns that file's current on-disk source with line numbers, exactly the shape Read gives you (`<n>\\t<line>`, safe to Edit from), narrowable with `offset`/`limit` just like Read — PLUS a one-line note of which files depend on it. Same bytes as Read, faster (served from the index), with the blast radius attached. Use it whenever you would Read a source file. (2) ONE SYMBOL you can name — its location, signature, verbatim source (includeCode=true) and caller/callee trail in one call, so before changing it you see what calls it and what your edit would break. For an AMBIGUOUS name it returns EVERY matching definition's body in one call (so you never Read a file to find the right overload); pass `file`/`line` to pin one. Use codegraph_explore for several related symbols or the full flow."),
-		mcplib.WithString("symbol",
-			mcplib.Description("Name of the symbol to read (symbol mode). Omit it and pass `file` alone to read a whole file like Read."),
-		),
-		mcplib.WithBoolean("includeCode",
-			mcplib.Description("Symbol mode: include the symbol's full body (default: false). Ignored in file mode, which always returns source unless `symbolsOnly` is set."),
-		),
-		mcplib.WithString("file",
-			mcplib.Description("A file path or basename. Pass it ALONE (no symbol) to READ the file like the Read tool."),
-		),
-		mcplib.WithNumber("offset",
-			mcplib.Description("File mode: 1-based line to start reading from."),
-		),
-		mcplib.WithNumber("limit",
-			mcplib.Description("File mode: maximum number of lines to return."),
-		),
-		mcplib.WithBoolean("symbolsOnly",
-			mcplib.Description("File mode: return just the file's symbol map + dependents."),
-		),
-		mcplib.WithNumber("line",
-			mcplib.Description("Symbol mode only: disambiguate to the definition at/around this line."),
-		),
-	), h.handleNode)
-
-	// codegraph_explore — always registered.
-	exploreDesc := "PRIMARY TOOL — call FIRST for almost any question OR before an edit: how does X work, architecture, a bug, where/what is X, surveying an area, or the symbols you are about to change. Returns the verbatim source of the relevant symbols grouped by file in ONE capped call (Read-equivalent — treat the shown source as already Read; do NOT re-open those files), plus the call path among them. Query can be a natural-language question OR a bag of symbol/file names. Usually the ONLY call you need — more accurate context, in far fewer tokens and round-trips than a search/Read/Grep loop."
-	if tinyRepo {
-		exploreDesc += " Budget: make at most 1 call for this project."
+// synthEdgeNote mirrors ToolHandler.synthEdgeNote. Upstream reads the
+// synthesizedBy/via/registeredAt metadata persisted by its callback
+// synthesizer; this port's resolve package synthesizes the same heuristic
+// edges without metadata, so when metadata is absent the interface-impl
+// annotation (the only heuristic `calls` kind the Go resolver emits) is
+// derived from the edge target's location — the exact value upstream stores
+// in registeredAt for interface-impl edges.
+func (h *toolHandlers) synthEdgeNote(edge *model.Edge) *synthNote {
+	if edge == nil || edge.Provenance != "heuristic" {
+		return nil
 	}
-	s.AddTool(mcplib.NewTool("codegraph_explore",
-		mcplib.WithDescription(exploreDesc),
-		mcplib.WithString("query",
-			mcplib.Description("Symbol names, file names, or short code terms to explore."),
-			mcplib.Required(),
-		),
-		mcplib.WithNumber("maxFiles",
-			mcplib.Description("Maximum number of files to include source code from (default: 12)"),
-		),
-	), h.handleExplore)
-
-	// Large-project-only tools.
-	if tinyRepo {
-		return
+	m := edge.Metadata
+	registeredAt := ""
+	if m != nil {
+		if s, ok := m["registeredAt"].(string); ok {
+			registeredAt = s
+		}
+	}
+	at := ""
+	if registeredAt != "" {
+		at = " @" + registeredAt
+	}
+	synthesizedBy := ""
+	if m != nil {
+		if s, ok := m["synthesizedBy"].(string); ok {
+			synthesizedBy = s
+		}
 	}
 
-	s.AddTool(mcplib.NewTool("codegraph_callers",
-		mcplib.WithDescription("List functions that call <symbol>. For the full flow, use codegraph_explore."),
-		mcplib.WithString("symbol",
-			mcplib.Description("Name of the function, method, or class to find callers for"),
-			mcplib.Required(),
-		),
-		mcplib.WithNumber("limit",
-			mcplib.Description("Maximum number of callers to return (default: 20)"),
-		),
-	), h.handleCallers)
+	if synthesizedBy == "" && edge.Kind == model.EdgeCalls {
+		// Derive the interface-impl annotation (see doc comment above).
+		if target, err := h.backend.GetNodeByID(edge.Target); err == nil && target != nil {
+			registeredAt = fmt.Sprintf("%s:%d", target.FilePath, target.StartLine)
+			at = " @" + registeredAt
+		}
+		synthesizedBy = "interface-impl"
+	}
 
-	s.AddTool(mcplib.NewTool("codegraph_callees",
-		mcplib.WithDescription("List functions that <symbol> calls. For the full flow, use codegraph_explore."),
-		mcplib.WithString("symbol",
-			mcplib.Description("Name of the function, method, or class to find callees for"),
-			mcplib.Required(),
-		),
-		mcplib.WithNumber("limit",
-			mcplib.Description("Maximum number of callees to return (default: 20)"),
-		),
-	), h.handleCallees)
-
-	s.AddTool(mcplib.NewTool("codegraph_impact",
-		mcplib.WithDescription("List symbols affected by changing <symbol>. Use before a refactor."),
-		mcplib.WithString("symbol",
-			mcplib.Description("Name of the symbol to analyze impact for"),
-			mcplib.Required(),
-		),
-		mcplib.WithNumber("depth",
-			mcplib.Description("How many levels of dependencies to traverse (default: 2)"),
-		),
-	), h.handleImpact)
-
-	s.AddTool(mcplib.NewTool("codegraph_status",
-		mcplib.WithDescription("Index health check (files / nodes / edges). Skip unless debugging."),
-	), h.handleStatus)
-
-	s.AddTool(mcplib.NewTool("codegraph_files",
-		mcplib.WithDescription("Indexed file tree with language + symbol counts. Faster than Glob for project layout."),
-		mcplib.WithString("path",
-			mcplib.Description("Filter to files under this directory path."),
-		),
-		mcplib.WithString("pattern",
-			mcplib.Description("Filter files matching this glob pattern."),
-		),
-		mcplib.WithString("format",
-			mcplib.Description("Output format: \"tree\" (default), \"flat\", or \"grouped\""),
-			mcplib.Enum("tree", "flat", "grouped"),
-		),
-		mcplib.WithBoolean("includeMetadata",
-			mcplib.Description("Include file metadata (default: true)"),
-		),
-		mcplib.WithNumber("maxDepth",
-			mcplib.Description("Maximum directory depth to show."),
-		),
-	), h.handleFiles)
+	switch synthesizedBy {
+	case "callback":
+		via := "a registrar"
+		if m != nil {
+			if v, ok := m["via"]; ok {
+				via = fmt.Sprintf("`%v`", v)
+			}
+		}
+		field := ""
+		if m != nil {
+			if f, ok := m["field"]; ok {
+				field = fmt.Sprintf(" on .%v", f)
+			}
+		}
+		return &synthNote{
+			label:        fmt.Sprintf("callback — registered via %s%s (dynamic dispatch)", via, field),
+			compact:      fmt.Sprintf("dynamic: callback via %s%s", via, at),
+			registeredAt: registeredAt,
+		}
+	case "event-emitter":
+		ev := "an event"
+		if m != nil {
+			if e, ok := m["event"]; ok {
+				ev = fmt.Sprintf("`%v`", e)
+			}
+		}
+		return &synthNote{
+			label:        fmt.Sprintf("event %s — emit → handler (dynamic dispatch)", ev),
+			compact:      fmt.Sprintf("dynamic: event %s%s", ev, at),
+			registeredAt: registeredAt,
+		}
+	case "react-render":
+		return &synthNote{
+			label:        "React re-render — `setState` re-runs render() (dynamic dispatch)",
+			compact:      "dynamic: React re-render via setState" + at,
+			registeredAt: registeredAt,
+		}
+	case "jsx-render":
+		child := "a child component"
+		if m != nil {
+			if v, ok := m["via"]; ok {
+				child = fmt.Sprintf("<%v>", v)
+			}
+		}
+		return &synthNote{
+			label:        fmt.Sprintf("renders %s (JSX child — dynamic dispatch)", child),
+			compact:      fmt.Sprintf("dynamic: renders %s", child),
+			registeredAt: registeredAt,
+		}
+	case "vue-handler":
+		ev := "a template event"
+		if m != nil {
+			if e, ok := m["event"]; ok {
+				ev = fmt.Sprintf("@%v", e)
+			}
+		}
+		return &synthNote{
+			label:        fmt.Sprintf("Vue template handler — bound to %s (dynamic dispatch)", ev),
+			compact:      fmt.Sprintf("dynamic: Vue %s handler", ev),
+			registeredAt: registeredAt,
+		}
+	case "interface-impl":
+		return &synthNote{
+			label:        "interface/abstract dispatch — runs the implementation override (dynamic dispatch)",
+			compact:      "dynamic: interface → impl" + at,
+			registeredAt: registeredAt,
+		}
+	case "closure-collection":
+		field := "a collection"
+		if m != nil {
+			if f, ok := m["field"]; ok {
+				field = fmt.Sprintf("`%v`", f)
+			}
+		}
+		return &synthNote{
+			label:        fmt.Sprintf("closure collection — runs handlers appended to %s (dynamic dispatch)", field),
+			compact:      fmt.Sprintf("dynamic: runs %s handlers%s", field, at),
+			registeredAt: registeredAt,
+		}
+	}
+	return nil
 }

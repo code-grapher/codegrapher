@@ -87,6 +87,5 @@ adding new capture dimensions) are full re-captures from the original via
 
 | Gap | State |
 |---|---|
-| MCP daemon/proxy modes (`daemon.sock`, `daemon.pid`, ppid watchdog) | Not implemented; direct (stdio) mode only. Pending decision at integration. |
-| MCP `codegraph_explore` relevance selection | Simplified (FTS + 1-hop expansion) vs upstream's full `findRelevantContext` pipeline; output *format* matches. Pending real `query`-package wiring. |
+| MCP daemon/proxy modes (`daemon.sock`, `daemon.pid`, ppid watchdog) | Not implemented; direct (stdio) mode only. `codegraph serve --mcp` serves direct stdio; `CODEGRAPH_DAEMON_INTERNAL` is rejected with a clear error and the daemon-default transport falls back to direct mode with a stderr notice. |
 | Windows `lock` alive-probe | Stale-lock detection on Windows uses the 2-minute mtime timeout only (no PID liveness probe) to stay pure-Go. Conservative: locks are never reclaimed early. |
