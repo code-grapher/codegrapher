@@ -1,12 +1,25 @@
 # Golden-parity harness
 
-`testdata/golden/` holds outputs captured from the **original** codegraph CLI
-(version recorded in `golden/VERSION`) run against `testdata/fixtures/{go-small,ts-small}`.
-They are the behavioral spec for the Go port: every `codegrapher` query verb must
-produce equivalent output. Re-capture only when deliberately re-baselining:
+> **Note (2026-06-11): Goldens are now self-baselined — our output is the spec.**
+> After the UB-1 docstring fix and the go/parser flip (ADR-003), the goldens were
+> re-generated from our own binary using `tools/parity/rebaseline-golden.sh`.
+> The original `capture-*.sh` scripts are retained for comparison only and still
+> require the upstream Node 22 CLI to run.
+
+`testdata/golden/` holds CLI and DB-dump outputs that define the behavioral spec
+for the Go port. Re-baseline with:
 
 ```sh
-tools/parity/capture-golden.sh   # requires the original `codegraph` on PATH
+tools/parity/rebaseline-golden.sh   # uses OUR binary — no external CLI needed
+```
+
+To compare against the original upstream CLI (requires `codegraph` on PATH + Node 22):
+
+```sh
+tools/parity/capture-golden.sh          # CLI goldens from upstream
+tools/parity/capture-extraction-golden.sh  # extraction DB dumps from upstream
+tools/parity/capture-resolution-golden.sh  # resolution DB dumps from upstream
+tools/parity/capture-mcp-golden.sh         # MCP goldens from upstream
 ```
 
 ## Comparison rules (implemented by the Go test helper `internal/paritytest`)

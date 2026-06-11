@@ -5,12 +5,6 @@
   "edgeCount": 2,
   "affected": [
     {
-      "name": "normalize",
-      "kind": "function",
-      "filePath": "internal/store/store.go",
-      "startLine": 62
-    },
-    {
       "name": "Set",
       "kind": "method",
       "filePath": "internal/store/store.go",
@@ -21,6 +15,12 @@
       "kind": "method",
       "filePath": "internal/store/cache.go",
       "startLine": 24
+    },
+    {
+      "name": "normalize",
+      "kind": "function",
+      "filePath": "internal/store/store.go",
+      "startLine": 62
     }
   ]
 }

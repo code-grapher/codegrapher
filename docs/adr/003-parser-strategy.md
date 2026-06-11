@@ -1,7 +1,7 @@
 # ADR-003: Parser strategy — native parsers in production, ported walk as test oracle
 
-Status: ACCEPTED (owner decision, 2026-06-11) — Go flip pending edge-parity
-evidence; TS adoption pending upstream API availability.
+Status: DONE (2026-06-11) — Go flip complete; go/parser is primary for Go files.
+TS adoption pending upstream API availability.
 
 ## Go: stdlib go/parser in production; tree-sitter walk kept for comparison
 

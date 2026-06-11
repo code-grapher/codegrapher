@@ -8,13 +8,13 @@
       "name": "Get",
       "kind": "method",
       "filePath": "internal/store/store.go",
-      "startLine": 29
+      "startLine": 20
     },
     {
       "name": "Get",
       "kind": "method",
       "filePath": "internal/store/store.go",
-      "startLine": 20
+      "startLine": 29
     },
     {
       "name": "Lookup",

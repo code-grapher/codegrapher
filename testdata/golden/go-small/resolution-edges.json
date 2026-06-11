@@ -17,5 +17,5 @@
 {"source":"method:61bb353671c58d0678834537ffc2eb6d","target":"method:35b070145333f750fa686136e7bad340","kind":"calls","provenance":null,"line":26,"col":2},
 {"source":"method:74e7e0f7d0aca402ae101418dc1220a1","target":"method:f4429292fae9c9b2f2e728a4571d35e6","kind":"calls","provenance":null,"line":16,"col":11},
 {"source":"method:f4429292fae9c9b2f2e728a4571d35e6","target":"method:06a3d930ab9c7c0f9fe59743ef09b613","kind":"calls","provenance":"heuristic","line":20,"col":null},
-{"source":"route:cmd/app/main.go:17:ANY:/health","target":"function:b0728e91012c3d6547f044b23d5621e5","kind":"references","provenance":null,"line":17,"col":0},
+{"source":"route:cmd/app/main.go:17:ANY:/health","target":"function:b0728e91012c3d6547f044b23d5621e5","kind":"references","provenance":null,"line":17,"col":null},
 {"source":"struct:cb336db3e2962f3c7761dee74649bc38","target":"interface:a83094215a0c6cf5d6bb919a30957fa1","kind":"implements","provenance":"heuristic","line":13,"col":null}]

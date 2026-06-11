@@ -18,19 +18,6 @@ This file tracks three categories:
 
 ## A. Upstream bugs deliberately reproduced
 
-### UB-1: Go type declarations lose their doc comments
-
-Doc comments on Go `struct` / `interface` / `type` alias declarations are never
-extracted (functions and methods are fine).
-
-- **Upstream cause:** `getPrecedingDocstring(type_spec)` uses
-  `previousNamedSibling`, but a `type_spec` has no named siblings inside its
-  `type_declaration` wrapper — the comment is a sibling of the wrapper at
-  `source_file` level (`src/extraction/tree-sitter.ts`).
-- **Our site:** `internal/extract/walk_go.go` → `extractGoStruct` /
-  `extractGoInterface` / `extractGoTypeAlias` (docstring hard-coded empty).
-- **Symptom:** `query --json` shows no `docstring` for Go types.
-
 ### UB-2: Exported TS/JS declarations lose their doc comments
 
 Doc comments on any TS/JS declaration wrapped in `export` (i.e. most public
@@ -67,6 +54,7 @@ and duplicating rows in raw edge listings.
 
 | # | Where | Bug | Fixed in |
 |---|---|---|---|
+| 0 | `internal/extract/walk_go.go`, `walk_go_fallback.go` | UB-1: Go type declarations (`struct`/`interface`/`type` alias) lost their doc comments. The tree-sitter walk now passes the `type_declaration` node as anchor to `extractGoTypeSpec` and calls `e.lookupDoc(anchor)`; the go/parser walk uses `ast.TypeSpec.Doc` with fallback to `ast.GenDecl.Doc`, matching go/ast CommentMap semantics. Both walks now extract type declaration doc comments correctly. | current |
 | 1 | `internal/paritytest` | `sortArray` indexed a detached key slice while `sort.SliceStable` moved items — canonicalization depended on input order, so two permutations of the same set could compare unequal. Regression test added. | `13d2dcd` |
 | 2 | golden capture process | All day-one CLI goldens were captured running the original under **Node 26 + `CODEGRAPH_ALLOW_UNSAFE_NODE=1`**, which degrades upstream's WASM parsing (e.g. ts-small edgeCount 37 instead of the true 41; wrong impact sets). Verified the original is deterministic under Node 22 (3 runs, identical DB hashes) and re-captured everything. **Rule: capture goldens only under Node 22** (`fnm exec --using 22`). | `e1ee40a` |
 | 3 | `query` scoring | Three porting bugs vs upstream: path-relevance bonuses don't stack the filename bonus with dir/path; prefix bonus is `Math.round(10+30*ratio)`; final score must sum in upstream's association order `((bm25+kind)+path)+name` to match float results bit-for-bit. | `6bc3676` |
@@ -97,30 +85,13 @@ adding new capture dimensions) are full re-captures from the original via
 
 ## D. Deliberate divergences from upstream
 
-### D-2: gotreesitter parse timeout falls back to go/parser
+### D-2: go/parser is the primary Go scanner; gotreesitter Go walk is the test oracle
 
-gotreesitter has a known pathological GLR blow-up (upstream issue #110) on
-certain literal-heavy Go files (notably `pkg/lint/coverage_test.go` at 211 KB).
-The `SetTimeoutMicros` mechanism doesn't fire because the per-iteration check
-runs too infrequently relative to the iteration count for such files.
-
-Divergence (`internal/extract/extract.go`): the gotreesitter `Parse` call runs
-in a goroutine with a 30-second hard deadline (configurable via
-`CODEGRAPH_PARSE_TIMEOUT_MS`). On timeout the goroutine is abandoned (Go has no
-cancellation) and `walkGoFallback` (go/parser) extracts the file. The upstream
-uses the C tree-sitter via WASM and never hits this limitation; for us go/parser
-produces identical node IDs and line numbers (same `token.FileSet` numbering
-matches gotreesitter's row+1 convention). The leaked goroutine eventually
-completes on its own and is GC'd; it holds no database handles.
-
-### D-3: go/parser supplemental pass for gotreesitter ERROR roots
-
-Files where gotreesitter produces `root.Kind()=="ERROR"` (the `[]struct{...}`
-anonymous struct slice pattern in function bodies) get a supplemental extraction
-pass via `walkGoFallback` (`internal/extract/walk_go_fallback.go`). go/parser
-correctly parses all valid Go and produces identical node IDs. New nodes only
-(by ID) are merged — nodes the partial tree-sitter walk already emitted
-correctly are never duplicated.
+go/parser is used directly for all Go files (ADR-003, completed 2026-06-11).
+The gotreesitter-based `walkGo` is retained in `internal/extract/walk_go.go`
+as a test oracle; a differential test runs both walks over fixtures and asserts
+identical emission. The old D-2 timeout goroutine and D-3 ERROR-root supplemental
+pass have been removed from the production path.
 
 ### D-1: FileLock no longer reclaims young locks with invalid content
 
@@ -141,3 +112,43 @@ pathological microsecond interleaving changes. A sub-microsecond TOCTOU
 between the freshness stat and the unlink remains (closing it fully needs
 flock-style OS primitives); it is narrower than upstream's by ~5 orders of
 magnitude.
+
+---
+
+## E. Differences vs codegraph, kept deliberately
+
+Analysis of the full codegrapher corpus shows a net edge difference of −62
+non-`contains` edges (orig: 14,985 / port: 14,923). All 223 missing edges and
+all 182 extra edges have `line=0`, indicating they are unresolved-reference or
+heuristic edges, not structurally extracted ones. They cluster into two patterns.
+
+| ID | Description | Net edge delta | Verdict |
+|---|---|---|---|
+| E-1 | D-2 fallback missing `imports` edges | −12 | Acceptable: fallback walk omits unresolved import refs; `contains` edges still link the import nodes |
+| E-2 | Heuristic resolution attribution differences | ~−50 net | Acceptable: JS vs Go proximity ranking differ in tie-breaking; both are heuristics |
+
+### E-1: D-2 fallback import edges (12 missing)
+
+Files affected: `pkg/lint/coverage_test.go` (211 KB, hits D-2 timeout),
+`pkg/feature/coverage_test.go`. The `fallbackImportSpec` function in
+`internal/extract/walk_go_fallback.go` creates import nodes (they appear in
+`contains`) but does not emit unresolved `imports` reference edges from the file
+node, unlike the normal tree-sitter walk's `extractSpec`. The upstream's C
+tree-sitter / WASM parses these files without timing out and emits the edge. Our
+go/parser fallback correctly identifies the import nodes — the `contains` edges
+still connect them — but the file→import `imports` resolution edge is absent.
+Because the resolution pass reconnects imports via `contains` regardless, this
+has no practical effect on query results.
+
+### E-2: Heuristic resolution attribution differences (net ~50 edges)
+
+Most affected files show equal counts of missing and extra edges (net=0 per
+file), meaning the same resolved target is attributed to a different source node
+— e.g. orig emits a `calls` edge from `function:TestFoo` while the port emits it
+from `file:foo_test.go`, or vice versa. For files parsed by the go/parser
+fallback (D-2 / D-3) the proximity algorithm picks a different "nearest
+enclosing" node because go/parser and tree-sitter produce different intermediate
+AST shapes. A smaller subset of files have only extra (10 files, 15 edges) or
+only missing (19 files, ~47 edges) edges, reflecting minor differences in
+tie-breaking when multiple candidate functions are equidistant. Both the JS and
+Go resolvers are heuristics with no authoritative ground truth; we keep ours.

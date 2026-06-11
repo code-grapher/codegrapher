@@ -5,6 +5,12 @@
   "edgeCount": 2,
   "affected": [
     {
+      "name": "main",
+      "kind": "function",
+      "filePath": "src/main.ts",
+      "startLine": 3
+    },
+    {
       "name": "set",
       "kind": "method",
       "filePath": "src/store.ts",
@@ -15,12 +21,6 @@
       "kind": "method",
       "filePath": "src/cache.ts",
       "startLine": 16
-    },
-    {
-      "name": "main",
-      "kind": "function",
-      "filePath": "src/main.ts",
-      "startLine": 3
     }
   ]
 }

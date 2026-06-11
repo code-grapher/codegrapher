@@ -171,13 +171,9 @@ func (e *extractor) addReceiverContains(receiverType, targetID string) {
 }
 
 // extractGoTypeSpec handles type_spec nodes (type Foo struct/interface/alias).
-// docstringAnchor is the parent type_declaration node; docstrings are looked up
-// from the anchor's start line so they match the upstream's
-// getPrecedingDocstring(type_spec) == null behavior (the comment is a sibling of
-// type_declaration, not type_spec, so type_spec has no preceding named sibling in
-// web-tree-sitter). By using the type_declaration as anchor we would still find it,
-// but the upstream never does — so we pass nil to skip docstrings for type nodes.
-func (e *extractor) extractGoTypeSpec(node *tsparse.Node, _ *tsparse.Node) {
+// anchor is the parent type_declaration node; its doc comment is looked up and
+// passed down to the struct/interface/alias extractor (fixes UB-1).
+func (e *extractor) extractGoTypeSpec(node *tsparse.Node, anchor *tsparse.Node) {
 	nameNode := node.ChildByFieldName("name")
 	if nameNode == nil {
 		return
@@ -187,31 +183,29 @@ func (e *extractor) extractGoTypeSpec(node *tsparse.Node, _ *tsparse.Node) {
 		return
 	}
 
+	docstring := ""
+	if anchor != nil {
+		docstring = e.lookupDoc(anchor)
+	}
+
 	typeChild := node.ChildByFieldName("type")
 	if typeChild == nil {
 		// plain type alias with no explicit type field
-		e.extractGoTypeAlias(node, name)
+		e.extractGoTypeAlias(node, name, docstring)
 		return
 	}
 
 	switch typeChild.Kind() {
 	case "struct_type":
-		e.extractGoStruct(node, name, typeChild)
+		e.extractGoStruct(node, name, typeChild, docstring)
 	case "interface_type":
-		e.extractGoInterface(node, name, typeChild)
+		e.extractGoInterface(node, name, typeChild, docstring)
 	default:
-		e.extractGoTypeAlias(node, name)
+		e.extractGoTypeAlias(node, name, docstring)
 	}
 }
 
-func (e *extractor) extractGoStruct(typeSpecNode *tsparse.Node, name string, structType *tsparse.Node) {
-	// TODO(upstream-bug UB-1): see KNOWN-BUGS.md — fix only as a deliberate
-	// divergence from upstream, together with a golden re-baseline.
-	// Docstrings for struct/interface/type_alias are NOT extracted: the upstream's
-	// getPrecedingDocstring(type_spec) returns null because type_spec has no
-	// preceding named sibling within type_declaration. The comment is a sibling of
-	// type_declaration at source_file level, not of type_spec.
-	docstring := ""
+func (e *extractor) extractGoStruct(typeSpecNode *tsparse.Node, name string, structType *tsparse.Node, docstring string) {
 	isExported := isGoExported(name)
 	sn := e.createNode(model.KindStruct, name, typeSpecNode, nodeExtra{
 		docstring:  docstring,
@@ -242,9 +236,7 @@ func (e *extractor) extractGoStruct(typeSpecNode *tsparse.Node, name string, str
 	e.nodeStack = e.nodeStack[:len(e.nodeStack)-1]
 }
 
-func (e *extractor) extractGoInterface(typeSpecNode *tsparse.Node, name string, ifaceType *tsparse.Node) {
-	// Same as extractGoStruct: upstream's getPrecedingDocstring(type_spec) returns null.
-	docstring := ""
+func (e *extractor) extractGoInterface(typeSpecNode *tsparse.Node, name string, ifaceType *tsparse.Node, docstring string) {
 	isExported := isGoExported(name)
 	ifn := e.createNode(model.KindInterface, name, typeSpecNode, nodeExtra{
 		docstring:  docstring,
@@ -288,9 +280,7 @@ func (e *extractor) extractGoInterfaceMethods(ifaceType *tsparse.Node, ifaceID s
 	e.nodeStack = e.nodeStack[:len(e.nodeStack)-1]
 }
 
-func (e *extractor) extractGoTypeAlias(node *tsparse.Node, name string) {
-	// Same as extractGoStruct: upstream's getPrecedingDocstring(type_spec) returns null.
-	docstring := ""
+func (e *extractor) extractGoTypeAlias(node *tsparse.Node, name string, docstring string) {
 	isExported := isGoExported(name)
 	e.createNode(model.KindTypeAlias, name, node, nodeExtra{
 		docstring:  docstring,

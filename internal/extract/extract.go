@@ -1,30 +1,13 @@
 package extract
 
 import (
-	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/specscore/codegrapher/internal/tsparse"
 	"github.com/specscore/codegrapher/model"
 )
-
-// parseTimeoutDuration is the per-file parse deadline for gotreesitter. The
-// standard library go/parser is used as fallback when it fires. Configurable
-// via CODEGRAPH_PARSE_TIMEOUT_MS (0 = disabled). Default: 30 s.
-var parseTimeoutDuration = func() time.Duration {
-	if v := os.Getenv("CODEGRAPH_PARSE_TIMEOUT_MS"); v != "" {
-		if ms, err := strconv.Atoi(v); err == nil {
-			if ms == 0 {
-				return 0
-			}
-			return time.Duration(ms) * time.Millisecond
-		}
-	}
-	return 30 * time.Second
-}()
 
 // nodeExtra holds optional fields that callers may provide when creating a node.
 type nodeExtra struct {
@@ -79,61 +62,10 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 		lang:     lang,
 	}
 
-	// Parse the file with tree-sitter when we have a supported grammar.
-	// For Go files the parse runs in a goroutine with a hard deadline: gotreesitter
-	// has a known pathological blow-up (issue #110) on files with many
-	// []struct{...} literals where SetTimeoutMicros does not fire in time.
-	// On timeout the tree is nil and goTreeError is set, so walkGoFallback
-	// (go/parser) handles the whole file — identical node output, no hang.
+	// Parse the file with tree-sitter for TS/JS; Go uses go/parser directly
+	// (ADR-003: go/parser is the primary Go scanner; walkGo is the test oracle only).
 	var tree *tsparse.Tree
 	switch lang {
-	case model.LangGo:
-		p, err := tsparse.NewParser(tsparse.LangGo)
-		if err == nil {
-			type parseResult struct {
-				tree *tsparse.Tree
-				err  error
-			}
-			if parseTimeoutDuration <= 0 {
-				// Timeout disabled: parse synchronously (may hang on pathological files).
-				tree, err = p.Parse(content)
-				if err != nil {
-					e.errors = append(e.errors, model.ExtractionError{
-						Message:  err.Error(),
-						FilePath: path,
-						Severity: "error",
-						Code:     "parse_error",
-					})
-				}
-			} else {
-				ch := make(chan parseResult, 1)
-				go func() {
-					t, parseErr := p.Parse(content)
-					ch <- parseResult{t, parseErr}
-				}()
-				select {
-				case r := <-ch:
-					tree = r.tree
-					if r.err != nil {
-						e.errors = append(e.errors, model.ExtractionError{
-							Message:  r.err.Error(),
-							FilePath: path,
-							Severity: "error",
-							Code:     "parse_error",
-						})
-					}
-				case <-time.After(parseTimeoutDuration):
-					// Parse hung — goroutine leaks but extraction continues via go/parser.
-					e.errors = append(e.errors, model.ExtractionError{
-						Message:  "gotreesitter parse timeout; falling back to go/parser",
-						FilePath: path,
-						Severity: "warning",
-						Code:     "parse_timeout",
-					})
-					// tree stays nil; goTreeError will be set below to trigger walkGoFallback.
-				}
-			}
-		}
 	case model.LangTypeScript, model.LangTSX, model.LangJavaScript, model.LangJSX:
 		p, err := tsparse.NewParser(tsparse.LangTypeScript)
 		if err == nil {
@@ -149,7 +81,7 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 		}
 	}
 
-	// Build the comment index so docstring lookup works during symbol walking.
+	// Build the comment index so docstring lookup works during TS/JS symbol walking.
 	if tree != nil {
 		e.commentByEndLine = buildCommentIndex(tree.RootNode())
 	}
@@ -168,34 +100,14 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 	e.emitFileNode(tree)
 
 	// Walk the tree and extract symbol nodes.
-	// goTreeError is true when the tree-sitter parse produced an error tree or
-	// timed out; in either case walkGoFallback (go/parser) fills in the gaps.
-	goTreeError := lang == model.LangGo && tree == nil // timeout: tree is nil
-	goFullFallback := goTreeError                      // D-2: no tree-sitter walk at all
-	if tree != nil {
-		root := tree.RootNode()
-		switch lang {
-		case model.LangGo:
-			e.walkGo(root)
-			// Detect gotreesitter parse failure: root kind is "ERROR" (not
-			// "source_file") or the root has error nodes. When this happens the
-			// partial tree-sitter walk misses declarations after the first
-			// problematic construct. We supplement with the go/parser fallback.
-			if root.Kind() == "ERROR" || root.HasError() {
-				goTreeError = true
-			}
-		case model.LangTypeScript, model.LangTSX, model.LangJavaScript, model.LangJSX:
-			e.walkTS(root)
+	switch lang {
+	case model.LangGo:
+		// go/parser is the primary walk (ADR-003); walkGo (gotreesitter) is the test oracle only.
+		e.walkGoFallback(content, true)
+	case model.LangTypeScript, model.LangTSX, model.LangJavaScript, model.LangJSX:
+		if tree != nil {
+			e.walkTS(tree.RootNode())
 		}
-	}
-
-	// go/parser supplemental pass: fills in any top-level declarations that
-	// the gotreesitter walk missed due to its []struct{...} parsing bug or timeout.
-	// goFullFallback=true for D-2 (timeout): all function bodies are walked by
-	// go/parser since tree-sitter produced nothing. For D-3 (ERROR root, goFullFallback=false)
-	// only newly-added function bodies are walked to avoid double-emitting refs.
-	if goTreeError {
-		e.walkGoFallback(content, goFullFallback)
 	}
 
 	// For Go files, also run the framework route extractor.

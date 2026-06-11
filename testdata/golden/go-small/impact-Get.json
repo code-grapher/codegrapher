@@ -11,6 +11,12 @@
       "startLine": 20
     },
     {
+      "name": "Get",
+      "kind": "method",
+      "filePath": "internal/store/store.go",
+      "startLine": 29
+    },
+    {
       "name": "Lookup",
       "kind": "method",
       "filePath": "internal/store/cache.go",
@@ -21,12 +27,6 @@
       "kind": "function",
       "filePath": "cmd/app/main.go",
       "startLine": 22
-    },
-    {
-      "name": "Get",
-      "kind": "method",
-      "filePath": "internal/store/store.go",
-      "startLine": 29
     }
   ]
 }

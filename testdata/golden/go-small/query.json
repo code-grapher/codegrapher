@@ -11,14 +11,15 @@
       "endLine": 16,
       "startColumn": 5,
       "endColumn": 1,
+      "docstring": "Store is a thread-safe key-value store.",
       "visibility": null,
       "isExported": true,
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781156772111
+      "updatedAt": 1781184398952
     },
-    "score": 102.21472027765986
+    "score": 101.88287141170147
   },
   {
     "node": {
@@ -37,9 +38,9 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781156772110
+      "updatedAt": 1781184398948
     },
-    "score": 45.196253462286705
+    "score": 44.88903668591918
   },
   {
     "node": {
@@ -60,9 +61,9 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781156772114
+      "updatedAt": 1781184398952
     },
-    "score": 26.007343447090594
+    "score": 25.756394375084568
   },
   {
     "node": {
@@ -84,9 +85,9 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "int",
-      "updatedAt": 1781156772114
+      "updatedAt": 1781184398952
     },
-    "score": 26.007343447090594
+    "score": 25.756394375084568
   },
   {
     "node": {
@@ -108,9 +109,9 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "string",
-      "updatedAt": 1781156772112
+      "updatedAt": 1781184398952
     },
-    "score": 25.920679284132397
+    "score": 25.695232477972237
   },
   {
     "node": {
@@ -132,9 +133,9 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "Store",
-      "updatedAt": 1781156772112
+      "updatedAt": 1781184398952
     },
-    "score": 25.897957682845814
+    "score": 25.677519955884556
   },
   {
     "node": {
@@ -156,9 +157,9 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "Cache",
-      "updatedAt": 1781156772105
+      "updatedAt": 1781184398950
     },
-    "score": 15.514497247015163
+    "score": 15.396946556397943
   },
   {
     "node": {
@@ -178,9 +179,31 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781156772093
+      "updatedAt": 1781184398949
     },
-    "score": 12.159093896999188
+    "score": 11.86355168169844
+  },
+  {
+    "node": {
+      "id": "struct:71cf774942ee3871dc96895fc3ea4eee",
+      "kind": "struct",
+      "name": "Cache",
+      "qualifiedName": "Cache",
+      "filePath": "internal/store/cache.go",
+      "language": "go",
+      "startLine": 4,
+      "endLine": 7,
+      "startColumn": 5,
+      "endColumn": 1,
+      "docstring": "Cache wraps a Store with hit counting.",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781184398950
+    },
+    "score": 11.425861293270984
   },
   {
     "node": {
@@ -201,9 +224,9 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "HandlerFunc",
-      "updatedAt": 1781156772096
+      "updatedAt": 1781184398949
     },
-    "score": 10.810001008657887
+    "score": 10.613541757031117
   },
   {
     "node": {
@@ -222,8 +245,8 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781156772104
+      "updatedAt": 1781184398948
     },
-    "score": 5.996965292331003
+    "score": 5.748649394822382
   }
 ]

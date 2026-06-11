@@ -11,16 +11,16 @@
       "startLine": 8
     },
     {
-      "name": "report",
-      "kind": "method",
-      "filePath": "src/cache.ts",
-      "startLine": 23
-    },
-    {
       "name": "main",
       "kind": "function",
       "filePath": "src/main.ts",
       "startLine": 3
+    },
+    {
+      "name": "report",
+      "kind": "method",
+      "filePath": "src/cache.ts",
+      "startLine": 23
     }
   ]
 }
