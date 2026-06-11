@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## CodeGraph Status\n\n**Files indexed:** 3\n**Total nodes:** 28\n**Total edges:** 50\n**Database size:** 0.15 MB\n**Backend:** node:sqlite (Node built-in) \u2014 full WAL + FTS5\n**Journal mode:** wal (concurrent reads safe)\n\n### Nodes by Kind:\n- file: 3\n- function: 6\n- import: 5\n- interface: 1\n- method: 7\n- route: 2\n- struct: 3\n- variable: 1\n\n### Languages:\n- go: 3"
+      }
+    ]
+  }
+}

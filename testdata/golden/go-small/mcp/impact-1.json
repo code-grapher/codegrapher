@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 8,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Impact: \"Get\" affects 4 symbols\n\n**internal/store/store.go:**\nGet:20, Get:29\n\n**internal/store/cache.go:**\nLookup:15\n\n**cmd/app/main.go:**\nhandleGreet:22\n\n\n> **Note:** Aggregated results across 2 symbols named \"Get\": method at internal/store/store.go:20, method at internal/store/store.go:29"
+      }
+    ]
+  }
+}

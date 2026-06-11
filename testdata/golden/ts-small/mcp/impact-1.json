@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 8,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Impact: \"get\" affects 3 symbols\n\n**src/store.ts:**\nget:15\n\n**src/cache.ts:**\nlookup:8, report:23\n"
+      }
+    ]
+  }
+}

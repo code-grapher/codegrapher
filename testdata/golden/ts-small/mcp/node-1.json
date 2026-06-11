@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## get (method)\n\n**Location:** src/store.ts:15\n**Signature:** `(key: string): LookupResult`\n\nGet a value by key.\n\n```typescript\n15\t  get(key: string): LookupResult {\n16\t    const value = this.items.get(key);\n17\t    return value === undefined ? undefined : { key, value };\n18\t  }\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Calls \u2192** LookupResult (src/store.ts:8)\n**Called by \u2190** lookup (src/cache.ts:8)"
+      }
+    ]
+  }
+}

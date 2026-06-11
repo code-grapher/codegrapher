@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Search Results (7 found)\n\n### Store (class)\nsrc/store.ts:11\n\n### store.ts (file)\nsrc/store.ts:1\n\n### items (method)\nsrc/store.ts:12\n\n### size (method)\nsrc/store.ts:25\n`(): number`\n\n### set (method)\nsrc/store.ts:21\n`(key: string, value: string): void`\n\n### get (method)\nsrc/store.ts:15\n`(key: string): LookupResult`\n\n### ./store (import)\nsrc/cache.ts:1\n`import { Store, type Entry, describe } from './store';`\n"
+      }
+    ]
+  }
+}

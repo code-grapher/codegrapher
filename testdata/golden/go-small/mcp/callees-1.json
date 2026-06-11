@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Callees of Get (1 found)\n\n- Get (method) - internal/store/store.go:29\n\n> **Note:** Aggregated results across 2 symbols named \"Get\": method at internal/store/store.go:20, method at internal/store/store.go:29"
+      }
+    ]
+  }
+}

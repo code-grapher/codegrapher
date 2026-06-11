@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Project Structure (3 files)\n\n\u251c\u2500\u2500 cmd\n\u2502   \u2514\u2500\u2500 app\n\u2502       \u2514\u2500\u2500 main.go (go, 9 symbols)\n\u2514\u2500\u2500 internal\n    \u2514\u2500\u2500 store\n        \u251c\u2500\u2500 cache.go (go, 5 symbols)\n        \u2514\u2500\u2500 store.go (go, 14 symbols)"
+      }
+    ]
+  }
+}

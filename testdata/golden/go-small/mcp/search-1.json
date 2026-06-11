@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Search Results (10 found)\n\n### Store (struct)\ninternal/store/store.go:13\n\n### store.go (file)\ninternal/store/store.go:1\n\n### Set (method)\ninternal/store/store.go:40\n`(key, value string)`\n\n### Len (method)\ninternal/store/store.go:47\n`() int`\n\n### Get (method)\ninternal/store/store.go:29\n`(key string) (string, error)`\n\n### New (function)\ninternal/store/store.go:24\n`() *Store`\n\n### NewCache (function)\ninternal/store/cache.go:10\n`() *Cache`\n\n### example.com/go-small/internal/store (import)\ncmd/app/main.go:8\n`\"example.com/go-small/internal/store\"`\n\n### handleGreet (function)\ncmd/app/main.go:22\n`(c *store.Cache) http.HandlerFunc`\n\n### cache.go (file)\ninternal/store/cache.go:1\n"
+      }
+    ]
+  }
+}

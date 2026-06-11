@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "**2 definitions named \"Get\"**\nReturning 2 in full \u2014 pick the one you need (no Read required).\n\n## Get (method)\n\n**Location:** internal/store/store.go:20\n**Signature:** `(key string) (string, error)`\n\n```go\n20\t\tGet(key string) (string, error)\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Calls \u2192** Get (internal/store/store.go:29) [dynamic: interface \u2192 impl @internal/store/store.go:29]\n**Called by \u2190** Lookup (internal/store/cache.go:15)\n\n---\n\n## Get (method)\n\n**Location:** internal/store/store.go:29\n**Signature:** `(key string) (string, error)`\n\nGet returns the value for key, or ErrNotFound.\n\n```go\n29\tfunc (s *Store) Get(key string) (string, error) {\n30\t\ts.mu.RLock()\n31\t\tdefer s.mu.RUnlock()\n32\t\tv, ok := s.items[key]\n33\t\tif !ok {\n34\t\t\treturn \"\", ErrNotFound\n35\t\t}\n36\t\treturn v, nil\n37\t}\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Called by \u2190** Get (internal/store/store.go:20) [dynamic: interface \u2192 impl @internal/store/store.go:29]"
+      }
+    ]
+  }
+}
