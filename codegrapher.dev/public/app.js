@@ -143,7 +143,7 @@ function mountViewer(route) {
 async function loadViewer(route, qInput) {
   const { forge, org, repo, filePath, q } = route;
   const rawBase = `https://raw.githubusercontent.com/${org}/${repo}/HEAD`;
-  const snapshotUrl = `${rawBase}/codegrapher/files.ingr`;
+  const snapshotUrl = `${rawBase}/codegrapher/files/files.ingr`;
 
   let filesData;
   try {

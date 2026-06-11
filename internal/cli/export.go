@@ -41,12 +41,12 @@ Use --out to override.`,
 
 			printInfo(fmt.Sprintf("Exporting index from %s → %s", dbPath, out))
 
-			if err := snapshot.Export(dbPath, out); err != nil {
+			if err := snapshot.Export(dbPath, out, projectPath); err != nil {
 				return fmt.Errorf("export failed: %w", err)
 			}
 
 			printSuccess(fmt.Sprintf("Snapshot written to %s", out))
-			printInfo("nodes.ingr, edges.ingr, files.ingr, project_metadata.ingr")
+			printInfo("nodes/nodes.ingr, edges/edges.ingr, files/files.ingr, project_metadata/project_metadata.ingr")
 			return nil
 		},
 	}

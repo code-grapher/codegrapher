@@ -20,8 +20,11 @@ instead of re-indexing from scratch.
 
 ## Snapshot design constraints
 
-- One `.ingr` file per table (`nodes`, `edges`, `files`, `unresolved_refs`,
-  `project_metadata`), records sorted by primary key for byte-determinism.
+- One `.ingr` file per table (`nodes`, `edges`, `files`, `project_metadata`),
+  each in its own subdirectory (`nodes/nodes.ingr` etc.), records sorted by
+  primary key for byte-determinism. The export directory is a valid inGitDB
+  database (`ingitdb validate` exits 0); `.ingitdb.yaml` and per-collection
+  `.ingitdb-collection.yaml` files are written on every export.
 - Volatile fields (`updated_at`, `indexed_at`, db size, absolute paths) are
   EXCLUDED or normalized — two exports of the same code tree must be
   byte-identical regardless of when/where they ran.

@@ -3,6 +3,7 @@ package snapshot_test
 import (
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -65,24 +66,27 @@ func TestDeterminism(t *testing.T) {
 	outA := t.TempDir()
 	outB := t.TempDir()
 
-	if err := snapshot.Export(dbPath, outA); err != nil {
+	if err := snapshot.Export(dbPath, outA, ""); err != nil {
 		t.Fatalf("export A: %v", err)
 	}
-	if err := snapshot.Export(dbPath, outB); err != nil {
+	if err := snapshot.Export(dbPath, outB, ""); err != nil {
 		t.Fatalf("export B: %v", err)
 	}
 
-	for _, name := range []string{"nodes.ingr", "edges.ingr", "files.ingr", "project_metadata.ingr"} {
-		bytesA, err := os.ReadFile(filepath.Join(outA, name))
+	for _, rel := range []string{
+		"nodes/nodes.ingr", "edges/edges.ingr", "files/files.ingr", "project_metadata/project_metadata.ingr",
+		".ingitdb/root-collections.yaml", ".ingitdb/settings.yaml", "README.md",
+	} {
+		bytesA, err := os.ReadFile(filepath.Join(outA, rel))
 		if err != nil {
-			t.Fatalf("read A/%s: %v", name, err)
+			t.Fatalf("read A/%s: %v", rel, err)
 		}
-		bytesB, err := os.ReadFile(filepath.Join(outB, name))
+		bytesB, err := os.ReadFile(filepath.Join(outB, rel))
 		if err != nil {
-			t.Fatalf("read B/%s: %v", name, err)
+			t.Fatalf("read B/%s: %v", rel, err)
 		}
 		if string(bytesA) != string(bytesB) {
-			t.Errorf("%s: not byte-identical between two exports", name)
+			t.Errorf("%s: not byte-identical between two exports", rel)
 		}
 	}
 }
@@ -95,7 +99,7 @@ func TestRoundTrip(t *testing.T) {
 
 	// Export from source.
 	outDir := t.TempDir()
-	if err := snapshot.Export(dbPathSrc, outDir); err != nil {
+	if err := snapshot.Export(dbPathSrc, outDir, ""); err != nil {
 		t.Fatalf("export: %v", err)
 	}
 
@@ -107,23 +111,25 @@ func TestRoundTrip(t *testing.T) {
 
 	// Export the imported DB.
 	outDir2 := t.TempDir()
-	if err := snapshot.Export(dbPathDst, outDir2); err != nil {
+	if err := snapshot.Export(dbPathDst, outDir2, ""); err != nil {
 		t.Fatalf("re-export: %v", err)
 	}
 
-	// Compare bytes for all four files.
-	for _, name := range []string{"nodes.ingr", "edges.ingr", "files.ingr", "project_metadata.ingr"} {
-		bytesOrig, err := os.ReadFile(filepath.Join(outDir, name))
+	// Compare bytes for all four INGR files (README excluded: it includes dir-name fallback).
+	for _, rel := range []string{
+		"nodes/nodes.ingr", "edges/edges.ingr", "files/files.ingr", "project_metadata/project_metadata.ingr",
+	} {
+		bytesOrig, err := os.ReadFile(filepath.Join(outDir, rel))
 		if err != nil {
-			t.Fatalf("read orig/%s: %v", name, err)
+			t.Fatalf("read orig/%s: %v", rel, err)
 		}
-		bytesReexp, err := os.ReadFile(filepath.Join(outDir2, name))
+		bytesReexp, err := os.ReadFile(filepath.Join(outDir2, rel))
 		if err != nil {
-			t.Fatalf("read re-export/%s: %v", name, err)
+			t.Fatalf("read re-export/%s: %v", rel, err)
 		}
 		if string(bytesOrig) != string(bytesReexp) {
 			t.Errorf("%s: round-trip not byte-identical\n--- original ---\n%s\n--- re-export ---\n%s",
-				name, bytesOrig, bytesReexp)
+				rel, bytesOrig, bytesReexp)
 		}
 	}
 
@@ -167,19 +173,24 @@ func TestEndToEnd(t *testing.T) {
 	_, dbPath := indexFixture(t, fixture)
 
 	outDir := t.TempDir()
-	if err := snapshot.Export(dbPath, outDir); err != nil {
+	if err := snapshot.Export(dbPath, outDir, ""); err != nil {
 		t.Fatalf("export: %v", err)
 	}
 
-	// All four files must exist and be non-empty.
-	for _, name := range []string{"nodes.ingr", "edges.ingr", "files.ingr", "project_metadata.ingr"} {
-		p := filepath.Join(outDir, name)
+	// All four INGR files plus schema files must exist and be non-empty.
+	for _, rel := range []string{
+		"nodes/nodes.ingr", "edges/edges.ingr", "files/files.ingr", "project_metadata/project_metadata.ingr",
+		"nodes/.collection/definition.yaml", "edges/.collection/definition.yaml",
+		"files/.collection/definition.yaml", "project_metadata/.collection/definition.yaml",
+		".ingitdb/root-collections.yaml", ".ingitdb/settings.yaml", "README.md",
+	} {
+		p := filepath.Join(outDir, rel)
 		fi, err := os.Stat(p)
 		if err != nil {
-			t.Fatalf("%s not found: %v", name, err)
+			t.Fatalf("%s not found: %v", rel, err)
 		}
 		if fi.Size() == 0 {
-			t.Errorf("%s is empty", name)
+			t.Errorf("%s is empty", rel)
 		}
 	}
 
@@ -195,9 +206,9 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("stats: %v", err)
 	}
 
-	nodesCount := countINGRRows(t, filepath.Join(outDir, "nodes.ingr"))
-	edgesCount := countINGRRows(t, filepath.Join(outDir, "edges.ingr"))
-	filesCount := countINGRRows(t, filepath.Join(outDir, "files.ingr"))
+	nodesCount := countINGRRows(t, filepath.Join(outDir, "nodes", "nodes.ingr"))
+	edgesCount := countINGRRows(t, filepath.Join(outDir, "edges", "edges.ingr"))
+	filesCount := countINGRRows(t, filepath.Join(outDir, "files", "files.ingr"))
 
 	if nodesCount != stats.NodeCount {
 		t.Errorf("nodes.ingr rows=%d, db nodes=%d", nodesCount, stats.NodeCount)
@@ -207,6 +218,36 @@ func TestEndToEnd(t *testing.T) {
 	}
 	if filesCount != stats.FileCount {
 		t.Errorf("files.ingr rows=%d, db files=%d", filesCount, stats.FileCount)
+	}
+}
+
+// TestIngitdbValidate exports go-small and runs `ingitdb validate` on the result.
+// The test is skipped gracefully when neither ingitdb binary is found.
+func TestIngitdbValidate(t *testing.T) {
+	// Prefer the current build; fall back to the Homebrew install.
+	ingitdbBin := ""
+	for _, candidate := range []string{"/tmp/ingitdb-current", "/opt/homebrew/bin/ingitdb"} {
+		if _, err := os.Stat(candidate); err == nil {
+			ingitdbBin = candidate
+			break
+		}
+	}
+	if ingitdbBin == "" {
+		t.Skip("ingitdb binary not found — skipping validate gate")
+	}
+
+	fixture := goSmallFixture(t)
+	_, dbPath := indexFixture(t, fixture)
+
+	outDir := t.TempDir()
+	if err := snapshot.Export(dbPath, outDir, ""); err != nil {
+		t.Fatalf("export: %v", err)
+	}
+
+	cmd := exec.Command(ingitdbBin, "validate", "--path", outDir)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("ingitdb validate failed:\n%s", out)
 	}
 }
 

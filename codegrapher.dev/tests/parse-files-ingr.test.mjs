@@ -7,7 +7,8 @@
  * testdata/fixtures/go-small via:
  *   CGO_ENABLED=0 go build -o /tmp/cgr ./cmd/codegrapher
  *   cp -r testdata/fixtures/go-small /tmp/go-small-fixture
- *   cd /tmp/go-small-fixture && /tmp/cgr init && /tmp/cgr export
+ *   /tmp/cgr init /tmp/go-small-fixture && /tmp/cgr export /tmp/go-small-fixture
+ *   cp /tmp/go-small-fixture/codegrapher/files/files.ingr codegrapher.dev/testdata/go-small-files.ingr
  */
 
 import { test } from 'node:test';

@@ -1,7 +1,16 @@
 // Package snapshot exports and imports the codegrapher index as INGR files.
 //
-// One .ingr file per table: nodes.ingr, edges.ingr, files.ingr,
-// project_metadata.ingr. Records are sorted by primary key for byte-determinism.
+// Layout inside the output directory (default: codegrapher/):
+//
+//	.ingitdb.yaml                     root inGitDB config
+//	README.md                         generated summary
+//	nodes/nodes.ingr                  node records
+//	edges/edges.ingr                  edge records
+//	files/files.ingr                  file records
+//	project_metadata/project_metadata.ingr  metadata records
+//
+// The directory is a valid inGitDB database (`ingitdb validate` exits 0).
+// Records are sorted by primary key for byte-determinism.
 // Volatile fields (updated_at, indexed_at, modified_at) are excluded.
 // Two exports of the same code tree are byte-identical.
 //
@@ -25,9 +34,11 @@ import (
 // relative to the project root (the path passed to export/import).
 const DefaultSnapshotDir = "codegrapher"
 
-// Export writes INGR snapshot files for the index at projectRoot to outDir.
+// Export writes INGR snapshot files for the index to outDir, structured as a
+// valid inGitDB database. projectRoot is used to detect the git remote for the
+// README; pass "" to fall back to the outDir parent name.
 // outDir is created if it does not exist.
-func Export(dbPath, outDir string) error {
+func Export(dbPath, outDir, projectRoot string) error {
 	s, err := store.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("snapshot: open store: %w", err)
@@ -38,6 +49,9 @@ func Export(dbPath, outDir string) error {
 		return fmt.Errorf("snapshot: mkdir %s: %w", outDir, err)
 	}
 
+	if err := writeIngitdbConfig(outDir); err != nil {
+		return fmt.Errorf("snapshot: ingitdb config: %w", err)
+	}
 	if err := exportNodes(s, outDir); err != nil {
 		return fmt.Errorf("snapshot: nodes: %w", err)
 	}
@@ -49,6 +63,9 @@ func Export(dbPath, outDir string) error {
 	}
 	if err := exportMetadata(s, outDir); err != nil {
 		return fmt.Errorf("snapshot: metadata: %w", err)
+	}
+	if err := writeREADME(s, outDir, projectRoot); err != nil {
+		return fmt.Errorf("snapshot: readme: %w", err)
 	}
 	return nil
 }
@@ -64,19 +81,25 @@ func Import(dbPath, inDir string) error {
 	}
 	defer s.Close()
 
-	if err := importNodes(s, inDir); err != nil {
+	if err := importNodes(s, ingrPath(inDir, "nodes")); err != nil {
 		return fmt.Errorf("snapshot: nodes: %w", err)
 	}
-	if err := importEdges(s, inDir); err != nil {
+	if err := importEdges(s, ingrPath(inDir, "edges")); err != nil {
 		return fmt.Errorf("snapshot: edges: %w", err)
 	}
-	if err := importFiles(s, inDir); err != nil {
+	if err := importFiles(s, ingrPath(inDir, "files")); err != nil {
 		return fmt.Errorf("snapshot: files: %w", err)
 	}
-	if err := importMetadata(s, inDir); err != nil {
+	if err := importMetadata(s, ingrPath(inDir, "project_metadata")); err != nil {
 		return fmt.Errorf("snapshot: metadata: %w", err)
 	}
 	return nil
+}
+
+// ingrPath returns the path to a collection's INGR file inside outDir.
+// Layout: outDir/<name>/<name>.ingr
+func ingrPath(outDir, name string) string {
+	return filepath.Join(outDir, name, name+".ingr")
 }
 
 // ---------------------------------------------------------------------------
@@ -132,11 +155,17 @@ func exportNodes(s *store.Store, outDir string) error {
 		}
 		rows = append(rows, row)
 	}
-	return writeINGR(filepath.Join(outDir, "nodes.ingr"), "nodes", nodeCols, rows)
+	dir := filepath.Join(outDir, "nodes")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if err := writeCollectionDef(dir, nodeCollectionDef); err != nil {
+		return err
+	}
+	return writeINGR(filepath.Join(dir, "nodes.ingr"), "nodes", nodeCols, rows)
 }
 
-func importNodes(s *store.Store, inDir string) error {
-	path := filepath.Join(inDir, "nodes.ingr")
+func importNodes(s *store.Store, path string) error {
 	maps, err := readINGR(path)
 	if err != nil {
 		return err
@@ -215,15 +244,21 @@ func exportEdges(s *store.Store, outDir string) error {
 			},
 		})
 	}
-	return writeINGR(filepath.Join(outDir, "edges.ingr"), "edges", edgeCols, rows)
+	dir := filepath.Join(outDir, "edges")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if err := writeCollectionDef(dir, edgeCollectionDef); err != nil {
+		return err
+	}
+	return writeINGR(filepath.Join(dir, "edges.ingr"), "edges", edgeCols, rows)
 }
 
 func edgeKey(source, target, kind string, line, col int) string {
 	return fmt.Sprintf("%s|%s|%s|%d|%d", source, target, kind, line, col)
 }
 
-func importEdges(s *store.Store, inDir string) error {
-	path := filepath.Join(inDir, "edges.ingr")
+func importEdges(s *store.Store, path string) error {
 	maps, err := readINGR(path)
 	if err != nil {
 		return err
@@ -299,11 +334,17 @@ func exportFiles(s *store.Store, outDir string) error {
 			},
 		})
 	}
-	return writeINGR(filepath.Join(outDir, "files.ingr"), "files", fileCols, rows)
+	dir := filepath.Join(outDir, "files")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if err := writeCollectionDef(dir, fileCollectionDef); err != nil {
+		return err
+	}
+	return writeINGR(filepath.Join(dir, "files.ingr"), "files", fileCols, rows)
 }
 
-func importFiles(s *store.Store, inDir string) error {
-	path := filepath.Join(inDir, "files.ingr")
+func importFiles(s *store.Store, path string) error {
 	maps, err := readINGR(path)
 	if err != nil {
 		return err
@@ -357,11 +398,17 @@ func exportMetadata(s *store.Store, outDir string) error {
 			data: map[string]any{"value": meta[k]},
 		})
 	}
-	return writeINGR(filepath.Join(outDir, "project_metadata.ingr"), "project_metadata", metaCols, rows)
+	dir := filepath.Join(outDir, "project_metadata")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if err := writeCollectionDef(dir, metadataCollectionDef); err != nil {
+		return err
+	}
+	return writeINGR(filepath.Join(dir, "project_metadata.ingr"), "project_metadata", metaCols, rows)
 }
 
-func importMetadata(s *store.Store, inDir string) error {
-	path := filepath.Join(inDir, "project_metadata.ingr")
+func importMetadata(s *store.Store, path string) error {
 	maps, err := readINGR(path)
 	if err != nil {
 		return err
