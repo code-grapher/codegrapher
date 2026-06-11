@@ -379,7 +379,7 @@ function renderNoSnapshot(org, repo) {
         <p><strong>${escapeHtml(org)}/${escapeHtml(repo)}</strong> has no CodeGrapher snapshot yet.</p>
         <p>To add one, run:</p>
         <pre class="no-snapshot-cmd">codegrapher init &amp;&amp; codegrapher export\ngit add codegrapher/ &amp;&amp; git commit -m "chore: add codegrapher snapshot"</pre>
-        <p class="viewer-hint">The snapshot is fetched from <code>codegrapher/files.ingr</code> in the repo.</p>
+        <p class="viewer-hint">The snapshot is fetched from <code>codegrapher/files/files.ingr</code> in the repo.</p>
       </div>
     `;
   }
