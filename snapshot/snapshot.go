@@ -1,6 +1,6 @@
 // Package snapshot exports and imports the codegrapher index as INGR files.
 //
-// Layout inside the output directory (default: codegrapher/):
+// Layout inside the output directory (default: codegraph/):
 //
 //	.ingitdb.yaml                     root inGitDB config
 //	README.md                         generated summary
@@ -32,7 +32,7 @@ import (
 
 // DefaultSnapshotDir is the default output/input directory for snapshots,
 // relative to the project root (the path passed to export/import).
-const DefaultSnapshotDir = "codegrapher"
+const DefaultSnapshotDir = "codegraph"
 
 // Export writes INGR snapshot files for the index to outDir, structured as a
 // valid inGitDB database. projectRoot is used to detect the git remote for the
@@ -64,7 +64,7 @@ func Export(dbPath, outDir, projectRoot string) error {
 	if err := exportMetadata(s, outDir); err != nil {
 		return fmt.Errorf("snapshot: metadata: %w", err)
 	}
-	if err := writeREADME(s, outDir, projectRoot); err != nil {
+	if err := writeREADME(outDir, projectRoot); err != nil {
 		return fmt.Errorf("snapshot: readme: %w", err)
 	}
 	return nil

@@ -22,7 +22,7 @@ Writes: nodes.ingr, edges.ingr, files.ingr, project_metadata.ingr
 The files are byte-deterministic: two exports of the same code tree
 produce identical output regardless of when or where they ran.
 
-Default output directory: <project-root>/codegrapher/
+Default output directory: <project-root>/codegraph/
 Use --out to override.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

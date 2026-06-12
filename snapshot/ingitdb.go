@@ -5,11 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
-
-	"github.com/specscore/codegrapher/model"
-	"github.com/specscore/codegrapher/store"
 )
 
 // ---------------------------------------------------------------------------
@@ -264,16 +260,8 @@ func writeCollectionDef(dir, content string) error {
 // ---------------------------------------------------------------------------
 
 // writeREADME generates a summary README.md in outDir.
-func writeREADME(s *store.Store, outDir, projectRoot string) error {
+func writeREADME(outDir, projectRoot string) error {
 	org, repo, isGitHub := detectRemote(projectRoot)
-	stats, err := s.GetStats()
-	if err != nil {
-		return err
-	}
-	files, err := s.GetAllFiles()
-	if err != nil {
-		return err
-	}
 
 	var b strings.Builder
 
@@ -281,63 +269,22 @@ func writeREADME(s *store.Store, outDir, projectRoot string) error {
 	b.WriteString(fmt.Sprintf("# Code graph of %s/%s\n\n", org, repo))
 
 	// Links
-	b.WriteString(fmt.Sprintf("Indexed by [codegrapher](https://codegrapher.dev)"))
+	b.WriteString("Indexed by [codegrapher](https://codegrapher.dev)")
 	if isGitHub {
 		b.WriteString(fmt.Sprintf(" · [Browse online](https://codegrapher.dev/github.com/%s/%s)", org, repo))
 	}
 	b.WriteString("\n\n")
 
-	// Stats table
-	b.WriteString("## Stats\n\n")
-	b.WriteString("| Metric | Count |\n")
-	b.WriteString("|--------|-------|\n")
-
-	// Files by language
-	langOrder := sortedKeys(stats.FilesByLanguage, func(a, b model.Language) bool { return string(a) < string(b) })
-	for _, lang := range langOrder {
-		n := stats.FilesByLanguage[lang]
-		if n > 0 {
-			b.WriteString(fmt.Sprintf("| Files (%s) | %d |\n", lang, n))
-		}
-	}
-
-	// Go packages (distinct dirs containing .go files)
-	goPackages := countGoPackages(files)
-	if goPackages > 0 {
-		b.WriteString(fmt.Sprintf("| Go packages | %d |\n", goPackages))
-	}
-
-	// Nodes by kind (only nonzero, in a fixed display order)
-	nodeKindOrder := []model.NodeKind{
-		model.KindFunction, model.KindMethod, model.KindStruct, model.KindInterface,
-		model.KindTypeAlias, model.KindConstant, model.KindVariable,
-		model.KindImport, model.KindRoute,
-	}
-	for _, kind := range nodeKindOrder {
-		n := stats.NodesByKind[kind]
-		if n > 0 {
-			b.WriteString(fmt.Sprintf("| Nodes (%s) | %d |\n", kind, n))
-		}
-	}
-	// remaining kinds not in the fixed order
-	for _, kind := range sortedNodeKinds(stats.NodesByKind) {
-		if !inNodeKindOrder(kind, nodeKindOrder) && stats.NodesByKind[kind] > 0 {
-			b.WriteString(fmt.Sprintf("| Nodes (%s) | %d |\n", kind, stats.NodesByKind[kind]))
-		}
-	}
-	// Total nodes
-	b.WriteString(fmt.Sprintf("| Nodes (total) | %d |\n", stats.NodeCount))
-
-	// Edges by kind (nonzero, sorted)
-	for _, kind := range sortedEdgeKinds(stats.EdgesByKind) {
-		n := stats.EdgesByKind[kind]
-		if n > 0 {
-			b.WriteString(fmt.Sprintf("| Edges (%s) | %d |\n", kind, n))
-		}
-	}
-	b.WriteString(fmt.Sprintf("| Edges (total) | %d |\n", stats.EdgeCount))
-
+	// Directories table
+	b.WriteString("## Contents\n\n")
+	b.WriteString("| Directory | Contents |\n")
+	b.WriteString("|-----------|----------|\n")
+	b.WriteString("| `nodes/` | Symbol nodes (functions, methods, types, variables, …) |\n")
+	b.WriteString("| `edges/` | Call and reference edges between nodes |\n")
+	b.WriteString("| `files/` | Indexed source files with language and hash metadata |\n")
+	b.WriteString("| `project_metadata/` | Project-level metadata (name, root path, index timestamp) |\n")
 	b.WriteString("\n")
+
 	b.WriteString("Regenerate: `codegrapher init && codegrapher export`\n\n")
 	b.WriteString("This directory is an [inGitDB](https://ingitdb.com) database in [INGR](https://ingr.io) format.\n")
 
@@ -401,38 +348,3 @@ func parseGitRemote(url, fallbackRepo string) (org, repo string, isGitHub bool) 
 	return "unknown", fallbackRepo, false
 }
 
-func countGoPackages(files []model.FileRecord) int {
-	dirs := map[string]struct{}{}
-	for _, f := range files {
-		if f.Language == model.LangGo {
-			dirs[filepath.Dir(f.Path)] = struct{}{}
-		}
-	}
-	return len(dirs)
-}
-
-func sortedKeys[K ~string, V any](m map[K]V, less func(a, b K) bool) []K {
-	keys := make([]K, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool { return less(keys[i], keys[j]) })
-	return keys
-}
-
-func sortedNodeKinds(m map[model.NodeKind]int) []model.NodeKind {
-	return sortedKeys(m, func(a, b model.NodeKind) bool { return string(a) < string(b) })
-}
-
-func sortedEdgeKinds(m map[model.EdgeKind]int) []model.EdgeKind {
-	return sortedKeys(m, func(a, b model.EdgeKind) bool { return string(a) < string(b) })
-}
-
-func inNodeKindOrder(kind model.NodeKind, order []model.NodeKind) bool {
-	for _, k := range order {
-		if k == kind {
-			return true
-		}
-	}
-	return false
-}
