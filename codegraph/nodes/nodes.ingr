@@ -1648,9 +1648,9 @@ null
 35
 35
 6
-40
+38
 "DefaultSnapshotDir is the default output/input directory for snapshots,\nrelative to the project root (the path passed to export/import)."
-"= \"codegrapher\""
+"= \"codegraph\""
 null
 false
 false
