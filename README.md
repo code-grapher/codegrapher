@@ -40,6 +40,8 @@ navigation without a local index.
 Go and TypeScript/JavaScript. Go files are parsed by the standard library
 `go/parser`; TypeScript/JavaScript are parsed via
 [gotreesitter](https://github.com/odvcencio/gotreesitter) (pure Go, no CGO).
+`go.mod` files are also indexed, producing module and dependency nodes with
+require/replace/exclude relationships.
 
 ## Build
 

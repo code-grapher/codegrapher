@@ -168,6 +168,21 @@ func TestDetectGoVersionPrefersToolchain(t *testing.T) {
 	}
 }
 
+func TestDetectGoVersionToolchainDefaultFallsBackToGo(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"),
+		[]byte("module x\n\ngo 1.22\n\ntoolchain default\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(src, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := DetectVersion(dir, src, model.LangGo); got != "v1" {
+		t.Errorf("DetectVersion = %q, want v1 (toolchain 'default' should fall back to the go directive)", got)
+	}
+}
+
 // When projectRoot is not an ancestor of filePath, the upward walk must still
 // terminate (at the filesystem root) and fall back to v0 rather than loop.
 func TestDetectVersionRootNotAncestor(t *testing.T) {

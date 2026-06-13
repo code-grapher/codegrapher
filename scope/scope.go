@@ -74,7 +74,7 @@ func detectGoVersion(projectRoot, filePath string) string {
 	if err != nil {
 		return ""
 	}
-	if f.Toolchain != "" {
+	if strings.HasPrefix(f.Toolchain, "go") {
 		return strings.TrimPrefix(f.Toolchain, "go") // "go1.26.4" -> "1.26.4"
 	}
 	return f.Go
