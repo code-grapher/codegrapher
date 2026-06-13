@@ -20,4 +20,9 @@
 {"source":"method:83d0f5eb55e213b8949a578905c5ab84","target":"interface:bcb36d70b44cb95075c0012fcd672e55","kind":"references","provenance":null,"line":8,"col":23},
 {"source":"method:83d0f5eb55e213b8949a578905c5ab84","target":"interface:bcb36d70b44cb95075c0012fcd672e55","kind":"references","provenance":null,"line":8,"col":23},
 {"source":"method:83d0f5eb55e213b8949a578905c5ab84","target":"method:085a0ec23522fac1f22bdcb70ec94651","kind":"calls","provenance":null,"line":9,"col":18},
+{"source":"module:20e2d17984f6e5a3fee240491c9b3a97","target":"module:1145ddc75eddbed1f642e1ecda6fcdc3","kind":"requires","provenance":"package.json","line":null,"col":null},
+{"source":"module:20e2d17984f6e5a3fee240491c9b3a97","target":"module:624959af643127b31bf38fd216ff8275","kind":"requires","provenance":"package.json","line":null,"col":null},
+{"source":"module:20e2d17984f6e5a3fee240491c9b3a97","target":"module:624959af643127b31bf38fd216ff8275","kind":"requires","provenance":"package.json","line":null,"col":null},
+{"source":"module:20e2d17984f6e5a3fee240491c9b3a97","target":"module:bbfd517f7d322f74c7441b6b1bb40cc3","kind":"requires","provenance":"package.json","line":null,"col":null},
+{"source":"module:20e2d17984f6e5a3fee240491c9b3a97","target":"module:c72200d1eb67dc9dd4199e59c1701d0e","kind":"requires","provenance":"package.json","line":null,"col":null},
 {"source":"type_alias:2c71234c91d067a3f05191b2e16c9b03","target":"interface:bcb36d70b44cb95075c0012fcd672e55","kind":"references","provenance":null,"line":8,"col":27}]

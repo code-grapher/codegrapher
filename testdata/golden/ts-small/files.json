@@ -1,5 +1,11 @@
 [
   {
+    "path": "package.json",
+    "language": "package.json",
+    "nodeCount": 6,
+    "size": 281
+  },
+  {
     "path": "src/cache.ts",
     "language": "typescript",
     "nodeCount": 8,
