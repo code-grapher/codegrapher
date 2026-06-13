@@ -19,6 +19,9 @@ func DetectLanguage(filePath string) model.Language {
 	if filepath.Base(filePath) == "go.mod" {
 		return model.LangGoMod
 	}
+	if filepath.Base(filePath) == "package.json" {
+		return model.LangPackageJSON
+	}
 	ext := strings.ToLower(filepath.Ext(filePath))
 	switch ext {
 	case ".go":
