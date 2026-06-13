@@ -76,14 +76,16 @@ const (
 type Language string
 
 const (
-	LangTypeScript Language = "typescript"
-	LangJavaScript Language = "javascript"
-	LangTSX        Language = "tsx"
-	LangJSX        Language = "jsx"
-	LangGo         Language = "go"
-	LangGoMod      Language = "go.mod"
-	LangYAML       Language = "yaml"
-	LangUnknown    Language = "unknown"
+	LangTypeScript  Language = "typescript"
+	LangJavaScript  Language = "javascript"
+	LangTSX         Language = "tsx"
+	LangJSX         Language = "jsx"
+	LangGo          Language = "go"
+	LangGoMod       Language = "go.mod"
+	LangPackageJSON Language = "package.json"
+	LangNode        Language = "node"
+	LangYAML        Language = "yaml"
+	LangUnknown     Language = "unknown"
 )
 
 // Node is a code symbol in the knowledge graph.
