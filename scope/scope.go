@@ -34,14 +34,14 @@ var (
 	goDirective = regexp.MustCompile(`(?m)^\s*go\s+(\d+\.\d+(?:\.\d+)?)`)
 	// versionPrefix strips a leading range operator from an npm semver spec.
 	versionPrefix = regexp.MustCompile(`^[\s^~>=<v]+`)
-	// safeVersion is the allowed character set for a version path segment.
-	safeVersion = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 )
 
-// DetectVersion resolves the toolchain version for filePath (absolute) within
-// projectRoot, given its already-determined language. It walks up to the
-// nearest governing manifest (go.mod for Go, package.json for TS/JS) and
-// returns fallbackVersion when nothing is detectable.
+// DetectVersion resolves the toolchain MAJOR version for filePath (absolute)
+// within projectRoot, given its already-determined language. Graphs are grouped
+// by major version, so e.g. Go 1.22 and 1.26.4 both map to "v1", and TypeScript
+// 5.4.2 maps to "v5". It walks up to the nearest governing manifest (go.mod for
+// Go, package.json for TS/JS) and returns fallbackVersion ("v0") when nothing is
+// detectable.
 func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 	var ver string
 	switch lang {
@@ -50,19 +50,22 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 	case model.LangTypeScript, model.LangJavaScript, model.LangTSX, model.LangJSX:
 		ver = detectNodeVersion(projectRoot, filePath)
 	}
-	ver = sanitizeVersion(ver)
-	if ver == "" {
-		return fallbackVersion
-	}
-	return ver
+	return majorVersion(ver)
 }
 
-func sanitizeVersion(v string) string {
-	v = versionPrefix.ReplaceAllString(strings.TrimSpace(v), "")
-	if v == "" || !safeVersion.MatchString(v) {
-		return ""
+// majorVersion reduces a raw toolchain version (e.g. "1.22", "^5.4.2") to its
+// major component prefixed with "v" (e.g. "v1", "v5"), or fallbackVersion when
+// no leading numeric component is present.
+func majorVersion(raw string) string {
+	raw = versionPrefix.ReplaceAllString(strings.TrimSpace(raw), "")
+	i := 0
+	for i < len(raw) && raw[i] >= '0' && raw[i] <= '9' {
+		i++
 	}
-	return v
+	if i == 0 {
+		return fallbackVersion
+	}
+	return "v" + raw[:i]
 }
 
 func detectGoVersion(projectRoot, filePath string) string {

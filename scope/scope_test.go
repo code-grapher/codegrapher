@@ -14,8 +14,8 @@ func TestScopeKey(t *testing.T) {
 		ver  string
 		want string
 	}{
-		{model.LangGo, "1.22", "go-1.22"},
-		{model.LangTypeScript, "5.4.2", "typescript-5.4.2"},
+		{model.LangGo, "v1", "go-v1"},
+		{model.LangTypeScript, "v5", "typescript-v5"},
 		{model.LangYAML, "v0", "yaml-v0"},
 	}
 	for _, tc := range cases {
@@ -51,29 +51,29 @@ func TestDetectVersion(t *testing.T) {
 		want  string
 	}{
 		{
-			name:  "go.mod go directive",
+			name:  "go major from go directive",
 			files: map[string]string{"go.mod": "module x\n\ngo 1.22\n"},
 			file:  "main.go",
 			lang:  model.LangGo,
-			want:  "1.22",
+			want:  "v1",
 		},
 		{
-			name: "nested go.mod wins over root",
+			name: "nearest package.json major wins over root",
 			files: map[string]string{
-				"go.mod":          "module x\n\ngo 1.20\n",
-				"svc/go.mod":      "module x/svc\n\ngo 1.23\n",
-				"svc/cmd/main.go": "package main\n",
+				"package.json":     `{"devDependencies":{"typescript":"^4.9.5"}}`,
+				"pkg/package.json": `{"devDependencies":{"typescript":"^5.4.2"}}`,
+				"pkg/src/app.ts":   "",
 			},
-			file: "svc/cmd/main.go",
-			lang: model.LangGo,
-			want: "1.23",
+			file: "pkg/src/app.ts",
+			lang: model.LangTypeScript,
+			want: "v5",
 		},
 		{
-			name:  "go patch version preserved",
+			name:  "go patch version reduced to major",
 			files: map[string]string{"go.mod": "module x\n\ngo 1.22.3\n"},
 			file:  "main.go",
 			lang:  model.LangGo,
-			want:  "1.22.3",
+			want:  "v1",
 		},
 		{
 			name:  "go no go.mod falls back to v0",
@@ -90,25 +90,25 @@ func TestDetectVersion(t *testing.T) {
 			want:  "v0",
 		},
 		{
-			name:  "typescript from devDependencies",
+			name:  "typescript major from devDependencies",
 			files: map[string]string{"package.json": `{"devDependencies":{"typescript":"^5.4.2"}}`},
 			file:  "src/app.ts",
 			lang:  model.LangTypeScript,
-			want:  "5.4.2",
+			want:  "v5",
 		},
 		{
-			name:  "typescript from dependencies",
+			name:  "typescript major from dependencies (tsx)",
 			files: map[string]string{"package.json": `{"dependencies":{"typescript":"~5.0.0"}}`},
 			file:  "src/app.tsx",
 			lang:  model.LangTSX,
-			want:  "5.0.0",
+			want:  "v5",
 		},
 		{
-			name:  "javascript falls back to engines.node",
+			name:  "javascript major from engines.node",
 			files: map[string]string{"package.json": `{"engines":{"node":">=20.1.0"}}`},
 			file:  "src/app.js",
 			lang:  model.LangJavaScript,
-			want:  "20.1.0",
+			want:  "v20",
 		},
 		{
 			name:  "package.json without version info is v0",
