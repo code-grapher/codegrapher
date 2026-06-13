@@ -27,6 +27,9 @@ go.work.sum
 # env file
 .env
 
+# codegraph index artifacts (per-scope SQLite stores written by `init`)
+.codegraph/
+
 # Editor/IDE
 # .idea/
 # .vscode/
