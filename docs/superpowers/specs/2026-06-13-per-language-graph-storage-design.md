@@ -26,6 +26,10 @@ single-DB indexes, old flat routes are removed.
 | Live query default | **Fan out across all scopes and merge**; CLI `--scope` CSV narrows |
 | Discovery | A **manifest**, exposed both embedded in `/status` and at a dedicated endpoint |
 | Progress UI | **Real %** when `Content-Length` is known, **indeterminate** otherwise |
+| Git ref dimension | Storage + URLs are keyed by **ref** as a path segment (forward-looking). **Free tier indexes only the default branch HEAD**; per-ref indexing is a future paid feature — no auth/gating built now |
+| `.ingr` compression | `codegraph export` writes **compressed-only** variants: `*.ingr.zst` + `*.ingr.gz` (no plain `.ingr` on disk) |
+| `.ingr` serving | **Go server** `ServeGraph` picks `.zst`/`.gz` by `Accept-Encoding`, sets `Content-Encoding`; Caddy stays a pure reverse-proxy |
+| `.db` at rest (server) | Scope DBs stored **zstd-compressed**; decompressed for incremental re-index, replaced wholesale otherwise |
 
 ## Scope vocabulary
 
@@ -73,11 +77,17 @@ Detection is pure and unit-testable: input = file path + project file tree, outp
 - **CLI `--scope` CSV** narrows to specific scopes, e.g. `--scope go-1.22,typescript-5.4`.
 - MCP tools keep current behavior (whole-repo = all scopes) via the same fan-out.
 
-## Component 4 — Export + manifest (codegrapher)
+## Component 4 — Export + manifest + compression (codegrapher)
 
-- Each scope DB exports to `codegraph/{lang}/{version}/{name}/{name}.ingr`
+- Each scope DB exports to `codegraph/{lang}/{version}/{name}/{name}.ingr.{ext}`
   (`name` ∈ {`files`, `nodes`, `edges`, `project_metadata`}), preserving the existing
   nested-`name` directory layout.
+- **Compression (compressed-only):** export writes `*.ingr.zst` and `*.ingr.gz`; the
+  plain `.ingr` is **not** kept on disk. Compression is deterministic (fixed level,
+  no timestamps in the gzip header) so re-exports are byte-stable. A `--compress`
+  flag selects the variant set (default `zstd,gzip`).
+- The size-comparison report (original vs each compressed variant, per file) is produced
+  by dogfooding — see Component 8.
 - `codegraph/manifest.json` is written at export time:
 
   ```json
@@ -98,22 +108,45 @@ Detection is pure and unit-testable: input = file path + project file tree, outp
 
 ## Component 5 — Server
 
-- **New** `GET /graph/{git_host}/{org}/{repo}/{lang}/{v}/{name}.ingr`
-  → `{baseDir}/codegraphs/{repoID}/{lang}/{v}/{name}.ingr`.
-  Validates `lang` and `v` (`[A-Za-z0-9._-]`), reuses the `validIngrNames` whitelist.
-- **New** `GET /graph/{git_host}/{org}/{repo}/manifest.json` → serves the stored manifest.
-- **Extended** `GET /status/{git_host}/{org}/{repo}` → response embeds the manifest
-  (`manifest` field) alongside existing index status.
+- **New** `GET /graph/{git_host}/{org}/{repo}/{ref}/{lang}/{v}/{name}.ingr`
+  → `{baseDir}/codegraphs/{repoID}/{ref}/{lang}/{v}/{name}/{name}.ingr.{ext}`.
+  Validates `ref`/`lang`/`v` (`[A-Za-z0-9._-]`; `ref` slashes sanitized), reuses the
+  `validIngrNames` whitelist.
+  - **Content negotiation:** `ServeGraph` inspects `Accept-Encoding` and serves
+    `…/{name}.ingr.zst` (`Content-Encoding: zstd`) or `…/{name}.ingr.gz`
+    (`Content-Encoding: gzip`); 406/uncompressed handling when neither is accepted.
+    Caddy remains a pure reverse-proxy.
+- **New** `GET /graph/{git_host}/{org}/{repo}/{ref}/manifest.json` → stored manifest.
+- **Extended** `GET /status/{git_host}/{org}/{repo}` → embeds the manifest (`manifest`
+  field) for the default ref alongside existing index status.
+- **Ref policy (free tier):** only the repo default branch HEAD is indexed/served.
+  Requests for other refs are not supported yet (404). The `{ref}` segment exists so the
+  paid per-ref feature is a later additive change, not a layout migration.
 - The old flat `GET /graph/.../{name}.ingr` route is **removed**.
+
+### Component 5a — DB-at-rest compression + incremental (server)
+
+- Scope DBs are stored **zstd-compressed** on the server
+  (`codegraphs/{repoID}/{ref}/codegraph-{lang}-{v}.db.zst`).
+- **Incremental re-index:** decompress the existing scope DBs to a temp working dir, run
+  codegrapher's incremental sync, re-export `.ingr.{zst,gz}`, then recompress the DBs.
+- **No prior DB / forced full re-index:** index fresh and **replace** the stored DBs
+  wholesale.
+- This is independent of the served `.ingr` artifacts; the `.db.zst` files are internal
+  server state, never served.
 
 ## Component 6 — Viewer (codegrapher-dev)
 
 - Selection state gains `(language, version)`. `RepoRef`-derived cache key and
   `GraphStoreService.loadGraph` are scoped by it.
-- Both data sources gain the `{lang}/{v}` path segment:
-  - DB server: `…/graph/{forge}/{org}/{repo}/{lang}/{v}/{name}.ingr`
-  - GitHub raw: `…/codegraph/{lang}/{v}/{name}/{name}.ingr`; manifest at
+- Both data sources gain `{ref}/{lang}/{v}` path segments (ref = `RepoRef.branch` or the
+  default branch):
+  - DB server: `…/graph/{forge}/{org}/{repo}/{ref}/{lang}/{v}/{name}.ingr`
+  - GitHub raw: `…/codegraph/{lang}/{v}/{name}/{name}.ingr.{ext}`; manifest at
     `…/codegraph/manifest.json`.
+- **Compression is transparent to the viewer:** the server/Caddy set `Content-Encoding`
+  and the browser decompresses before `fetch().text()`/stream reads. The progress bar's
+  `Content-Length` reflects the compressed size, which is fine.
 - **Flow:** fetch manifest first → build **tree roots per scope** (label e.g. `Go (1.22)`).
   Selecting a not-yet-loaded scope triggers a lazy fetch.
 - **Progress:** read the response body as a stream; when all 4 recordsets report
@@ -135,8 +168,18 @@ Detection is pure and unit-testable: input = file path + project file tree, outp
   - viewer: manifest parse, scoped cache key, lazy load, progress reader
     (`Content-Length` present and absent), tree roots per scope.
 
+## Component 8 — Dogfood + size report
+
+- Run the new per-language codegrapher on **this `codegrapher` repo** (Go + YAML/shell),
+  producing `codegraph-{lang}-{v}.db` scopes and the compressed export.
+- Emit a table: for each exported `{scope}/{name}.ingr`, report **original size** and the
+  **zstd** and **gzip** compressed sizes (+ ratio).
+- Use it as an end-to-end sanity check of detection → routing → export → compression.
+
 ## Out of scope
 
 - New language extractors (e.g. Python).
 - Cross-language traversal / JOINs.
 - Migrating existing single-DB indexes (greenfield).
+- Auth / paid-tier gating and per-ref indexing (future; only the `{ref}` layout is plumbed,
+  populated with the default branch HEAD).
