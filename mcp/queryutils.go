@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -10,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/specscore/codegrapher/gomod"
+	"github.com/specscore/codegrapher/pkgjson"
 )
 
 // -----------------------------------------------------------------------
@@ -330,11 +330,8 @@ func deriveProjectNameTokens(projectRoot string) map[string]struct{} {
 		}
 	}
 	if data, err := os.ReadFile(filepath.Join(projectRoot, "package.json")); err == nil {
-		var pkg struct {
-			Name string `json:"name"`
-		}
-		if json.Unmarshal(data, &pkg) == nil && pkg.Name != "" {
-			add(regexp.MustCompile(`^@[^/]+/`).ReplaceAllString(pkg.Name, ""))
+		if f, perr := pkgjson.Parse(data); perr == nil && f.Name != "" {
+			add(regexp.MustCompile(`^@[^/]+/`).ReplaceAllString(f.Name, ""))
 		}
 	}
 	abs, err := filepath.Abs(projectRoot)
