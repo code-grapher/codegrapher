@@ -5,11 +5,11 @@
 package resolve
 
 import (
-	"bufio"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/specscore/codegrapher/gomod"
 	"github.com/specscore/codegrapher/model"
 	"github.com/specscore/codegrapher/store"
 )
@@ -910,20 +910,15 @@ func importPathToRelDir(importPath, modulePath string) string {
 // loadGoModulePath reads the module declaration from go.mod at projectRoot.
 // Returns "" when go.mod is absent or unreadable.
 func loadGoModulePath(projectRoot string) string {
-	gomodPath := filepath.Join(projectRoot, "go.mod")
-	f, err := os.Open(gomodPath)
+	data, err := os.ReadFile(filepath.Join(projectRoot, "go.mod"))
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
-		}
+	f, err := gomod.Parse("go.mod", data)
+	if err != nil {
+		return ""
 	}
-	return ""
+	return f.Module
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
