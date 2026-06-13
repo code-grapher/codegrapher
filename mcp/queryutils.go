@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/specscore/codegrapher/gomod"
 )
 
 // -----------------------------------------------------------------------
@@ -322,8 +324,8 @@ func deriveProjectNameTokens(projectRoot string) map[string]struct{} {
 	}
 
 	if data, err := os.ReadFile(filepath.Join(projectRoot, "go.mod")); err == nil {
-		if m := regexp.MustCompile(`(?m)^\s*module\s+(\S+)`).FindStringSubmatch(string(data)); m != nil {
-			parts := strings.Split(m[1], "/")
+		if f, perr := gomod.Parse("go.mod", data); perr == nil && f.Module != "" {
+			parts := strings.Split(f.Module, "/")
 			add(parts[len(parts)-1])
 		}
 	}

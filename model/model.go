@@ -65,6 +65,9 @@ const (
 	EdgeInstantiates EdgeKind = "instantiates"
 	EdgeOverrides    EdgeKind = "overrides"
 	EdgeDecorates    EdgeKind = "decorates"
+	EdgeRequires     EdgeKind = "requires"
+	EdgeReplaces     EdgeKind = "replaces"
+	EdgeExcludes     EdgeKind = "excludes"
 )
 
 // Language identifies the programming language of a file or symbol.
@@ -78,6 +81,7 @@ const (
 	LangTSX        Language = "tsx"
 	LangJSX        Language = "jsx"
 	LangGo         Language = "go"
+	LangGoMod      Language = "go.mod"
 	LangYAML       Language = "yaml"
 	LangUnknown    Language = "unknown"
 )

@@ -43,7 +43,7 @@ func init() {
 	}
 	languageValues = map[string]bool{
 		"typescript": true, "javascript": true, "tsx": true, "jsx": true,
-		"go": true, "yaml": true, "unknown": true,
+		"go": true, "go.mod": true, "yaml": true, "unknown": true,
 		// Additional languages from the original types.ts LANGUAGES array.
 		"python": true, "java": true, "csharp": true, "cpp": true,
 		"c": true, "ruby": true, "rust": true, "kotlin": true,

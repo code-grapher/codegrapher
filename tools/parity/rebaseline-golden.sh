@@ -43,7 +43,15 @@ capture() {
   # Fresh index every time for determinism.
   rm -rf "$dir/.codegraph"
   (cd "$dir" && CODEGRAPH_NO_WATCH=1 "$BIN" init >/dev/null 2>&1)
-  local db="$dir/.codegraph/codegraph.db"
+  # Per-scope recordset layout: the DB filename is scope-dependent
+  # (e.g. codegraph-go-v1.db, codegraph-typescript-v0.db). Both fixtures
+  # are single-scope, so resolve the one .db file.
+  local dbs=("$dir"/.codegraph/codegraph-*.db)
+  if [ "${#dbs[@]}" -ne 1 ] || [ ! -f "${dbs[0]}" ]; then
+    echo "expected exactly one per-scope DB in $dir/.codegraph, found: ${dbs[*]}" >&2
+    exit 1
+  fi
+  local db="${dbs[0]}"
 
   # CLI goldens.
   (cd "$dir" \

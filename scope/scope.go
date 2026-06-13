@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/specscore/codegrapher/gomod"
 	"github.com/specscore/codegrapher/model"
 )
 
@@ -29,12 +30,8 @@ func (s Scope) Key() string {
 	return string(s.Language) + "-" + s.Version
 }
 
-var (
-	// goDirective matches the `go 1.22` / `go 1.22.3` line in a go.mod.
-	goDirective = regexp.MustCompile(`(?m)^\s*go\s+(\d+\.\d+(?:\.\d+)?)`)
-	// versionPrefix strips a leading range operator from an npm semver spec.
-	versionPrefix = regexp.MustCompile(`^[\s^~>=<v]+`)
-)
+// versionPrefix strips a leading range operator from an npm semver spec.
+var versionPrefix = regexp.MustCompile(`^[\s^~>=<v]+`)
 
 // DetectVersion resolves the toolchain MAJOR version for filePath (absolute)
 // within projectRoot, given its already-determined language. Graphs are grouped
@@ -45,7 +42,7 @@ var (
 func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 	var ver string
 	switch lang {
-	case model.LangGo:
+	case model.LangGo, model.LangGoMod:
 		ver = detectGoVersion(projectRoot, filePath)
 	case model.LangTypeScript, model.LangJavaScript, model.LangTSX, model.LangJSX:
 		ver = detectNodeVersion(projectRoot, filePath)
@@ -73,11 +70,14 @@ func detectGoVersion(projectRoot, filePath string) string {
 	if data == nil {
 		return ""
 	}
-	m := goDirective.FindSubmatch(data)
-	if m == nil {
+	f, err := gomod.Parse("go.mod", data)
+	if err != nil {
 		return ""
 	}
-	return string(m[1])
+	if strings.HasPrefix(f.Toolchain, "go") {
+		return strings.TrimPrefix(f.Toolchain, "go") // "go1.26.4" -> "1.26.4"
+	}
+	return f.Go
 }
 
 func detectNodeVersion(projectRoot, filePath string) string {

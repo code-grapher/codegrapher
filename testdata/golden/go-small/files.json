@@ -6,6 +6,12 @@
     "size": 731
   },
   {
+    "path": "go.mod",
+    "language": "go.mod",
+    "nodeCount": 2,
+    "size": 37
+  },
+  {
     "path": "internal/store/cache.go",
     "language": "go",
     "nodeCount": 5,

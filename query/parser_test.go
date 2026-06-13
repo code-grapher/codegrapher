@@ -49,6 +49,13 @@ func TestParseQuery(t *testing.T) {
 		}
 	})
 
+	t.Run("recognizes language:go.mod as a language filter", func(t *testing.T) {
+		r := query.ParseQuery("language:go.mod foo")
+		if len(r.Languages) != 1 || string(r.Languages[0]) != "go.mod" {
+			t.Errorf("Languages = %v, want [go.mod]", r.Languages)
+		}
+	})
+
 	t.Run("handles multiple kind: filters as an OR set", func(t *testing.T) {
 		r := query.ParseQuery("kind:function kind:method auth")
 		if len(r.Kinds) != 2 {

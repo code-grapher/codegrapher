@@ -108,6 +108,8 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 		if tree != nil {
 			e.walkTS(tree.RootNode())
 		}
+	case model.LangGoMod:
+		e.extractGoMod(content)
 	}
 
 	// For Go files, also run the framework route extractor.

@@ -133,7 +133,7 @@ func mustGit(t *testing.T, dir string, args ...string) {
 func TestScanDirectoryFixture(t *testing.T) {
 	root := repoRootDir(t)
 	got := ScanDirectory(filepath.Join(root, "testdata", "fixtures", "go-small"))
-	want := []string{"cmd/app/main.go", "internal/store/cache.go", "internal/store/store.go"}
+	want := []string{"cmd/app/main.go", "go.mod", "internal/store/cache.go", "internal/store/store.go"}
 	sort.Strings(got)
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ScanDirectory(go-small) = %v, want %v", got, want)

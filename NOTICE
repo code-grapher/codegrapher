@@ -44,6 +44,14 @@ The original codegraph is licensed under the MIT License:
 
 ---
 
+## Attribution: golang.org/x/mod
+
+This product depends on golang.org/x/mod, Copyright (c) The Go Authors,
+licensed under the BSD-3-Clause License. The BSD-3-Clause license terms apply
+to that portion of the software.
+
+---
+
 ## Attribution: gotreesitter (patched fork)
 
 This product uses a patched fork of gotreesitter (github.com/odvcencio/gotreesitter)
