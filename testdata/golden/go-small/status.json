@@ -1,27 +1,29 @@
 {
   "initialized": true,
   "version": "0.9.9",
-  "projectPath": "/Users/alexandertrakhimenok/projects/specscore/codegrapher/testdata/fixtures/go-small",
-  "indexPath": "/Users/alexandertrakhimenok/projects/specscore/codegrapher/testdata/fixtures/go-small/.codegraph",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/testdata/fixtures/go-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/testdata/fixtures/go-small/.codegraph",
   "lastIndexed": "",
-  "fileCount": 3,
-  "nodeCount": 28,
-  "edgeCount": 50,
+  "fileCount": 4,
+  "nodeCount": 30,
+  "edgeCount": 51,
   "dbSizeBytes": 163840,
   "backend": "node-sqlite",
   "journalMode": "wal",
   "nodesByKind": {
-    "file": 3,
+    "file": 4,
     "function": 6,
     "import": 5,
     "interface": 1,
     "method": 7,
+    "module": 1,
     "route": 2,
     "struct": 3,
     "variable": 1
   },
   "languages": [
-    "go"
+    "go",
+    "go.mod"
   ],
   "pendingChanges": {
     "added": 0,

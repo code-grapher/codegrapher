@@ -5,7 +5,7 @@
     "content": [
       {
         "type": "text",
-        "text": "## Project Structure (3 files)\n\n\u251c\u2500\u2500 cmd\n\u2502   \u2514\u2500\u2500 app\n\u2502       \u2514\u2500\u2500 main.go (go, 9 symbols)\n\u2514\u2500\u2500 internal\n    \u2514\u2500\u2500 store\n        \u251c\u2500\u2500 cache.go (go, 5 symbols)\n        \u2514\u2500\u2500 store.go (go, 14 symbols)"
+        "text": "## Project Structure (4 files)\n\n\u251c\u2500\u2500 cmd\n\u2502   \u2514\u2500\u2500 app\n\u2502       \u2514\u2500\u2500 main.go (go, 9 symbols)\n\u251c\u2500\u2500 internal\n\u2502   \u2514\u2500\u2500 store\n\u2502       \u251c\u2500\u2500 cache.go (go, 5 symbols)\n\u2502       \u2514\u2500\u2500 store.go (go, 14 symbols)\n\u2514\u2500\u2500 go.mod (go.mod, 2 symbols)"
       }
     ]
   }

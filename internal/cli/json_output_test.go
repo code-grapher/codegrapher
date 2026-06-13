@@ -340,8 +340,8 @@ func TestE2EInitSyncUninit(t *testing.T) {
 	if !status.Initialized {
 		t.Error("status.Initialized should be true")
 	}
-	if status.FileCount != 3 {
-		t.Errorf("expected 3 files, got %d", status.FileCount)
+	if status.FileCount != 4 {
+		t.Errorf("expected 4 files, got %d", status.FileCount)
 	}
 	if status.NodeCount == 0 {
 		t.Error("expected >0 nodes")
@@ -365,8 +365,8 @@ func TestE2EInitSyncUninit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Files: %v", err)
 	}
-	if len(files) != 3 {
-		t.Errorf("expected 3 files, got %d", len(files))
+	if len(files) != 4 {
+		t.Errorf("expected 4 files, got %d", len(files))
 	}
 
 	// Uninit.

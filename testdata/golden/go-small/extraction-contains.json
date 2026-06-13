@@ -4,6 +4,7 @@
 {"source":"file:cmd/app/main.go","target":"import:0ae10122f2e057d51ed6abc937440119","kind":"contains"},
 {"source":"file:cmd/app/main.go","target":"import:26a211edf9b3dfa04f56662a997fc8c2","kind":"contains"},
 {"source":"file:cmd/app/main.go","target":"import:7ad9e9e7d9e19c0b0e75d39ea56a63ab","kind":"contains"},
+{"source":"file:go.mod","target":"module:6f3ddb7a958223f54a9c52d3be495712","kind":"contains"},
 {"source":"file:internal/store/cache.go","target":"function:0824d7b696d1c8d1d19563e910d6848c","kind":"contains"},
 {"source":"file:internal/store/cache.go","target":"method:61bb353671c58d0678834537ffc2eb6d","kind":"contains"},
 {"source":"file:internal/store/cache.go","target":"method:74e7e0f7d0aca402ae101418dc1220a1","kind":"contains"},
