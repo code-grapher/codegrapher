@@ -13,6 +13,7 @@ import (
 func newStatusCmd() *cobra.Command {
 	var jsonOut bool
 	var pathFlag string
+	var scope string
 
 	cmd := &cobra.Command{
 		Use:   "status [path]",
@@ -52,7 +53,7 @@ func newStatusCmd() *cobra.Command {
 			}
 			defer idx.Close()
 
-			q := NewStoreQuerier(idx.Store())
+			q := NewStoreQuerier(idx.StoresFiltered(splitCSV(scope))...)
 			status, err := q.Status(projectPath)
 			if err != nil {
 				printError(fmt.Sprintf("Failed to get status: %s", err))
@@ -148,5 +149,6 @@ func newStatusCmd() *cobra.Command {
 
 	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "Output as JSON")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
+	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
 	return cmd
 }

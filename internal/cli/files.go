@@ -20,6 +20,7 @@ func newFilesCmd() *cobra.Command {
 	var format string
 	var maxDepth int
 	var noMetadata bool
+	var scope string
 
 	cmd := &cobra.Command{
 		Use:   "files",
@@ -46,7 +47,7 @@ func newFilesCmd() *cobra.Command {
 			}
 			defer idx.Close()
 
-			q := NewStoreQuerier(idx.Store())
+			q := NewStoreQuerier(idx.StoresFiltered(splitCSV(scope))...)
 			files, err := q.Files()
 			if err != nil {
 				printError(fmt.Sprintf("Failed to list files: %s", err))
@@ -148,6 +149,7 @@ func newFilesCmd() *cobra.Command {
 	cmd.Flags().StringVar(&format, "format", "tree", "Output format (tree, flat, grouped)")
 	cmd.Flags().IntVar(&maxDepth, "max-depth", 0, "Maximum directory depth for tree format (0 = unlimited)")
 	cmd.Flags().BoolVar(&noMetadata, "no-metadata", false, "Hide file metadata")
+	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
 	return cmd
 }
 

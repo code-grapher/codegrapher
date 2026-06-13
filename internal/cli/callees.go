@@ -13,6 +13,7 @@ func newCalleesCmd() *cobra.Command {
 	var jsonOut bool
 	var limit int
 	var pathFlag string
+	var scope string
 
 	cmd := &cobra.Command{
 		Use:   "callees <symbol>",
@@ -40,7 +41,7 @@ func newCalleesCmd() *cobra.Command {
 			}
 			defer idx.Close()
 
-			q := NewStoreQuerier(idx.Store())
+			q := NewStoreQuerier(idx.StoresFiltered(splitCSV(scope))...)
 			result, err := q.Callees(symbol)
 			if err != nil {
 				printError(fmt.Sprintf("callees failed: %s", err))
@@ -74,5 +75,6 @@ func newCalleesCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "Output as JSON")
 	cmd.Flags().IntVarP(&limit, "limit", "l", 20, "Maximum results")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
+	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
 	return cmd
 }

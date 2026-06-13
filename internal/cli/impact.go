@@ -13,6 +13,7 @@ func newImpactCmd() *cobra.Command {
 	var jsonOut bool
 	var depth int
 	var pathFlag string
+	var scope string
 
 	cmd := &cobra.Command{
 		Use:   "impact <symbol>",
@@ -40,7 +41,7 @@ func newImpactCmd() *cobra.Command {
 			}
 			defer idx.Close()
 
-			q := NewStoreQuerier(idx.Store())
+			q := NewStoreQuerier(idx.StoresFiltered(splitCSV(scope))...)
 			result, err := q.Impact(symbol, depth)
 			if err != nil {
 				printError(fmt.Sprintf("impact failed: %s", err))
@@ -85,5 +86,6 @@ func newImpactCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "Output as JSON")
 	cmd.Flags().IntVarP(&depth, "depth", "d", 2, "Traversal depth")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
+	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
 	return cmd
 }

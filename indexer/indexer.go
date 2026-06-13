@@ -170,6 +170,29 @@ func (idx *Indexer) Stores() []*store.Store {
 	return out
 }
 
+// StoresFiltered returns the scope stores whose scope key is in scopeKeys,
+// ordered deterministically by key. An empty scopeKeys returns all stores
+// (identical to Stores). Unknown keys are silently ignored.
+func (idx *Indexer) StoresFiltered(scopeKeys []string) []*store.Store {
+	if len(scopeKeys) == 0 {
+		return idx.Stores()
+	}
+	want := make(map[string]struct{}, len(scopeKeys))
+	for _, k := range scopeKeys {
+		want[k] = struct{}{}
+	}
+	scopes := idx.reg.Scopes()
+	sort.Slice(scopes, func(i, j int) bool { return scopes[i].Key() < scopes[j].Key() })
+	stores := idx.reg.Stores()
+	out := make([]*store.Store, 0, len(scopes))
+	for _, sc := range scopes {
+		if _, ok := want[sc.Key()]; ok {
+			out = append(out, stores[sc])
+		}
+	}
+	return out
+}
+
 // Store returns the primary (lexicographically-first) scope store. It is a
 // convenience for single-scope projects and tests; multi-scope consumers must
 // use Stores.

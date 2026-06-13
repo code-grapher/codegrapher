@@ -15,6 +15,7 @@ func newQueryCmd() *cobra.Command {
 	var limit int
 	var kind string
 	var pathFlag string
+	var scope string
 
 	cmd := &cobra.Command{
 		Use:   "query <search>",
@@ -42,7 +43,7 @@ func newQueryCmd() *cobra.Command {
 			}
 			defer idx.Close()
 
-			q := NewStoreQuerier(idx.Store())
+			q := NewStoreQuerier(idx.StoresFiltered(splitCSV(scope))...)
 			opts := SearchOptions{Limit: limit}
 			if kind != "" {
 				opts.Kinds = []model.NodeKind{model.NodeKind(kind)}
@@ -88,6 +89,7 @@ func newQueryCmd() *cobra.Command {
 	cmd.Flags().IntVarP(&limit, "limit", "l", 10, "Maximum results")
 	cmd.Flags().StringVarP(&kind, "kind", "k", "", "Filter by node kind")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
+	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
 	return cmd
 }
 

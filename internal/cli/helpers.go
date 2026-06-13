@@ -13,6 +13,18 @@ import (
 // resolveArg returns the first arg as an absolute path, or cwd if no args.
 // Also walks up parent directories to find the nearest initialized CodeGraph
 // project, mirroring resolveProjectPath in the original codegraph.ts.
+// splitCSV splits a comma-separated value into trimmed, non-empty fields.
+// An empty or whitespace-only input yields nil (meaning "all scopes").
+func splitCSV(csv string) []string {
+	var out []string
+	for _, p := range strings.Split(csv, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func resolveArg(args []string, idx int) string {
 	var raw string
 	if idx < len(args) && args[idx] != "" {

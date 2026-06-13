@@ -21,6 +21,7 @@ func newAffectedCmd() *cobra.Command {
 	var stdin bool
 	var depth int
 	var filterGlob string
+	var scope string
 
 	cmd := &cobra.Command{
 		Use:   "affected [files...]",
@@ -66,8 +67,8 @@ func newAffectedCmd() *cobra.Command {
 			}
 			defer idx.Close()
 
-			s := idx.Store()
-			affectedTests, totalDependents := findAffectedTests(s, changedFiles, depth, filterGlob)
+			affectedTests, totalDependents := findAffectedTestsAcross(
+				idx.StoresFiltered(splitCSV(scope)), changedFiles, depth, filterGlob)
 			sortedTests := make([]string, 0, len(affectedTests))
 			for t := range affectedTests {
 				sortedTests = append(sortedTests, t)
@@ -108,7 +109,25 @@ func newAffectedCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&stdin, "stdin", false, "Read file list from stdin (one per line)")
 	cmd.Flags().IntVarP(&depth, "depth", "d", 5, "Max dependency traversal depth")
 	cmd.Flags().StringVarP(&filterGlob, "filter", "f", "", "Custom glob filter for test files")
+	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
 	return cmd
+}
+
+// findAffectedTestsAcross fans findAffectedTests out across every scope store
+// and merges the affected-test sets and dependent counts. A source file's
+// import graph lives entirely within one scope store, so the union across
+// stores reconstructs the whole-repo result.
+func findAffectedTestsAcross(stores []*store.Store, changedFiles []string, maxDepth int, filterGlob string) (map[string]bool, int) {
+	affectedTests := map[string]bool{}
+	total := 0
+	for _, s := range stores {
+		tests, dependents := findAffectedTests(s, changedFiles, maxDepth, filterGlob)
+		for t := range tests {
+			affectedTests[t] = true
+		}
+		total += dependents
+	}
+	return affectedTests, total
 }
 
 // findAffectedTests performs BFS through file import/dependency edges to find
