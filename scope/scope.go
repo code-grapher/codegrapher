@@ -42,7 +42,7 @@ var versionPrefix = regexp.MustCompile(`^[\s^~>=<v]+`)
 func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 	var ver string
 	switch lang {
-	case model.LangGo:
+	case model.LangGo, model.LangGoMod:
 		ver = detectGoVersion(projectRoot, filePath)
 	case model.LangTypeScript, model.LangJavaScript, model.LangTSX, model.LangJSX:
 		ver = detectNodeVersion(projectRoot, filePath)

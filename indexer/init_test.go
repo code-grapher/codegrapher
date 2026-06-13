@@ -7,6 +7,30 @@ import (
 	"testing"
 )
 
+func TestGoModFoldsIntoGoScope(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("go.mod", "module example.com/proj\n\ngo 1.22\n\nrequire github.com/spf13/cobra v1.10.2\n")
+	write("main.go", "package main\n\nfunc main() {}\n")
+
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !hasNodeNamed(t, idx, "example.com/proj") {
+		t.Error("module node not found in any store")
+	}
+	scoped := idx.StoresFiltered([]string{"go-v1"})
+	if len(scoped) != 1 {
+		t.Fatalf("expected exactly one go-v1 store, got %d", len(scoped))
+	}
+}
+
 func TestInitIndexesProject(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "main.go"), "package main\n\nfunc main() { helper() }\n\nfunc helper() {}\n")

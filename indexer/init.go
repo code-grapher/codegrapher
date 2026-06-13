@@ -46,7 +46,17 @@ func Init(projectRoot string, opts Options) (*Indexer, IndexResult, error) {
 // creating the scope database on first use.
 func (idx *Indexer) scopeStoreForFile(relPath string, lang model.Language) (*store.Store, error) {
 	ver := scope.DetectVersion(idx.root, filepath.Join(idx.root, relPath), lang)
-	return idx.reg.Store(scope.Scope{Language: lang, Version: ver})
+	return idx.reg.Store(scope.Scope{Language: scopeLanguage(lang), Version: ver})
+}
+
+// scopeLanguage maps a detection language to its storage-partition language.
+// go.mod folds into the Go partition so module/dependency nodes are co-located
+// with the Go source they govern.
+func scopeLanguage(lang model.Language) model.Language {
+	if lang == model.LangGoMod {
+		return model.LangGo
+	}
+	return lang
 }
 
 // aggregateStats sums node/edge/file counts across every scope store.
