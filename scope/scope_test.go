@@ -151,6 +151,23 @@ func TestDetectVersion(t *testing.T) {
 	}
 }
 
+func TestDetectGoVersionPrefersToolchain(t *testing.T) {
+	dir := t.TempDir()
+	gomodPath := filepath.Join(dir, "go.mod")
+	content := "module x\n\ngo 1.22\n\ntoolchain go1.26.4\n"
+	if err := os.WriteFile(gomodPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(src, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Both go 1.22 and toolchain go1.26.4 share major "v1"; assert the bucket.
+	if got := DetectVersion(dir, src, model.LangGo); got != "v1" {
+		t.Errorf("DetectVersion = %q, want v1", got)
+	}
+}
+
 // When projectRoot is not an ancestor of filePath, the upward walk must still
 // terminate (at the filesystem root) and fall back to v0 rather than loop.
 func TestDetectVersionRootNotAncestor(t *testing.T) {
