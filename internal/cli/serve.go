@@ -7,6 +7,7 @@ import (
 
 	"github.com/specscore/codegrapher/indexer"
 	"github.com/specscore/codegrapher/mcp"
+	"github.com/specscore/codegrapher/store"
 	"github.com/spf13/cobra"
 )
 
@@ -71,7 +72,11 @@ func newServeCmd() *cobra.Command {
 			}
 			defer idx.Close()
 
-			backend := mcp.NewStoreBackend(idx.Store(), projectPath)
+			// TODO(integration): use idx.Stores() once the multi-store indexer
+			// change lands; until then wrap the single store as a one-element
+			// slice so this worktree builds (MultiBackend over one store is
+			// behavior-identical to NewStoreBackend).
+			backend := mcp.NewMultiBackend([]*store.Store{idx.Store()}, projectPath)
 			server := mcp.NewServer(backend)
 			return server.Serve(cmd.Context(), os.Stdin, os.Stdout)
 		},
