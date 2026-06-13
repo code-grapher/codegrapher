@@ -201,10 +201,18 @@ func copyFixture(t *testing.T, fixtureDir string) string {
 
 // assertGoldenState dumps the store and compares nodes (minus updated_at),
 // contains edges, non-contains edges, and file records against the goldens.
-func assertGoldenState(t *testing.T, s *store.Store, goldenDir, fixtureCopy string) {
+func assertGoldenState(t *testing.T, stores []*store.Store, goldenDir, fixtureCopy string) {
 	t.Helper()
 
-	gotNodes, gotEdges := dumpDB(t, s)
+	// Aggregate across every scope store (a fixture may have more than one,
+	// e.g. ts-small's typescript-v0 + node-v0); the goldens are UNION dumps.
+	var gotNodes []model.Node
+	var gotEdges []model.Edge
+	for _, s := range stores {
+		ns, es := dumpDB(t, s)
+		gotNodes = append(gotNodes, ns...)
+		gotEdges = append(gotEdges, es...)
+	}
 
 	// --- nodes ---
 	wantNodes := loadJSON[goldenNode](t, filepath.Join(goldenDir, "extraction-nodes.json"))
@@ -283,12 +291,14 @@ func assertGoldenState(t *testing.T, s *store.Store, goldenDir, fixtureCopy stri
 	}
 
 	// --- unresolved refs must be empty ---
-	n, err := s.GetUnresolvedReferencesCount()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != 0 {
-		t.Errorf("unresolved_refs count = %d, want 0", n)
+	for _, s := range stores {
+		n, err := s.GetUnresolvedReferencesCount()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Errorf("unresolved_refs count = %d, want 0", n)
+		}
 	}
 
 	// --- files ---
@@ -307,9 +317,13 @@ func assertGoldenState(t *testing.T, s *store.Store, goldenDir, fixtureCopy stri
 	for i := range wantFiles {
 		wantFiles[i].NodeCount = nodesPerFile[wantFiles[i].Path]
 	}
-	gotFileRecs, err := s.GetAllFiles()
-	if err != nil {
-		t.Fatal(err)
+	var gotFileRecs []model.FileRecord
+	for _, s := range stores {
+		recs, err := s.GetAllFiles()
+		if err != nil {
+			t.Fatal(err)
+		}
+		gotFileRecs = append(gotFileRecs, recs...)
 	}
 	var gotFiles []goldenFile
 	for _, f := range gotFileRecs {
@@ -391,7 +405,7 @@ func TestGoldenInit(t *testing.T) {
 				t.Fatalf("Init result not successful: %+v", res)
 			}
 
-			assertGoldenState(t, idx.Store(), goldenDir, fixtureCopy)
+			assertGoldenState(t, idx.Stores(), goldenDir, fixtureCopy)
 		})
 	}
 }
@@ -413,7 +427,7 @@ func TestGoldenSyncRoundTrip(t *testing.T) {
 	if !res.Success {
 		t.Fatalf("Init result: %+v", res)
 	}
-	assertGoldenState(t, idx.Store(), goldenDir, fixtureCopy)
+	assertGoldenState(t, idx.Stores(), goldenDir, fixtureCopy)
 
 	// Modify cmd/app/main.go: add a function. main.go has only outgoing
 	// cross-file edges, so a sync of it alone re-resolves everything it
@@ -487,7 +501,7 @@ func TestGoldenSyncRoundTrip(t *testing.T) {
 	}
 
 	// The DB is byte-equal to the golden state again.
-	assertGoldenState(t, idx.Store(), goldenDir, fixtureCopy)
+	assertGoldenState(t, idx.Stores(), goldenDir, fixtureCopy)
 }
 
 func backdate(t *testing.T, path string) {

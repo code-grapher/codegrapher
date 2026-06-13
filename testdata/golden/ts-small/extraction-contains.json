@@ -7,6 +7,7 @@
 {"source":"class:d704799d2aefd3d2a1b36523104285a1","target":"method:2a78b45f7f72dfb0c66ce42caedaf1de","kind":"contains"},
 {"source":"class:d704799d2aefd3d2a1b36523104285a1","target":"method:e77b32544aadebe25bc51acf272621a7","kind":"contains"},
 {"source":"class:d704799d2aefd3d2a1b36523104285a1","target":"method:ee7eba3cd90130d2e3b96c58fdded9eb","kind":"contains"},
+{"source":"file:package.json","target":"module:20e2d17984f6e5a3fee240491c9b3a97","kind":"contains"},
 {"source":"file:src/cache.ts","target":"class:0d5520d0381688557f80e89772308f74","kind":"contains"},
 {"source":"file:src/cache.ts","target":"import:297a7c70612498716cce139b0a71edaf","kind":"contains"},
 {"source":"file:src/main.ts","target":"function:3fc045df3f91ffa132630224317127ca","kind":"contains"},

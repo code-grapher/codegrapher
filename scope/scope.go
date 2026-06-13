@@ -4,7 +4,6 @@
 package scope
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/specscore/codegrapher/gomod"
 	"github.com/specscore/codegrapher/model"
+	"github.com/specscore/codegrapher/pkgjson"
 )
 
 // fallbackVersion is used when no toolchain version can be detected for a file.
@@ -44,7 +44,7 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 	switch lang {
 	case model.LangGo, model.LangGoMod:
 		ver = detectGoVersion(projectRoot, filePath)
-	case model.LangTypeScript, model.LangJavaScript, model.LangTSX, model.LangJSX:
+	case model.LangTypeScript, model.LangJavaScript, model.LangTSX, model.LangJSX, model.LangPackageJSON:
 		ver = detectNodeVersion(projectRoot, filePath)
 	}
 	return majorVersion(ver)
@@ -85,21 +85,17 @@ func detectNodeVersion(projectRoot, filePath string) string {
 	if data == nil {
 		return ""
 	}
-	var pkg struct {
-		Dependencies    map[string]string `json:"dependencies"`
-		DevDependencies map[string]string `json:"devDependencies"`
-		Engines         map[string]string `json:"engines"`
-	}
-	if err := json.Unmarshal(data, &pkg); err != nil {
+	f, err := pkgjson.Parse(data)
+	if err != nil {
 		return ""
 	}
-	if v := pkg.DevDependencies["typescript"]; v != "" {
+	if v := f.DevDependencies["typescript"]; v != "" {
 		return v
 	}
-	if v := pkg.Dependencies["typescript"]; v != "" {
+	if v := f.Dependencies["typescript"]; v != "" {
 		return v
 	}
-	return pkg.Engines["node"]
+	return f.Engines["node"]
 }
 
 // readNearest walks up from filePath's directory to projectRoot, returning the

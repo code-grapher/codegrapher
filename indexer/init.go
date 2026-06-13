@@ -50,13 +50,17 @@ func (idx *Indexer) scopeStoreForFile(relPath string, lang model.Language) (*sto
 }
 
 // scopeLanguage maps a detection language to its storage-partition language.
-// go.mod folds into the Go partition so module/dependency nodes are co-located
-// with the Go source they govern.
+// go.mod folds into the Go partition and package.json into the Node partition,
+// so module/dependency nodes are co-located with the source they govern.
 func scopeLanguage(lang model.Language) model.Language {
-	if lang == model.LangGoMod {
+	switch lang {
+	case model.LangGoMod:
 		return model.LangGo
+	case model.LangPackageJSON:
+		return model.LangNode
+	default:
+		return lang
 	}
-	return lang
 }
 
 // aggregateStats sums node/edge/file counts across every scope store.

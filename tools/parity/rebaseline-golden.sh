@@ -32,6 +32,28 @@ normalize_json() {
   [ -s "$f" ] || echo "[]" > "$f"
 }
 
+# sqlite_union OUT SELECT TABLE WHERE ORDER DB1 [DB2 ...]
+# Dumps `SELECT <SELECT> FROM <TABLE> [WHERE <WHERE>] ORDER BY <ORDER>` UNION-ed
+# across all given scope DBs (identical schema) as a single -json array.
+sqlite_union() {
+  local out="$1" select="$2" table="$3" where="$4" order="$5"; shift 5
+  local dbs=("$@")
+  local main="${dbs[0]}"
+  local attaches="" union=""
+  union="SELECT $select FROM \"$table\""
+  [ -n "$where" ] && union="$union WHERE $where"
+  local i=0 db
+  for db in "${dbs[@]:1}"; do
+    i=$((i+1))
+    attaches="$attaches ATTACH '$db' AS s$i;"
+    local u="SELECT $select FROM s$i.\"$table\""
+    [ -n "$where" ] && u="$u WHERE $where"
+    union="$union UNION ALL $u"
+  done
+  sqlite3 -json "$main" "$attaches $union ORDER BY $order;" > "$out"
+  normalize_json "$out"
+}
+
 capture() {
   local fixture="$1" query="$2"; shift 2
   local dir="$FIXTURES/$fixture" out="$GOLDEN/$fixture"
@@ -44,14 +66,10 @@ capture() {
   rm -rf "$dir/.codegraph"
   (cd "$dir" && CODEGRAPH_NO_WATCH=1 "$BIN" init >/dev/null 2>&1)
   # Per-scope recordset layout: the DB filename is scope-dependent
-  # (e.g. codegraph-go-v1.db, codegraph-typescript-v0.db). Both fixtures
-  # are single-scope, so resolve the one .db file.
+  # (e.g. codegraph-go-v1.db, codegraph-typescript-v0.db). A fixture may
+  # produce multiple scope DBs (e.g. ts-small now has typescript-v0 + node-v0);
+  # extraction/resolution dumps UNION across all of them.
   local dbs=("$dir"/.codegraph/codegraph-*.db)
-  if [ "${#dbs[@]}" -ne 1 ] || [ ! -f "${dbs[0]}" ]; then
-    echo "expected exactly one per-scope DB in $dir/.codegraph, found: ${dbs[*]}" >&2
-    exit 1
-  fi
-  local db="${dbs[0]}"
 
   # CLI goldens.
   (cd "$dir" \
@@ -68,26 +86,12 @@ capture() {
   done
 
   # Extraction goldens (post-resolution DB dumps, matching capture-extraction-golden.sh).
-  sqlite3 -json "$db" \
-    "SELECT $NODE_COLS FROM nodes ORDER BY id" \
-    > "$out/extraction-nodes.json"
-  normalize_json "$out/extraction-nodes.json"
-
-  sqlite3 -json "$db" \
-    "SELECT source,target,kind FROM edges WHERE kind='contains' ORDER BY source,target" \
-    > "$out/extraction-contains.json"
-  normalize_json "$out/extraction-contains.json"
-
-  sqlite3 -json "$db" \
-    "SELECT from_node_id,reference_name,reference_kind,line,col,candidates,file_path,language FROM unresolved_refs ORDER BY from_node_id,reference_name,line" \
-    > "$out/extraction-unresolved.json"
-  normalize_json "$out/extraction-unresolved.json"
+  sqlite_union "$out/extraction-nodes.json" "$NODE_COLS" "nodes" "" "id" "${dbs[@]}"
+  sqlite_union "$out/extraction-contains.json" "source,target,kind" "edges" "kind='contains'" "source,target" "${dbs[@]}"
+  sqlite_union "$out/extraction-unresolved.json" "from_node_id,reference_name,reference_kind,line,col,candidates,file_path,language" "unresolved_refs" "" "from_node_id,reference_name,line" "${dbs[@]}"
 
   # Resolution goldens (non-contains edges, matching capture-resolution-golden.sh).
-  sqlite3 -json "$db" \
-    "SELECT source,target,kind,provenance,line,col FROM edges WHERE kind != 'contains' ORDER BY source,target,kind,line,col" \
-    > "$out/resolution-edges.json"
-  normalize_json "$out/resolution-edges.json"
+  sqlite_union "$out/resolution-edges.json" "source,target,kind,provenance,line,col" "edges" "kind != 'contains'" "source,target,kind,line,col" "${dbs[@]}"
 
   echo "  CLI: status, files, query, callers/callees/impact for ${*}"
   echo "  DB:  extraction-nodes, extraction-contains, extraction-unresolved, resolution-edges"

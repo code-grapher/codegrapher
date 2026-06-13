@@ -4,13 +4,16 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 
+	"github.com/specscore/codegrapher/internal/cli"
 	"github.com/specscore/codegrapher/internal/extract"
 	"github.com/specscore/codegrapher/internal/paritytest"
 	"github.com/specscore/codegrapher/model"
 	"github.com/specscore/codegrapher/query"
 	"github.com/specscore/codegrapher/resolve"
+	"github.com/specscore/codegrapher/scope"
 	"github.com/specscore/codegrapher/store"
 )
 
@@ -81,6 +84,86 @@ func buildStore(t *testing.T, fixtureDir string) *store.Store {
 		t.Fatalf("Resolve: %v", err)
 	}
 	return s
+}
+
+// buildScopedStores mirrors the production indexer: every file is bucketed to
+// its (language, version) scope and indexed into a separate store, each
+// resolved independently. Returns the per-scope stores in deterministic order
+// by scope key. BM25 search scoring is per-store, so multi-scope fixtures must
+// query this way (not from one merged store) to match the CLI/MCP goldens.
+func buildScopedStores(t *testing.T, fixtureDir string) []*store.Store {
+	t.Helper()
+	byScope := map[string]*store.Store{}
+	var order []string
+
+	err := filepath.Walk(fixtureDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return err
+		}
+		lang := extract.DetectLanguage(path)
+		if lang == model.LangUnknown {
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		relPath, err := filepath.Rel(fixtureDir, path)
+		if err != nil {
+			return err
+		}
+		relPath = filepath.ToSlash(relPath)
+
+		key := scope.Scope{Language: lang, Version: scope.DetectVersion(fixtureDir, path, lang)}.Key()
+		s := byScope[key]
+		if s == nil {
+			s, err = store.Initialize(filepath.Join(t.TempDir(), store.DatabaseFilename))
+			if err != nil {
+				t.Fatalf("store.Initialize: %v", err)
+			}
+			t.Cleanup(func() { s.Close() })
+			byScope[key] = s
+			order = append(order, key)
+		}
+
+		result, err := extract.ExtractFile(relPath, content, lang)
+		if err != nil {
+			return err
+		}
+		if err := s.InsertNodes(result.Nodes); err != nil {
+			return err
+		}
+		if err := s.InsertEdges(result.Edges); err != nil {
+			return err
+		}
+		if err := s.InsertUnresolvedRefs(result.UnresolvedReferences); err != nil {
+			return err
+		}
+		fi, err := os.Stat(path)
+		if err != nil {
+			return err
+		}
+		return s.UpsertFile(model.FileRecord{
+			Path:      relPath,
+			Language:  lang,
+			Size:      fi.Size(),
+			NodeCount: len(result.Nodes),
+		})
+	})
+	if err != nil {
+		t.Fatalf("walk fixture: %v", err)
+	}
+
+	sort.Strings(order)
+	stores := make([]*store.Store, 0, len(order))
+	for _, key := range order {
+		s := byScope[key]
+		if _, err := resolve.Resolve(s, fixtureDir); err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+		stores = append(stores, s)
+	}
+	return stores
 }
 
 // -----------------------------------------------------------------------
@@ -219,9 +302,11 @@ func TestGoSmall_ImpactStoreGet(t *testing.T) {
 func TestTsSmall_Query(t *testing.T) {
 	fixtureDir := filepath.Join(repoRoot, "testdata", "fixtures", "ts-small")
 	goldenPath := filepath.Join(repoRoot, "testdata", "golden", "ts-small", "query.json")
-	s := buildStore(t, fixtureDir)
+	// ts-small now spans two scopes (typescript-v0 + node-v0). BM25 scoring is
+	// per-store, so query via the production multi-store merge to match goldens.
+	stores := buildScopedStores(t, fixtureDir)
 
-	results, err := query.SearchNodes(s, "store", query.SearchOptions{Limit: 20})
+	results, err := cli.NewStoreQuerier(stores...).SearchNodes("store", cli.SearchOptions{Limit: 20})
 	if err != nil {
 		t.Fatalf("SearchNodes: %v", err)
 	}

@@ -31,6 +31,37 @@ func TestGoModFoldsIntoGoScope(t *testing.T) {
 	}
 }
 
+func TestPackageJSONFoldsIntoNodeScope(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("package.json", `{"name":"demo","dependencies":{"left-pad":"^1.3.0"}}`)
+	write("index.js", "module.exports = 1;\n")
+
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// package.json (no typescript dep / engines) buckets to v0 -> node-v0.
+	scoped := idx.StoresFiltered([]string{"node-v0"})
+	if len(scoped) != 1 {
+		t.Fatalf("expected exactly one node-v0 store, got %d", len(scoped))
+	}
+	// The module node lives in the node-v0 scope, not the default Store()
+	// (index.js stays in its own javascript-v0 scope, which sorts first).
+	nodes, err := scoped[0].GetNodesByName("demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(nodes) == 0 {
+		t.Error("package.json module node not found in node-v0 store")
+	}
+}
+
 func TestInitIndexesProject(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "main.go"), "package main\n\nfunc main() { helper() }\n\nfunc helper() {}\n")
@@ -187,5 +218,32 @@ func TestInitProgressCallback(t *testing.T) {
 		if phases[i] != want[i] {
 			t.Fatalf("phases = %v, want %v", phases, want)
 		}
+	}
+}
+
+func TestStoresFilteredMergesNodeScope(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// package.json (no typescript dep) -> node-v0; a .ts file -> typescript-v0.
+	write("package.json", `{"name":"demo","dependencies":{"left-pad":"^1.3.0"}}`)
+	write("main.ts", "export const x = 1;\n")
+
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Requesting only the typescript scope must auto-include node-v0 (the merge).
+	got := idx.StoresFiltered([]string{"typescript-v0"})
+	if len(got) != 2 {
+		t.Fatalf("typescript-v0 filter returned %d stores, want 2 (typescript-v0 + node-v0)", len(got))
+	}
+	// Requesting node alone returns just node.
+	if n := len(idx.StoresFiltered([]string{"node-v0"})); n != 1 {
+		t.Errorf("node-v0 filter returned %d stores, want 1", n)
 	}
 }

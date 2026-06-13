@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -180,6 +181,9 @@ func (idx *Indexer) StoresFiltered(scopeKeys []string) []*store.Store {
 	want := make(map[string]struct{}, len(scopeKeys))
 	for _, k := range scopeKeys {
 		want[k] = struct{}{}
+		if nodeKey, ok := nodeScopeForFamilyKey(k); ok {
+			want[nodeKey] = struct{}{}
+		}
 	}
 	scopes := idx.reg.Scopes()
 	sort.Slice(scopes, func(i, j int) bool { return scopes[i].Key() < scopes[j].Key() })
@@ -191,6 +195,22 @@ func (idx *Indexer) StoresFiltered(scopeKeys []string) []*store.Store {
 		}
 	}
 	return out
+}
+
+// nodeScopeForFamilyKey maps a JS/TS-family scope key to its version-matched
+// node scope key (e.g. "typescript-v5" -> "node-v5"), so a scoped query for a
+// TS/JS scope also surfaces the package.json dependency graph stored in the
+// dedicated node scope. Returns false for non-family keys.
+func nodeScopeForFamilyKey(key string) (string, bool) {
+	for _, lang := range []model.Language{
+		model.LangTypeScript, model.LangJavaScript, model.LangTSX, model.LangJSX,
+	} {
+		prefix := string(lang) + "-"
+		if strings.HasPrefix(key, prefix) {
+			return string(model.LangNode) + "-" + key[len(prefix):], true
+		}
+	}
+	return "", false
 }
 
 // Store returns the primary (lexicographically-first) scope store. It is a
