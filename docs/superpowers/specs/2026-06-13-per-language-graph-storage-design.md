@@ -134,6 +134,9 @@ Detection is pure and unit-testable: input = file path + project file tree, outp
   wholesale.
 - This is independent of the served `.ingr` artifacts; the `.db.zst` files are internal
   server state, never served.
+- **Repo clone cache:** repos are cloned into `REPOS_DIR` (default: a `repos` sibling of
+  the codegrapher data dir `BASE_DIR`), kept *outside* the codegrapher data dir so the
+  clone cache can be shared across tools. Graphs live under `BASE_DIR/codegraphs/`.
 
 ## Component 6 — Viewer (codegrapher-dev)
 
