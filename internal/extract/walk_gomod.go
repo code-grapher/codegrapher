@@ -90,7 +90,7 @@ func (e *extractor) addModuleNode(path, signature string, line int, now int64) s
 		Name:          path,
 		QualifiedName: path,
 		FilePath:      e.filePath,
-		Language:      model.LangGoMod,
+		Language:      e.lang,
 		StartLine:     line,
 		EndLine:       line,
 		Signature:     signature,

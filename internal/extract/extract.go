@@ -110,6 +110,8 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 		}
 	case model.LangGoMod:
 		e.extractGoMod(content)
+	case model.LangPackageJSON:
+		e.extractPackageJSON(content)
 	}
 
 	// For Go files, also run the framework route extractor.
