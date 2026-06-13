@@ -90,8 +90,9 @@ func TestExportScoped(t *testing.T) {
 		t.Errorf("go counts = %+v, want nodes=1 files=1", m.Scopes[0].Counts)
 	}
 
-	// Compressed-only: variants exist, plain .ingr does not.
-	base := filepath.Join(out, "go", "1.22", "nodes", "nodes.ingr")
+	// Compressed-only, flat layout: variants exist directly under the scope
+	// dir; neither the plain .ingr nor the nested collection dir remain.
+	base := filepath.Join(out, "go", "1.22", "nodes.ingr")
 	for _, ext := range []string{".zst", ".gz"} {
 		if _, err := os.Stat(base + ext); err != nil {
 			t.Errorf("missing %s: %v", base+ext, err)
@@ -99,6 +100,9 @@ func TestExportScoped(t *testing.T) {
 	}
 	if _, err := os.Stat(base); !os.IsNotExist(err) {
 		t.Errorf("plain .ingr should be removed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "go", "1.22", "nodes")); !os.IsNotExist(err) {
+		t.Errorf("nested collection dir should be removed: %v", err)
 	}
 
 	// The gzip variant decompresses to non-empty INGR text.

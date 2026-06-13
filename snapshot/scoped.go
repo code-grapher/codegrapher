@@ -103,13 +103,16 @@ func ExportScoped(stores map[scope.Scope]*store.Store, baseOutDir, ref string) (
 	return manifest, sizes, nil
 }
 
-// compressRecordset replaces scopeDir/{name}/{name}.ingr with .ingr.zst and
-// .ingr.gz variants and returns its size report.
+// compressRecordset reads the recordset the inGitDB exporter wrote at
+// scopeDir/{name}/{name}.ingr, writes flat scopeDir/{name}.ingr.{zst,gz}
+// variants, removes the inGitDB collection dir (the nested .ingr plus its
+// .collection wrapper — neither is served), and returns its size report.
 func compressRecordset(scopeDir, name, scopeKey string) (RecordsetSize, error) {
-	p := filepath.Join(scopeDir, name, name+".ingr")
-	data, err := os.ReadFile(p)
+	nestedDir := filepath.Join(scopeDir, name)
+	src := filepath.Join(nestedDir, name+".ingr")
+	data, err := os.ReadFile(src)
 	if err != nil {
-		return RecordsetSize{}, fmt.Errorf("snapshot: read %s: %w", p, err)
+		return RecordsetSize{}, fmt.Errorf("snapshot: read %s: %w", src, err)
 	}
 	zst, err := CompressZstd(data)
 	if err != nil {
@@ -119,13 +122,14 @@ func compressRecordset(scopeDir, name, scopeKey string) (RecordsetSize, error) {
 	if err != nil {
 		return RecordsetSize{}, err
 	}
-	if err := os.WriteFile(p+".zst", zst, 0o644); err != nil {
+	flat := filepath.Join(scopeDir, name+".ingr")
+	if err := os.WriteFile(flat+".zst", zst, 0o644); err != nil {
 		return RecordsetSize{}, err
 	}
-	if err := os.WriteFile(p+".gz", gz, 0o644); err != nil {
+	if err := os.WriteFile(flat+".gz", gz, 0o644); err != nil {
 		return RecordsetSize{}, err
 	}
-	if err := os.Remove(p); err != nil {
+	if err := os.RemoveAll(nestedDir); err != nil {
 		return RecordsetSize{}, err
 	}
 	return RecordsetSize{
