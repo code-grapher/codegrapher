@@ -39,7 +39,7 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 		currentSet[f] = true
 	}
 
-	tracked, err := idx.store.GetAllFiles()
+	tracked, err := idx.allTrackedFiles()
 	if err != nil {
 		result.DurationMs = now() - start
 		return result
@@ -58,7 +58,7 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 			exists = false
 		}
 		if !currentSet[rec.Path] || !exists {
-			if err := idx.store.DeleteFile(rec.Path); err == nil {
+			if idx.deleteFileEverywhere(rec.Path) {
 				result.FilesRemoved++
 			}
 		}
@@ -102,7 +102,7 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 	idx.syncChangedFiles(filesToIndex, opts, &result)
 
 	if result.FilesAdded > 0 || result.FilesModified > 0 || result.FilesRemoved > 0 {
-		idx.store.RunMaintenance()
+		idx.runMaintenanceAll()
 	}
 
 	result.DurationMs = now() - start
@@ -131,7 +131,7 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 	for _, raw := range changed {
 		filePath := filepath.ToSlash(strings.TrimPrefix(raw, "./"))
 		fullPath := filepath.Join(idx.root, filepath.FromSlash(filePath))
-		rec, err := idx.store.GetFileByPath(filePath)
+		rec, err := idx.fileRecord(filePath)
 		if err != nil {
 			continue
 		}
@@ -139,7 +139,7 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 		if _, statErr := os.Stat(fullPath); statErr != nil {
 			// Gone from disk — drop it from the index if tracked.
 			if rec != nil {
-				if err := idx.store.DeleteFile(filePath); err == nil {
+				if idx.deleteFileEverywhere(filePath) {
 					result.FilesRemoved++
 				}
 			}
@@ -169,7 +169,7 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 	idx.syncChangedFiles(filesToIndex, opts, &result)
 
 	if result.FilesAdded > 0 || result.FilesModified > 0 || result.FilesRemoved > 0 {
-		idx.store.RunMaintenance()
+		idx.runMaintenanceAll()
 	}
 
 	result.DurationMs = now() - start
@@ -193,7 +193,7 @@ func (idx *Indexer) syncChangedFiles(filesToIndex []string, opts Options, result
 	// (the original's `nodesUpdated += result.nodes.length`).
 	nodesUpdated := 0
 	for _, f := range filesToIndex {
-		nodes, err := idx.store.GetNodesByFile(f)
+		nodes, err := idx.nodesByFile(f)
 		if err == nil {
 			nodesUpdated += len(nodes)
 		}
@@ -214,7 +214,7 @@ func (idx *Indexer) GetChangedFiles() ChangedFiles {
 	if changes, ok := gitChangedFiles(idx.root); ok {
 		out := ChangedFiles{}
 		for _, filePath := range changes.deleted {
-			if rec, err := idx.store.GetFileByPath(filePath); err == nil && rec != nil {
+			if rec, err := idx.fileRecord(filePath); err == nil && rec != nil {
 				out.Removed = append(out.Removed, filePath)
 			}
 		}
@@ -227,7 +227,7 @@ func (idx *Indexer) GetChangedFiles() ChangedFiles {
 				continue
 			}
 			hash := HashContent(content)
-			rec, err := idx.store.GetFileByPath(filePath)
+			rec, err := idx.fileRecord(filePath)
 			if err != nil {
 				continue
 			}
@@ -246,7 +246,7 @@ func (idx *Indexer) GetChangedFiles() ChangedFiles {
 	for _, f := range currentFiles {
 		currentSet[f] = true
 	}
-	tracked, err := idx.store.GetAllFiles()
+	tracked, err := idx.allTrackedFiles()
 	if err != nil {
 		return ChangedFiles{}
 	}
@@ -274,6 +274,71 @@ func (idx *Indexer) GetChangedFiles() ChangedFiles {
 		}
 	}
 	return out
+}
+
+// --- multi-scope fan-out helpers ---------------------------------------------
+//
+// A file belongs to exactly one scope, so these read across every scope store
+// and concatenate; lookups return the first scope that has the path.
+
+// allTrackedFiles returns the union of tracked files across all scope stores.
+func (idx *Indexer) allTrackedFiles() ([]model.FileRecord, error) {
+	var all []model.FileRecord
+	for _, s := range idx.Stores() {
+		files, err := s.GetAllFiles()
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, files...)
+	}
+	return all, nil
+}
+
+// fileRecord returns the record for path from whichever scope store has it, or
+// (nil, nil) when no scope tracks it.
+func (idx *Indexer) fileRecord(path string) (*model.FileRecord, error) {
+	for _, s := range idx.Stores() {
+		rec, err := s.GetFileByPath(path)
+		if err != nil {
+			return nil, err
+		}
+		if rec != nil {
+			return rec, nil
+		}
+	}
+	return nil, nil
+}
+
+// deleteFileEverywhere removes path from every scope store that tracks it,
+// reporting whether any deletion succeeded.
+func (idx *Indexer) deleteFileEverywhere(path string) bool {
+	deleted := false
+	for _, s := range idx.Stores() {
+		if err := s.DeleteFile(path); err == nil {
+			deleted = true
+		}
+	}
+	return deleted
+}
+
+// nodesByFile returns the nodes recorded for path across all scope stores.
+func (idx *Indexer) nodesByFile(path string) ([]model.Node, error) {
+	var all []model.Node
+	for _, s := range idx.Stores() {
+		nodes, err := s.GetNodesByFile(path)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, nodes...)
+	}
+	return all, nil
+}
+
+// runMaintenanceAll runs store maintenance on every scope store.
+func (idx *Indexer) runMaintenanceAll() {
+	for _, s := range idx.Stores() {
+		s.RunMaintenance()
+	}
 }
 
 // gitChanges classifies `git status --porcelain` output.

@@ -54,8 +54,13 @@ func indexFixture(t *testing.T, fixturePath string) (tmpDir string, dbPath strin
 	if err != nil {
 		t.Fatalf("indexer.Init: %v", err)
 	}
-	dbPath = indexer.DatabasePath(tmpDir)
-	return tmpDir, dbPath
+	// Init writes per-scope databases; single-language fixtures produce exactly
+	// one. Return it for the legacy single-DB Export round-trip tests.
+	matches, err := filepath.Glob(filepath.Join(indexer.GetCodeGraphDir(tmpDir), "codegraph-*.db"))
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("expected exactly one scope db, got %v (err %v)", matches, err)
+	}
+	return tmpDir, matches[0]
 }
 
 // TestDeterminism verifies that two exports of the same index are byte-identical.

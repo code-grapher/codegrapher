@@ -61,21 +61,29 @@ func GetCodeGraphDir(projectRoot string) string {
 	return filepath.Join(projectRoot, CodeGraphDirName())
 }
 
-// DatabasePath returns the path of the index database for a project.
+// DatabasePath returns the legacy single-database path for a project. The index
+// is now partitioned into per-scope databases (see ScopedDatabasePath); this
+// helper remains only for the `import` command pending scoped-import support.
 func DatabasePath(projectRoot string) string {
 	return filepath.Join(GetCodeGraphDir(projectRoot), "codegraph.db")
 }
 
-// IsInitialized reports whether a project has been initialized: both the
-// .codegraph/ directory AND codegraph.db must exist.
+// hasScopeDB reports whether dir contains at least one per-scope database
+// (codegraph-{lang}-{version}.db).
+func hasScopeDB(dir string) bool {
+	matches, err := filepath.Glob(filepath.Join(dir, dbPrefix+"*"+dbSuffix))
+	return err == nil && len(matches) > 0
+}
+
+// IsInitialized reports whether a project has been initialized: the .codegraph/
+// directory exists AND it holds at least one per-scope database.
 func IsInitialized(projectRoot string) bool {
 	dir := GetCodeGraphDir(projectRoot)
 	fi, err := os.Stat(dir)
 	if err != nil || !fi.IsDir() {
 		return false
 	}
-	_, err = os.Stat(filepath.Join(dir, "codegraph.db"))
-	return err == nil
+	return hasScopeDB(dir)
 }
 
 // FindNearestCodeGraphRoot walks up from startPath to find the nearest
@@ -108,11 +116,10 @@ const dataDirGitignore = `# CodeGraph data files — local to each machine, not 
 `
 
 // CreateDirectory creates the .codegraph directory structure. It errors only
-// when codegraph.db already exists (the directory alone is fine).
+// when a per-scope database already exists (the directory alone is fine).
 func CreateDirectory(projectRoot string) error {
 	dir := GetCodeGraphDir(projectRoot)
-	dbPath := filepath.Join(dir, "codegraph.db")
-	if _, err := os.Stat(dbPath); err == nil {
+	if hasScopeDB(dir) {
 		return fmt.Errorf("CodeGraph already initialized in %s", projectRoot)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/specscore/codegrapher/internal/extract"
 	"github.com/specscore/codegrapher/model"
 	"github.com/specscore/codegrapher/resolve"
+	"github.com/specscore/codegrapher/scope"
 	"github.com/specscore/codegrapher/store"
 )
 
@@ -32,17 +33,35 @@ func Init(projectRoot string, opts Options) (*Indexer, IndexResult, error) {
 	if err := CreateDirectory(root); err != nil {
 		return nil, IndexResult{}, err
 	}
-	storeOpts := []store.Option{}
-	if opts.Clock != nil {
-		storeOpts = append(storeOpts, store.WithNowFunc(opts.Clock))
-	}
-	s, err := store.Initialize(DatabasePath(root), storeOpts...)
+	reg, err := OpenRegistry(root, storeOptsFrom(opts)...)
 	if err != nil {
 		return nil, IndexResult{}, err
 	}
-	idx := newIndexer(root, s)
+	idx := newIndexer(root, reg)
 	result := idx.IndexAll(opts)
 	return idx, result, nil
+}
+
+// scopeStoreForFile returns the scope store a project-relative file belongs to,
+// creating the scope database on first use.
+func (idx *Indexer) scopeStoreForFile(relPath string, lang model.Language) (*store.Store, error) {
+	ver := scope.DetectVersion(idx.root, filepath.Join(idx.root, relPath), lang)
+	return idx.reg.Store(scope.Scope{Language: lang, Version: ver})
+}
+
+// aggregateStats sums node/edge/file counts across every scope store.
+func (idx *Indexer) aggregateStats() (store.GraphStats, error) {
+	var agg store.GraphStats
+	for _, s := range idx.Stores() {
+		st, err := s.GetStats()
+		if err != nil {
+			return store.GraphStats{}, err
+		}
+		agg.NodeCount += st.NodeCount
+		agg.EdgeCount += st.EdgeCount
+		agg.FileCount += st.FileCount
+	}
+	return agg, nil
 }
 
 // IndexAll indexes every source file in the project. It holds the in-process
@@ -67,7 +86,7 @@ func (idx *Indexer) IndexAll(opts Options) IndexResult {
 	start := now()
 	result := IndexResult{}
 
-	before, err := idx.store.GetStats()
+	before, err := idx.aggregateStats()
 	if err != nil {
 		result.Errors = append(result.Errors, model.ExtractionError{
 			Message: err.Error(), Severity: "error",
@@ -92,15 +111,16 @@ func (idx *Indexer) IndexAll(opts Options) IndexResult {
 
 	// Phase 4: maintenance + metadata stamp (advisory — never fails a run).
 	if result.Success && result.FilesIndexed > 0 {
-		idx.store.RunMaintenance()
+		for _, s := range idx.Stores() {
+			s.RunMaintenance()
+			_ = s.SetMetadata("indexed_with_version", PackageVersion)
+			_ = s.SetMetadata("indexed_with_extraction_version", strconv.Itoa(ExtractionVersion))
+		}
 
-		if after, err := idx.store.GetStats(); err == nil {
+		if after, err := idx.aggregateStats(); err == nil {
 			result.NodesCreated = after.NodeCount - before.NodeCount
 			result.EdgesCreated = after.EdgeCount - before.EdgeCount
 		}
-
-		_ = idx.store.SetMetadata("indexed_with_version", PackageVersion)
-		_ = idx.store.SetMetadata("indexed_with_extraction_version", strconv.Itoa(ExtractionVersion))
 	}
 
 	result.DurationMs = now() - start
@@ -109,19 +129,28 @@ func (idx *Indexer) IndexAll(opts Options) IndexResult {
 
 // resolveAll runs the full resolution pass with progress reporting.
 func (idx *Indexer) resolveAll(opts Options, result *IndexResult) {
-	total, err := idx.store.GetUnresolvedReferencesCount()
-	if err != nil {
-		result.Errors = append(result.Errors, model.ExtractionError{
-			Message: err.Error(), Severity: "error",
-		})
-		return
+	stores := idx.Stores()
+	total := 0
+	for _, s := range stores {
+		n, err := s.GetUnresolvedReferencesCount()
+		if err != nil {
+			result.Errors = append(result.Errors, model.ExtractionError{
+				Message: err.Error(), Severity: "error",
+			})
+			return
+		}
+		total += n
 	}
 	opts.progress(IndexProgress{Phase: PhaseResolving, Current: 0, Total: total})
-	if _, err := resolve.Resolve(idx.store, idx.root); err != nil {
-		result.Errors = append(result.Errors, model.ExtractionError{
-			Message: err.Error(), Severity: "error",
-		})
-		return
+	// Each scope resolves independently; cross-language references stay
+	// unresolved (their targets live in another scope's database).
+	for _, s := range stores {
+		if _, err := resolve.Resolve(s, idx.root); err != nil {
+			result.Errors = append(result.Errors, model.ExtractionError{
+				Message: err.Error(), Severity: "error",
+			})
+			return
+		}
 	}
 	opts.progress(IndexProgress{Phase: PhaseResolving, Current: total, Total: total})
 }
@@ -195,13 +224,17 @@ func (idx *Indexer) extractAndStore(files []string, opts Options, result *IndexR
 
 			if len(job.result.Nodes) > 0 || len(job.result.Errors) == 0 {
 				lang := extract.DetectLanguage(job.path)
-				if err := storeExtractionResult(
-					idx.store, job.path, job.content, lang,
-					job.size, job.mtimeMs, job.result, now,
-				); err != nil {
+				s, serr := idx.scopeStoreForFile(job.path, lang)
+				if serr == nil {
+					serr = storeExtractionResult(
+						s, job.path, job.content, lang,
+						job.size, job.mtimeMs, job.result, now,
+					)
+				}
+				if serr != nil {
 					result.FilesErrored++
 					result.Errors = append(result.Errors, model.ExtractionError{
-						Message:  err.Error(),
+						Message:  serr.Error(),
 						FilePath: job.path,
 						Severity: "error",
 						Code:     "store_error",

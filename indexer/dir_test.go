@@ -55,23 +55,29 @@ func TestIsCodeGraphDataDir(t *testing.T) {
 	}
 }
 
+// scopeDBFile returns a representative per-scope database path under dir's
+// .codegraph directory, used to simulate an initialized project in tests.
+func scopeDBFile(dir string) string {
+	return filepath.Join(GetCodeGraphDir(dir), "codegraph-go-1.22.db")
+}
+
 func TestIsInitialized(t *testing.T) {
 	dir := t.TempDir()
 	if IsInitialized(dir) {
 		t.Fatal("empty dir reported initialized")
 	}
-	// .codegraph alone is not enough — codegraph.db must exist too.
+	// .codegraph alone is not enough — a per-scope db must exist too.
 	if err := os.MkdirAll(GetCodeGraphDir(dir), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if IsInitialized(dir) {
 		t.Fatal(".codegraph without db reported initialized")
 	}
-	if err := os.WriteFile(DatabasePath(dir), nil, 0o644); err != nil {
+	if err := os.WriteFile(scopeDBFile(dir), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if !IsInitialized(dir) {
-		t.Fatal(".codegraph with db not reported initialized")
+		t.Fatal(".codegraph with scope db not reported initialized")
 	}
 }
 
@@ -87,7 +93,7 @@ func TestFindNearestCodeGraphRoot(t *testing.T) {
 	if err := os.MkdirAll(GetCodeGraphDir(root), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(DatabasePath(root), nil, 0o644); err != nil {
+	if err := os.WriteFile(scopeDBFile(root), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got := FindNearestCodeGraphRoot(nested)
@@ -118,8 +124,8 @@ func TestCreateAndRemoveDirectory(t *testing.T) {
 		t.Fatalf("CreateDirectory (second): %v", err)
 	}
 
-	// Errors once the db exists.
-	if err := os.WriteFile(DatabasePath(dir), nil, 0o644); err != nil {
+	// Errors once a per-scope db exists.
+	if err := os.WriteFile(scopeDBFile(dir), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := CreateDirectory(dir); err == nil {

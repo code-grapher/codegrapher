@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -108,13 +109,22 @@ func (o Options) progress(p IndexProgress) {
 // Indexer is an open codegraph project: the seam embedding consumers use to
 // build and maintain the index. Construct with Init or Open.
 type Indexer struct {
-	root  string
-	store *store.Store
-	lock  *lock.FileLock
+	root string
+	reg  *Registry
+	lock *lock.FileLock
 
 	// mu serializes in-process indexing operations (the indexMutex in
 	// src/index.ts); the file lock serializes across processes.
 	mu sync.Mutex
+}
+
+// storeOptsFrom builds store options from indexer Options.
+func storeOptsFrom(opts Options) []store.Option {
+	var storeOpts []store.Option
+	if opts.Clock != nil {
+		storeOpts = append(storeOpts, store.WithNowFunc(opts.Clock))
+	}
+	return storeOpts
 }
 
 // Open opens an existing CodeGraph project.
@@ -126,35 +136,65 @@ func Open(projectRoot string, opts Options) (*Indexer, error) {
 	if !IsInitialized(root) {
 		return nil, fmt.Errorf("CodeGraph not initialized in %s. Run Init first", root)
 	}
-	storeOpts := []store.Option{}
-	if opts.Clock != nil {
-		storeOpts = append(storeOpts, store.WithNowFunc(opts.Clock))
-	}
-	s, err := store.Open(DatabasePath(root), storeOpts...)
+	reg, err := OpenRegistry(root, storeOptsFrom(opts)...)
 	if err != nil {
 		return nil, err
 	}
-	return newIndexer(root, s), nil
+	return newIndexer(root, reg), nil
 }
 
-func newIndexer(root string, s *store.Store) *Indexer {
+func newIndexer(root string, reg *Registry) *Indexer {
 	return &Indexer{
-		root:  root,
-		store: s,
-		lock:  lock.New(filepath.Join(GetCodeGraphDir(root), "codegraph.lock")),
+		root: root,
+		reg:  reg,
+		lock: lock.New(filepath.Join(GetCodeGraphDir(root), "codegraph.lock")),
 	}
 }
 
 // ProjectRoot returns the project root directory.
 func (idx *Indexer) ProjectRoot() string { return idx.root }
 
-// Store exposes the underlying store for query consumers.
-func (idx *Indexer) Store() *store.Store { return idx.store }
+// Registry exposes the per-scope store registry.
+func (idx *Indexer) Registry() *Registry { return idx.reg }
 
-// Close releases the file lock (if held) and closes the database.
+// Stores returns every open scope store, ordered deterministically by scope
+// key. Query consumers fan out across these and merge.
+func (idx *Indexer) Stores() []*store.Store {
+	scopes := idx.reg.Scopes()
+	sort.Slice(scopes, func(i, j int) bool { return scopes[i].Key() < scopes[j].Key() })
+	out := make([]*store.Store, 0, len(scopes))
+	stores := idx.reg.Stores()
+	for _, sc := range scopes {
+		out = append(out, stores[sc])
+	}
+	return out
+}
+
+// Store returns the primary (lexicographically-first) scope store. It is a
+// convenience for single-scope projects and tests; multi-scope consumers must
+// use Stores.
+func (idx *Indexer) Store() *store.Store {
+	all := idx.Stores()
+	if len(all) == 0 {
+		return nil
+	}
+	return all[0]
+}
+
+// ClearAll clears every scope store.
+func (idx *Indexer) ClearAll() error {
+	for _, s := range idx.Stores() {
+		if err := s.Clear(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Close releases the file lock (if held) and closes every scope store.
 func (idx *Indexer) Close() error {
 	idx.lock.Release()
-	return idx.store.Close()
+	return idx.reg.Close()
 }
 
 // Uninit closes the index and removes the project's .codegraph directory.
