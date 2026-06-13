@@ -44,7 +44,7 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 	switch lang {
 	case model.LangGo, model.LangGoMod:
 		ver = detectGoVersion(projectRoot, filePath)
-	case model.LangTypeScript, model.LangJavaScript, model.LangTSX, model.LangJSX:
+	case model.LangTypeScript, model.LangJavaScript, model.LangTSX, model.LangJSX, model.LangPackageJSON:
 		ver = detectNodeVersion(projectRoot, filePath)
 	}
 	return majorVersion(ver)
