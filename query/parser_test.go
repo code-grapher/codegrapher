@@ -56,6 +56,13 @@ func TestParseQuery(t *testing.T) {
 		}
 	})
 
+	t.Run("recognizes language:package.json as a language filter", func(t *testing.T) {
+		r := query.ParseQuery("language:package.json foo")
+		if len(r.Languages) != 1 || string(r.Languages[0]) != "package.json" {
+			t.Errorf("Languages = %v, want [package.json]", r.Languages)
+		}
+	})
+
 	t.Run("handles multiple kind: filters as an OR set", func(t *testing.T) {
 		r := query.ParseQuery("kind:function kind:method auth")
 		if len(r.Kinds) != 2 {

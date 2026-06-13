@@ -41,7 +41,10 @@ Go and TypeScript/JavaScript. Go files are parsed by the standard library
 `go/parser`; TypeScript/JavaScript are parsed via
 [gotreesitter](https://github.com/odvcencio/gotreesitter) (pure Go, no CGO).
 `go.mod` files are also indexed, producing module and dependency nodes with
-require/replace/exclude relationships.
+require/replace/exclude relationships. `package.json` files are likewise
+indexed, producing module and dependency nodes across `dependencies`,
+`devDependencies`, `peerDependencies`, and `optionalDependencies`, stored in a
+dedicated node scope merged into JS/TS queries.
 
 ## Build
 
