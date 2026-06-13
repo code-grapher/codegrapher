@@ -16,6 +16,9 @@ import (
 // properties) return their own Language constant so the indexer records a
 // file row with zero nodes, matching the original's behaviour.
 func DetectLanguage(filePath string) model.Language {
+	if filepath.Base(filePath) == "go.mod" {
+		return model.LangGoMod
+	}
 	ext := strings.ToLower(filepath.Ext(filePath))
 	switch ext {
 	case ".go":
