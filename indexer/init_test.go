@@ -220,3 +220,30 @@ func TestInitProgressCallback(t *testing.T) {
 		}
 	}
 }
+
+func TestStoresFilteredMergesNodeScope(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// package.json (no typescript dep) -> node-v0; a .ts file -> typescript-v0.
+	write("package.json", `{"name":"demo","dependencies":{"left-pad":"^1.3.0"}}`)
+	write("main.ts", "export const x = 1;\n")
+
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Requesting only the typescript scope must auto-include node-v0 (the merge).
+	got := idx.StoresFiltered([]string{"typescript-v0"})
+	if len(got) != 2 {
+		t.Fatalf("typescript-v0 filter returned %d stores, want 2 (typescript-v0 + node-v0)", len(got))
+	}
+	// Requesting node alone returns just node.
+	if n := len(idx.StoresFiltered([]string{"node-v0"})); n != 1 {
+		t.Errorf("node-v0 filter returned %d stores, want 1", n)
+	}
+}
