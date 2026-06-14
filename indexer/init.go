@@ -173,6 +173,7 @@ func (idx *Indexer) resolveAll(opts Options, result *IndexResult) {
 type extractJob struct {
 	path     string
 	content  []byte
+	lang     model.Language
 	size     int64
 	mtimeMs  int64
 	result   model.ExtractionResult
@@ -237,7 +238,7 @@ func (idx *Indexer) extractAndStore(files []string, opts Options, result *IndexR
 			}
 
 			if len(job.result.Nodes) > 0 || len(job.result.Errors) == 0 {
-				lang := extract.DetectLanguage(job.path)
+				lang := job.lang
 				s, serr := idx.scopeStoreForFile(job.path, lang)
 				if serr == nil {
 					serr = storeExtractionResult(
@@ -302,7 +303,8 @@ func extractOne(rootDir, relPath string) extractJob {
 	}
 	job.content = content
 
-	lang := extract.DetectLanguage(relPath)
+	lang := extract.DetectLanguageContent(relPath, content)
+	job.lang = lang
 	res, err := extract.ExtractFile(relPath, content, lang)
 	if err != nil {
 		res.Errors = append(res.Errors, model.ExtractionError{

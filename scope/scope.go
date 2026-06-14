@@ -74,6 +74,10 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 		// PHP scope uses the fallback version this pass: no composer.json
 		// parsing yet. majorVersion("") → fallbackVersion ("v0").
 		ver = ""
+	case model.LangC, model.LangCPP:
+		// C / C++ scope uses the fallback version this pass: no build-system
+		// (CMake/Make/compile_commands) parsing. majorVersion("") → "v0".
+		ver = ""
 	}
 	return majorVersion(ver)
 }

@@ -39,6 +39,8 @@ const (
 	LangRust
 	// LangPHP selects the tree-sitter `php` grammar.
 	LangPHP
+	// LangC selects the tree-sitter `c` grammar.
+	LangC
 )
 
 // Point is a (row, column) position in source text (0-indexed).
@@ -163,6 +165,8 @@ func NewParser(lang Language) (*Parser, error) {
 		return &Parser{lang: grammars.RustLanguage()}, nil
 	case LangPHP:
 		return &Parser{lang: grammars.PhpLanguage()}, nil
+	case LangC:
+		return &Parser{lang: grammars.CLanguage()}, nil
 	default:
 		return nil, fmt.Errorf("tsparse: unknown language %d", lang)
 	}

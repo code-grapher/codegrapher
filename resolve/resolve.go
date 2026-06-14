@@ -127,6 +127,8 @@ func resolveRef(
 		return resolveRustRef(ref, s, pyVarTypeCache)
 	case model.LangPHP:
 		return resolvePHPRef(ref, s, pyVarTypeCache)
+	case model.LangC:
+		return resolveCRef(ref, s)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -1936,6 +1938,160 @@ func resolveGoBareName(ref model.UnresolvedReference, s *store.Store, name strin
 // resolveGenericRef performs a simple name-based lookup for non-Go refs.
 // Handles dotted calls like "cache.warm" by finding methods named "warm" in
 // same-language same-file context, mirroring upstream's matchMethodCall strategy.
+// ──────────────────────────────────────────────────────────────────────────────
+// C resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// cBuiltins is the set of C standard symbols (functions, macros, type-ish names)
+// that never resolve to a user node, so references to them produce no edge.
+var cBuiltins = map[string]bool{
+	// Common libc functions.
+	"printf": true, "fprintf": true, "sprintf": true, "snprintf": true,
+	"scanf": true, "sscanf": true, "fscanf": true, "puts": true, "putchar": true,
+	"getchar": true, "fgets": true, "fputs": true, "fopen": true, "fclose": true,
+	"fread": true, "fwrite": true, "fseek": true, "ftell": true, "rewind": true,
+	"malloc": true, "calloc": true, "realloc": true, "free": true,
+	"memcpy": true, "memmove": true, "memset": true, "memcmp": true,
+	"strcpy": true, "strncpy": true, "strcat": true, "strncat": true,
+	"strcmp": true, "strncmp": true, "strlen": true, "strchr": true,
+	"strstr": true, "strdup": true, "strtok": true,
+	"abort": true, "exit": true, "atexit": true, "system": true,
+	"atoi": true, "atol": true, "atof": true, "strtol": true, "strtod": true,
+	"abs": true, "labs": true, "rand": true, "srand": true,
+	"qsort": true, "bsearch": true, "assert": true, "perror": true,
+	// Math.
+	"sqrt": true, "pow": true, "sin": true, "cos": true, "tan": true,
+	"floor": true, "ceil": true, "fabs": true, "round": true, "log": true,
+	"exp": true, "fmod": true,
+	// Macros / constants / keywords that look like names.
+	"NULL": true, "sizeof": true, "offsetof": true, "true": true, "false": true,
+	"EOF": true, "stdin": true, "stdout": true, "stderr": true,
+	"errno": true, "va_start": true, "va_arg": true, "va_end": true,
+}
+
+// resolveCRef resolves a C unresolved reference. C has a single global
+// namespace, so resolution is name-based against the global symbol table, with
+// two specializations:
+//   - `imports` (#include): resolve to the in-repo header file node, matching
+//     the included path relative to the including file's directory (falling back
+//     to a unique basename match), then to the local import node.
+//   - `calls`/`references`: skip C builtins, then resolve by name with a
+//     same-file/dir preference. Because the resolver searches the whole repo,
+//     a call to a function only declared (prototype) in an included header still
+//     resolves to its definition anywhere in-repo (through-include).
+func resolveCRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	if ref.ReferenceKind == model.EdgeImports {
+		if edge := resolveCIncludeRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveCImportNodeRef(ref, s)
+	}
+
+	name := ref.ReferenceName
+	if !strings.Contains(name, ".") && cBuiltins[name] {
+		return nil
+	}
+
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangC {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		// Prefer real definitions: for a `calls` ref, a function_definition
+		// outranks a bare prototype, but both share a name/ID only when on the
+		// same line, so name-based selection with proximity is sufficient here.
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	target := pickBestNode(defs, ref.FilePath)
+	if target == nil {
+		return nil
+	}
+	kind := ref.ReferenceKind
+	if kind == model.EdgeCalls &&
+		(target.Kind == model.KindStruct || target.Kind == model.KindClass) {
+		kind = model.EdgeInstantiates
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   kind,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolveCIncludeRef resolves a `#include "x.h"` ref to the in-repo header file
+// node. It first tries the path relative to the including file's directory, then
+// a unique basename match across all file nodes named like the header.
+func resolveCIncludeRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	header := ref.ReferenceName
+
+	// 1. Relative to the including file's directory (handles "../foo.h").
+	relDir := filepath.Dir(ref.FilePath)
+	candPath := filepath.ToSlash(filepath.Clean(filepath.Join(relDir, header)))
+	if n, err := s.GetNodeByID(model.FileNodeID(candPath)); err == nil && n != nil {
+		return cIncludeEdge(ref, n)
+	}
+
+	// 2. Unique basename match among file nodes (covers include-path headers).
+	base := filepath.Base(header)
+	byName, err := s.GetNodesByName(base)
+	if err != nil {
+		return nil
+	}
+	var matches []model.Node
+	for _, n := range byName {
+		if n.Kind == model.KindFile && n.Language == model.LangC {
+			matches = append(matches, n)
+		}
+	}
+	if len(matches) == 1 {
+		return cIncludeEdge(ref, &matches[0])
+	}
+	return nil
+}
+
+func cIncludeEdge(ref model.UnresolvedReference, target *model.Node) *model.Edge {
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   model.EdgeImports,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolveCImportNodeRef falls back to the local KindImport node for an include
+// whose header is not an in-repo file (e.g. system headers like <stdio.h>).
+func resolveCImportNodeRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	nodes, err := s.GetNodesByFile(ref.FilePath)
+	if err != nil {
+		return nil
+	}
+	for _, n := range nodes {
+		if n.Kind == model.KindImport && n.Name == ref.ReferenceName {
+			return &model.Edge{
+				Source: ref.FromNodeID,
+				Target: n.ID,
+				Kind:   model.EdgeImports,
+				Line:   ref.Line,
+				Column: ref.Column,
+			}
+		}
+	}
+	return nil
+}
+
 func resolveGenericRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
 	name := ref.ReferenceName
 

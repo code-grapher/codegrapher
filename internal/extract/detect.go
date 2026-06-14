@@ -48,6 +48,14 @@ func DetectLanguage(filePath string) model.Language {
 		return model.LangRust
 	case ".php":
 		return model.LangPHP
+	case ".c":
+		return model.LangC
+	// Path-only callers (scan filtering) treat .h as C for back-compat; the
+	// content-aware DetectLanguageContent sniffs .h for C++ markers.
+	case ".h":
+		return model.LangC
+	case ".hpp", ".hh", ".hxx":
+		return model.LangCPP
 	// File-level-only languages: tracked in the files table with zero
 	// symbol nodes, matching isFileLevelOnlyLanguage() in grammars.ts.
 	case ".yml", ".yaml":
@@ -55,6 +63,26 @@ func DetectLanguage(filePath string) model.Language {
 	default:
 		return model.LangUnknown
 	}
+}
+
+// cppHeaderMarkers matches C++-only constructs used to disambiguate a `.h`
+// header (which DetectLanguage defaults to C) as actually C++.
+var cppHeaderMarkers = regexp.MustCompile(`\bclass\b|\bnamespace\b|\btemplate\b|::|\bpublic:|\bprivate:|\bprotected:`)
+
+// DetectLanguageContent returns the model.Language for path, using content to
+// disambiguate ambiguous extensions. For unambiguous extensions it delegates to
+// the path-only DetectLanguage. For `.h` (which DetectLanguage defaults to C for
+// back-compat) it sniffs content for C++ markers and returns LangCPP when found,
+// else LangC. Callers that have the file content available (the indexer extract
+// path, the parity test) should prefer this over DetectLanguage.
+func DetectLanguageContent(path string, content []byte) model.Language {
+	if strings.ToLower(filepath.Ext(path)) == ".h" {
+		if cppHeaderMarkers.Match(content) {
+			return model.LangCPP
+		}
+		return model.LangC
+	}
+	return DetectLanguage(path)
 }
 
 // IsFileLevelOnly reports whether lang is tracked at the file-record level
