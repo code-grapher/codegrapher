@@ -47,6 +47,11 @@ type extractor struct {
 	// gotreesitter's ERROR root causes walkGo to visit the same AST node via
 	// multiple paths (direct child + inside ERROR subtree).
 	seenNodeIDs map[string]bool
+
+	// pyVarTypes maps a Python local variable name to the class name it was
+	// constructed from (localName = ClassName(...)). Populated during the
+	// Python walk; consumed in Phase 3 resolver. Per-file is fine.
+	pyVarTypes map[string]string
 }
 
 // ExtractFile parses content as lang, extracts a file node (and, eventually,
