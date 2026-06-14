@@ -31,6 +31,8 @@ const (
 	LangCSharp
 	// LangJava selects the tree-sitter `java` grammar.
 	LangJava
+	// LangRuby selects the tree-sitter `ruby` grammar.
+	LangRuby
 )
 
 // Point is a (row, column) position in source text (0-indexed).
@@ -147,6 +149,8 @@ func NewParser(lang Language) (*Parser, error) {
 		return &Parser{lang: grammars.CSharpLanguage()}, nil
 	case LangJava:
 		return &Parser{lang: grammars.JavaLanguage()}, nil
+	case LangRuby:
+		return &Parser{lang: grammars.RubyLanguage()}, nil
 	default:
 		return nil, fmt.Errorf("tsparse: unknown language %d", lang)
 	}

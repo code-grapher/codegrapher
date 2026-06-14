@@ -84,6 +84,7 @@ const (
 	LangPython      Language = "python"
 	LangCSharp      Language = "csharp"
 	LangJava        Language = "java"
+	LangRuby        Language = "ruby"
 	LangGoMod       Language = "go.mod"
 	LangPackageJSON Language = "package.json"
 	LangNode        Language = "node"
