@@ -118,7 +118,9 @@ func resolveRef(
 	case model.LangCSharp:
 		return resolveCSharpRef(ref, s)
 	case model.LangJava:
-		return resolveJVMRef(ref, s, jvmCtxCache)
+		return resolveJVMRef(ref, model.LangJava, s, jvmCtxCache)
+	case model.LangKotlin:
+		return resolveKotlinRef(ref, s, jvmCtxCache)
 	default:
 		return resolveGenericRef(ref, s)
 	}

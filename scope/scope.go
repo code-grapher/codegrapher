@@ -58,6 +58,10 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 		// Java scope uses the fallback version this pass: no pom.xml /
 		// build.gradle parsing yet. majorVersion("") → fallbackVersion ("v0").
 		ver = ""
+	case model.LangKotlin:
+		// Kotlin scope uses the fallback version this pass: no build.gradle(.kts)
+		// parsing yet. majorVersion("") → fallbackVersion ("v0").
+		ver = ""
 	}
 	return majorVersion(ver)
 }

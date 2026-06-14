@@ -21,31 +21,44 @@ import (
 // jvmFileContext is the per-file import/package resolution context. Built once
 // per file (cached) so resolution is order-independent and deterministic.
 type jvmFileContext struct {
+	lang         model.Language      // the JVM language of this file (java/kotlin)
 	pkg          string              // declared package (namespace node name), "" if none
-	explicit     map[string]struct{} // simple type names brought in by `import a.b.C;`
-	wildcardPkgs map[string]struct{} // packages brought in by `import a.b.*;`
+	explicit     map[string]struct{} // simple type names brought in by `import a.b.C`
+	wildcardPkgs map[string]struct{} // packages brought in by `import a.b.*`
 }
 
-// implicitJVMPackages are wildcard packages every Java file imports implicitly.
-var implicitJVMPackages = map[string]struct{}{
-	"java.lang": {},
+// implicitJVMPackages maps a JVM language to the packages every file imports
+// implicitly (java.lang for Java; the Kotlin default-import roots for Kotlin).
+var implicitJVMPackages = map[model.Language]map[string]struct{}{
+	model.LangJava: {
+		"java.lang": {},
+	},
+	model.LangKotlin: {
+		"kotlin":             {},
+		"kotlin.collections": {},
+		"kotlin.io":          {},
+		"kotlin.text":        {},
+		"java.lang":          {},
+	},
 }
 
-// getJVMContext returns the (cached) resolution context for a file.
-func getJVMContext(filePath string, s *store.Store, cache map[string]*jvmFileContext) *jvmFileContext {
+// getJVMContext returns the (cached) resolution context for a file. lang is the
+// JVM language to filter the file's nodes by (java/kotlin).
+func getJVMContext(filePath string, lang model.Language, s *store.Store, cache map[string]*jvmFileContext) *jvmFileContext {
 	if ctx, ok := cache[filePath]; ok {
 		return ctx
 	}
-	ctx := buildJVMContext(filePath, s)
+	ctx := buildJVMContext(filePath, lang, s)
 	cache[filePath] = ctx
 	return ctx
 }
 
 // buildJVMContext reads a file's namespace + import nodes and derives its package
 // name, explicit-import set, and wildcard-package set. Import FQNs come from the
-// import node's signature ("import a.b.C;" / "import a.b.*;").
-func buildJVMContext(filePath string, s *store.Store) *jvmFileContext {
+// import node's signature ("import a.b.C" / "import a.b.*").
+func buildJVMContext(filePath string, lang model.Language, s *store.Store) *jvmFileContext {
 	ctx := &jvmFileContext{
+		lang:         lang,
 		explicit:     make(map[string]struct{}),
 		wildcardPkgs: make(map[string]struct{}),
 	}
@@ -55,7 +68,7 @@ func buildJVMContext(filePath string, s *store.Store) *jvmFileContext {
 	}
 	for i := range nodes {
 		n := &nodes[i]
-		if n.Language != model.LangJava {
+		if n.Language != lang {
 			continue
 		}
 		switch n.Kind {
@@ -101,13 +114,14 @@ func jvmSimpleName(fq string) string {
 
 // jvmPackageOf returns the package (namespace) declared in the file that node n
 // belongs to, or "" when none. Cached per file via the same context cache.
-func jvmPackageOf(n *model.Node, s *store.Store, cache map[string]*jvmFileContext) string {
-	return getJVMContext(n.FilePath, s, cache).pkg
+func jvmPackageOf(n *model.Node, lang model.Language, s *store.Store, cache map[string]*jvmFileContext) string {
+	return getJVMContext(n.FilePath, lang, s, cache).pkg
 }
 
 // resolveJVMRef resolves one Java unresolved reference into an edge using static,
-// Go-like resolution. Shared with Kotlin (sub-project 4).
-func resolveJVMRef(ref model.UnresolvedReference, s *store.Store, cache map[string]*jvmFileContext) *model.Edge {
+// Go-like resolution. Shared with Kotlin (sub-project 4) — lang selects which
+// language's symbol table the resolver matches against.
+func resolveJVMRef(ref model.UnresolvedReference, lang model.Language, s *store.Store, cache map[string]*jvmFileContext) *model.Edge {
 	name := ref.ReferenceName
 
 	// Dotted calls "recv.method": resolve by the method name, conservatively.
@@ -117,14 +131,14 @@ func resolveJVMRef(ref model.UnresolvedReference, s *store.Store, cache map[stri
 			if attr == "" || strings.ContainsAny(attr, "./") {
 				return nil
 			}
-			return resolveJVMMethodByName(ref, s, attr)
+			return resolveJVMMethodByName(ref, lang, s, attr)
 		}
 	}
 
 	// `imports` refs: target the real definition in the source package when one
 	// exists; otherwise fall back to the local import node (generic behavior).
 	if ref.ReferenceKind == model.EdgeImports {
-		if edge := resolveJVMImportsRef(ref, s, cache); edge != nil {
+		if edge := resolveJVMImportsRef(ref, lang, s, cache); edge != nil {
 			return edge
 		}
 		return resolveGenericRef(ref, s)
@@ -133,7 +147,7 @@ func resolveJVMRef(ref model.UnresolvedReference, s *store.Store, cache map[stri
 	// Type-bearing refs (calls / instantiates / extends / implements / references):
 	// resolve a bare type/symbol name with package preference, through imports.
 	if !strings.Contains(name, ".") {
-		if target := resolveJVMTypeByName(name, ref.FilePath, s, cache); target != nil {
+		if target := resolveJVMTypeByName(name, ref.FilePath, lang, s, cache); target != nil {
 			kind := ref.ReferenceKind
 			if kind == model.EdgeCalls && (target.Kind == model.KindClass || target.Kind == model.KindStruct) {
 				kind = model.EdgeInstantiates
@@ -150,7 +164,7 @@ func resolveJVMRef(ref model.UnresolvedReference, s *store.Store, cache map[stri
 
 	// Bare calls that didn't resolve as a type: try a same-name method/function.
 	if ref.ReferenceKind == model.EdgeCalls && !strings.Contains(name, ".") {
-		return resolveJVMMethodByName(ref, s, name)
+		return resolveJVMMethodByName(ref, lang, s, name)
 	}
 
 	return nil
@@ -159,8 +173,8 @@ func resolveJVMRef(ref model.UnresolvedReference, s *store.Store, cache map[stri
 // resolveJVMImportsRef resolves an `imports` ref to the real definition (class /
 // interface / enum) named by the import when one exists, rather than the local
 // import shim node. Returns nil when no in-repo definition exists.
-func resolveJVMImportsRef(ref model.UnresolvedReference, s *store.Store, cache map[string]*jvmFileContext) *model.Edge {
-	target := resolveJVMTypeByName(ref.ReferenceName, ref.FilePath, s, cache)
+func resolveJVMImportsRef(ref model.UnresolvedReference, lang model.Language, s *store.Store, cache map[string]*jvmFileContext) *model.Edge {
+	target := resolveJVMTypeByName(ref.ReferenceName, ref.FilePath, lang, s, cache)
 	if target == nil {
 		return nil
 	}
@@ -182,7 +196,7 @@ func resolveJVMImportsRef(ref model.UnresolvedReference, s *store.Store, cache m
 // This is the JVM analogue of Go's import-map resolution and reuses the
 // "resolve through the local import node" pattern (an imported type's
 // constructor/call lands on the real cross-file definition).
-func resolveJVMTypeByName(name, refFilePath string, s *store.Store, cache map[string]*jvmFileContext) *model.Node {
+func resolveJVMTypeByName(name, refFilePath string, lang model.Language, s *store.Store, cache map[string]*jvmFileContext) *model.Node {
 	candidates, err := s.GetNodesByName(name)
 	if err != nil || len(candidates) == 0 {
 		return nil
@@ -191,7 +205,7 @@ func resolveJVMTypeByName(name, refFilePath string, s *store.Store, cache map[st
 	var defs []model.Node
 	for i := range candidates {
 		n := &candidates[i]
-		if n.Language != model.LangJava {
+		if n.Language != lang {
 			continue
 		}
 		if n.Kind == model.KindImport || n.Kind == model.KindFile {
@@ -203,12 +217,12 @@ func resolveJVMTypeByName(name, refFilePath string, s *store.Store, cache map[st
 		return nil
 	}
 
-	ctx := getJVMContext(refFilePath, s, cache)
+	ctx := getJVMContext(refFilePath, lang, s, cache)
 
 	var samePkg, imported, wildcard, other []model.Node
 	for i := range defs {
 		n := &defs[i]
-		pkg := jvmPackageOf(n, s, cache)
+		pkg := jvmPackageOf(n, lang, s, cache)
 		switch {
 		case ctx.pkg != "" && pkg == ctx.pkg:
 			samePkg = append(samePkg, *n)
@@ -245,14 +259,18 @@ func isWildcardImported(pkg string, ctx *jvmFileContext) bool {
 	if _, ok := ctx.wildcardPkgs[pkg]; ok {
 		return true
 	}
-	_, ok := implicitJVMPackages[pkg]
-	return ok
+	if implicit, ok := implicitJVMPackages[ctx.lang]; ok {
+		if _, ok := implicit[pkg]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveJVMMethodByName resolves a (dotted or bare) call to a method/function
 // named methodName, conservatively: a single same-language method/function match
 // resolves; ambiguity stays unresolved. No signature matching this pass.
-func resolveJVMMethodByName(ref model.UnresolvedReference, s *store.Store, methodName string) *model.Edge {
+func resolveJVMMethodByName(ref model.UnresolvedReference, lang model.Language, s *store.Store, methodName string) *model.Edge {
 	candidates, err := s.GetNodesByName(methodName)
 	if err != nil || len(candidates) == 0 {
 		return nil
@@ -260,7 +278,7 @@ func resolveJVMMethodByName(ref model.UnresolvedReference, s *store.Store, metho
 	var matches []model.Node
 	for i := range candidates {
 		n := &candidates[i]
-		if n.Language == model.LangJava && (n.Kind == model.KindMethod || n.Kind == model.KindFunction) {
+		if n.Language == lang && (n.Kind == model.KindMethod || n.Kind == model.KindFunction) {
 			matches = append(matches, *n)
 		}
 	}
