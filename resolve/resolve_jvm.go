@@ -40,6 +40,12 @@ var implicitJVMPackages = map[model.Language]map[string]struct{}{
 		"kotlin.text":        {},
 		"java.lang":          {},
 	},
+	model.LangScala: {
+		"scala":            {},
+		"scala.Predef":     {},
+		"scala.collection": {},
+		"java.lang":        {},
+	},
 }
 
 // getJVMContext returns the (cached) resolution context for a file. lang is the

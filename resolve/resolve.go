@@ -127,6 +127,8 @@ func resolveRef(
 		return resolveRustRef(ref, s, pyVarTypeCache)
 	case model.LangPHP:
 		return resolvePHPRef(ref, s, pyVarTypeCache)
+	case model.LangScala:
+		return resolveScalaRef(ref, s, jvmCtxCache)
 	default:
 		return resolveGenericRef(ref, s)
 	}

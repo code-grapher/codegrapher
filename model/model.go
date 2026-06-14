@@ -88,6 +88,7 @@ const (
 	LangRuby        Language = "ruby"
 	LangRust        Language = "rust"
 	LangPHP         Language = "php"
+	LangScala       Language = "scala"
 	LangGoMod       Language = "go.mod"
 	LangPackageJSON Language = "package.json"
 	LangNode        Language = "node"
