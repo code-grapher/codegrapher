@@ -157,8 +157,111 @@ func resolvePythonRef(
 		}
 	}
 
-	// Bare names and extends/imports/decorates: generic name resolution.
+	// `imports` refs: target the real definition in the source module when one
+	// exists; otherwise fall back to the local import node (generic behavior).
+	if ref.ReferenceKind == model.EdgeImports {
+		if edge := resolvePyImportsRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveGenericRef(ref, s)
+	}
+
+	// Bare names (calls / references): resolve through a local import node to the
+	// real cross-file definition when the best same-file candidate is an import.
+	if ref.ReferenceKind == model.EdgeCalls || ref.ReferenceKind == model.EdgeReferences {
+		if !strings.Contains(name, ".") {
+			if edge := resolvePyBareThroughImport(ref, s); edge != nil {
+				return edge
+			}
+		}
+	}
+
+	// extends/decorates and anything else: generic name resolution.
 	return resolveGenericRef(ref, s)
+}
+
+// resolvePyDefinitionByName returns the best real (non-import, non-file) Python
+// definition node named name, preferring same-file/same-dir, then any other
+// file. Returns nil when no such definition exists.
+func resolvePyDefinitionByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangPython {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolvePyBareThroughImport handles a bare-name call/reference whose best
+// same-file candidate is a local import node: it resolves THROUGH the import to
+// the real cross-file definition (mirrors how TS resolves import bindings to the
+// imported module's definition). Returns nil when the name has no real Python
+// definition or no local import shadow (so the generic path can handle it).
+func resolvePyBareThroughImport(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	// Only intervene when a local import node with this name exists; otherwise
+	// the generic resolver already does the right thing.
+	sameFile, err := s.GetNodesByFile(ref.FilePath)
+	if err != nil {
+		return nil
+	}
+	hasLocalImport := false
+	for i := range sameFile {
+		if sameFile[i].Kind == model.KindImport && sameFile[i].Name == ref.ReferenceName {
+			hasLocalImport = true
+			break
+		}
+	}
+	if !hasLocalImport {
+		return nil
+	}
+
+	target := resolvePyDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+
+	kind := ref.ReferenceKind
+	if kind == model.EdgeCalls && (target.Kind == model.KindClass || target.Kind == model.KindStruct) {
+		kind = model.EdgeInstantiates
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   kind,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolvePyImportsRef resolves an `imports` ref to the real definition (class /
+// function / method) in the source module when one exists, rather than to the
+// local import node in the importing file. Returns nil when no real cross-file
+// definition exists (e.g. whole-module imports like `import functools`), letting
+// the caller fall back to generic (import-node) resolution.
+func resolvePyImportsRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	target := resolvePyDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   model.EdgeImports,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
 }
 
 // resolvePyAttrOnClass resolves attr as a method/field contained by the class
