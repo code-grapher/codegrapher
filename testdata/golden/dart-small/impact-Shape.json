@@ -1,0 +1,68 @@
+{
+  "symbol": "Shape",
+  "depth": 2,
+  "nodeCount": 10,
+  "edgeCount": 9,
+  "affected": [
+    {
+      "name": "Base",
+      "kind": "class",
+      "filePath": "lib/shapes.dart",
+      "startLine": 13
+    },
+    {
+      "name": "Base",
+      "kind": "method",
+      "filePath": "lib/shapes.dart",
+      "startLine": 16
+    },
+    {
+      "name": "Circle",
+      "kind": "class",
+      "filePath": "lib/shapes.dart",
+      "startLine": 22
+    },
+    {
+      "name": "Shape",
+      "kind": "class",
+      "filePath": "lib/shapes.dart",
+      "startLine": 3
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "lib/shapes.dart",
+      "startLine": 4
+    },
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "lib/app.dart",
+      "startLine": 3
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "lib/shapes.dart",
+      "startLine": 6
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "lib/shapes.dart",
+      "startLine": 19
+    },
+    {
+      "name": "name",
+      "kind": "field",
+      "filePath": "lib/shapes.dart",
+      "startLine": 14
+    },
+    {
+      "name": "run",
+      "kind": "method",
+      "filePath": "lib/app.dart",
+      "startLine": 6
+    }
+  ]
+}

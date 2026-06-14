@@ -1,0 +1,137 @@
+[
+  {
+    "node": {
+      "id": "method:f624affaa0bb0d7c84a0219ec28c71bd",
+      "kind": "method",
+      "name": "Circle",
+      "qualifiedName": "Circle::Circle",
+      "filePath": "lib/shapes.dart",
+      "language": "dart",
+      "startLine": 27,
+      "endLine": 27,
+      "startColumn": 2,
+      "endColumn": 34,
+      "signature": "Circle(String name, this.radius)",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781429097572
+    },
+    "score": 92.41060688845775
+  },
+  {
+    "node": {
+      "id": "class:1c87f23a1f1429a93d862e68df9573f9",
+      "kind": "class",
+      "name": "Circle",
+      "qualifiedName": "Circle",
+      "filePath": "lib/shapes.dart",
+      "language": "dart",
+      "startLine": 22,
+      "endLine": 36,
+      "startColumn": 0,
+      "endColumn": 1,
+      "signature": "class Circle",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781429097572
+    },
+    "score": 90.43265428589285
+  },
+  {
+    "node": {
+      "id": "method:3b04dca19a0d985ada199eb459b7a764",
+      "kind": "method",
+      "name": "Circle.unit",
+      "qualifiedName": "Circle::Circle.unit",
+      "filePath": "lib/shapes.dart",
+      "language": "dart",
+      "startLine": 29,
+      "endLine": 29,
+      "startColumn": 2,
+      "endColumn": 15,
+      "signature": "Circle.unit()",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781429097572
+    },
+    "score": 38.4195847972895
+  },
+  {
+    "node": {
+      "id": "method:e6336a1388690231bc4fbc9be5338d98",
+      "kind": "method",
+      "name": "area",
+      "qualifiedName": "Circle::area",
+      "filePath": "lib/shapes.dart",
+      "language": "dart",
+      "startLine": 32,
+      "endLine": 32,
+      "startColumn": 2,
+      "endColumn": 15,
+      "signature": "double area()",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": true,
+      "returnType": "double",
+      "updatedAt": 1781429097572
+    },
+    "score": 12.047364043021936
+  },
+  {
+    "node": {
+      "id": "constant:79d99b58692c0db000bb9bc52cb123fb",
+      "kind": "constant",
+      "name": "pi",
+      "qualifiedName": "Circle::pi",
+      "filePath": "lib/shapes.dart",
+      "language": "dart",
+      "startLine": 23,
+      "endLine": 23,
+      "startColumn": 22,
+      "endColumn": 34,
+      "signature": "double pi",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": true,
+      "isAbstract": false,
+      "returnType": "double",
+      "updatedAt": 1781429097572
+    },
+    "score": 5.047364043021936
+  },
+  {
+    "node": {
+      "id": "field:35a769ada664a999485d2e4fe07a47f3",
+      "kind": "field",
+      "name": "radius",
+      "qualifiedName": "Circle::radius",
+      "filePath": "lib/shapes.dart",
+      "language": "dart",
+      "startLine": 25,
+      "endLine": 25,
+      "startColumn": 15,
+      "endColumn": 21,
+      "signature": "double radius",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "double",
+      "updatedAt": 1781429097572
+    },
+    "score": 5.047364043021936
+  }
+]

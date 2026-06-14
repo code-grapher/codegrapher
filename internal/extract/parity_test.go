@@ -123,6 +123,12 @@ func TestParityCppSmall(t *testing.T) {
 	testParity(t, "cpp-small")
 }
 
+// TestParityDartSmall runs our extractor over all files in testdata/fixtures/dart-small
+// and compares against the golden.
+func TestParityDartSmall(t *testing.T) {
+	testParity(t, "dart-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 

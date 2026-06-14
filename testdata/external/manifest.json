@@ -74,6 +74,12 @@
       "url": "https://github.com/microsoft/GSL.git",
       "sha": "b2f6bec48e27381b2e11d650ce7e4b899b446289",
       "lang": "cpp"
+    },
+    {
+      "name": "state_notifier",
+      "url": "https://github.com/rrousselGit/state_notifier.git",
+      "sha": "0d692f96fd39c9629e57ec1cfcc540befda3a847",
+      "lang": "dart"
     }
   ]
 }

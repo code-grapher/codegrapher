@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Callees of area (1 found)\n\n- log (method) - lib/shapes.dart:10\n\n> **Note:** Aggregated results across 2 symbols named \"area\": method at lib/shapes.dart:4, method at lib/shapes.dart:32"
+      }
+    ]
+  }
+}

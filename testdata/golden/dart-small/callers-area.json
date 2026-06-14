@@ -1,0 +1,11 @@
+{
+  "symbol": "area",
+  "callers": [
+    {
+      "name": "run",
+      "kind": "method",
+      "filePath": "lib/app.dart",
+      "startLine": 6
+    }
+  ]
+}
