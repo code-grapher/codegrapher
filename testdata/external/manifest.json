@@ -110,6 +110,12 @@
       "url": "https://github.com/p5sagit/Try-Tiny.git",
       "sha": "839716b7892c76ebccafd43f6ba44a7adb039398",
       "lang": "perl"
+    },
+    {
+      "name": "getopt",
+      "url": "https://github.com/jcomellas/getopt.git",
+      "sha": "1c963cecd75cb5f7b37f28737abb120e61390c62",
+      "lang": "erlang"
     }
   ]
 }

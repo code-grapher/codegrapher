@@ -110,6 +110,10 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 		// Perl scope uses the fallback version this pass: no cpanfile/
 		// Makefile.PL parsing yet. majorVersion("") → fallbackVersion ("v0").
 		ver = ""
+	case model.LangErlang:
+		// Erlang scope uses the fallback version this pass: no rebar.config/
+		// .app.src parsing yet. majorVersion("") → fallbackVersion ("v0").
+		ver = ""
 	}
 	return majorVersion(ver)
 }

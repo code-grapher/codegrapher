@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 8,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Impact: \"area\" affects 2 symbols\n\n**shape.erl:**\narea:7\n\n**app.erl:**\nrun:6\n"
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "symbol": "run",
+  "callees": [
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shape.erl",
+      "startLine": 7
+    }
+  ]
+}

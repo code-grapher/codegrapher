@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## area (function)\n\n**Location:** shape.erl:7\n**Signature:** `area/1`\n\n```erlang\n7\tarea(#circle{radius = R}) ->\n8\t    R * R * 3.\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Called by \u2190** run (app.erl:6)"
+      }
+    ]
+  }
+}

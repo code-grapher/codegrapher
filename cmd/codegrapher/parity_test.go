@@ -156,6 +156,11 @@ var fixtures = []fixture{
 		query:   "dog",
 		symbols: []string{"speak", "new", "Dog", "Animal", "Dog::speak", "Animal::new"},
 	},
+	{
+		name:    "erlang-small",
+		query:   "shape",
+		symbols: []string{"area", "run", "shape", "app", "circle"},
+	},
 }
 
 // TestParityGoldens runs the binary against all goldens and asserts full-value parity.

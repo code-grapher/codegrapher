@@ -1,0 +1,131 @@
+[
+  {
+    "node": {
+      "id": "module:d1a9929b9e8a96455e85cba1d1e7e622",
+      "kind": "module",
+      "name": "shape",
+      "qualifiedName": "shape",
+      "filePath": "shape.erl",
+      "language": "erlang",
+      "startLine": 2,
+      "endLine": 2,
+      "startColumn": 0,
+      "endColumn": 15,
+      "signature": "-module(shape)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781434171602
+    },
+    "score": 97.00000211209546
+  },
+  {
+    "node": {
+      "id": "file:shape.erl",
+      "kind": "file",
+      "name": "shape.erl",
+      "qualifiedName": "shape.erl",
+      "filePath": "shape.erl",
+      "language": "erlang",
+      "startLine": 1,
+      "endLine": 9,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781434171602
+    },
+    "score": 40.000002094359104
+  },
+  {
+    "node": {
+      "id": "function:30ca3fddf8b4db48d73f70b7016c3874",
+      "kind": "function",
+      "name": "area",
+      "qualifiedName": "shape::area",
+      "filePath": "shape.erl",
+      "language": "erlang",
+      "startLine": 7,
+      "endLine": 8,
+      "startColumn": 0,
+      "endColumn": 14,
+      "signature": "area/1",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781434171602
+    },
+    "score": 23.000001756903085
+  },
+  {
+    "node": {
+      "id": "struct:3633afa949cd808ad8be7de19dfe4946",
+      "kind": "struct",
+      "name": "circle",
+      "qualifiedName": "shape::circle",
+      "filePath": "shape.erl",
+      "language": "erlang",
+      "startLine": 5,
+      "endLine": 5,
+      "startColumn": 0,
+      "endColumn": 32,
+      "signature": "-record(circle)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781434171602
+    },
+    "score": 19.000001756903085
+  },
+  {
+    "node": {
+      "id": "field:5c8c1b786e2b708befc693a423f1a986",
+      "kind": "field",
+      "name": "radius",
+      "qualifiedName": "shape::circle::radius",
+      "filePath": "shape.erl",
+      "language": "erlang",
+      "startLine": 5,
+      "endLine": 5,
+      "startColumn": 17,
+      "endColumn": 23,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781434171602
+    },
+    "score": 16.000001796291173
+  },
+  {
+    "node": {
+      "id": "field:aa5091dd7206402f07e54fc0bda6ad4a",
+      "kind": "field",
+      "name": "name",
+      "qualifiedName": "shape::circle::name",
+      "filePath": "shape.erl",
+      "language": "erlang",
+      "startLine": 5,
+      "endLine": 5,
+      "startColumn": 25,
+      "endColumn": 29,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781434171602
+    },
+    "score": 16.000001796291173
+  }
+]

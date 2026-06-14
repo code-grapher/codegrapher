@@ -1,0 +1,11 @@
+{
+  "symbol": "area",
+  "callers": [
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "app.erl",
+      "startLine": 6
+    }
+  ]
+}

@@ -62,6 +62,8 @@ func (r externalRepo) repoLang() model.Language {
 		return model.LangObjC
 	case "perl":
 		return model.LangPerl
+	case "erlang":
+		return model.LangErlang
 	default:
 		return model.LangPython
 	}
@@ -102,6 +104,8 @@ func (r externalRepo) sourceExts() []string {
 		return []string{".m", ".h"}
 	case model.LangPerl:
 		return []string{".pl", ".pm"}
+	case model.LangErlang:
+		return []string{".erl", ".hrl"}
 	default:
 		return []string{".py", ".pyi"}
 	}

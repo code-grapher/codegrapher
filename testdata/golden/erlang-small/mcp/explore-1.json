@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Exploration: how does the shape work\n\nFound 5 symbols across 2 files.\n\n### Blast radius \u2014 what depends on these (update/verify before editing)\n\n- `area` (shape.erl:7) \u2014 1 caller in `app.erl`; \u26a0\ufe0f no covering tests found\n\n### Source Code\n\n> The code below is the **verbatim, current on-disk source** of these files \u2014 re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.\n\n#### shape.erl \u2014 shape(module), area(function), circle(struct)\n\n```erlang\n1\t%% Domain module: a record + an exported area/1 function.\n2\t-module(shape).\n3\t-export([area/1]).\n4\t\n5\t-record(circle, {radius, name}).\n6\t\n7\tarea(#circle{radius = R}) ->\n8\t    R * R * 3.\n```\n\n#### app.erl \u2014 app(module), run(function)\n\n```erlang\n1\t%% Application module exercising a cross-module mod:func remote call.\n2\t-module(app).\n3\t-behaviour(shape).\n4\t-export([run/0]).\n5\t\n6\trun() ->\n7\t    shape:area({circle, 2, \"c\"}).\n```\n"
+      }
+    ]
+  }
+}

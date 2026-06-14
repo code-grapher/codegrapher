@@ -118,6 +118,7 @@ capture elixir-small "circle" "area" "label" "run" "Circle" "Shape" "Circle::are
 capture haskell-small "circle" "area" "label" "run" "Circle" "Shape" "Shape.Circle::area"
 capture objc-small "circle" "area" "label" "run" "Circle" "Shape" "Drawable"
 capture perl-small "dog" "speak" "new" "Dog" "Animal" "Dog::speak" "Animal::new"
+capture erlang-small "shape" "area" "run" "shape" "app" "circle" "shape::area"
 
 echo ""
 echo "=== MCP goldens ==="
@@ -298,6 +299,11 @@ elif fixture == "perl-small":
     explore2 = "speak new Dog"
     explore3 = "new"
     q_explore1 = "how does the dog work"
+elif fixture == "erlang-small":
+    sym1 = "area"
+    explore2 = "area run shape"
+    explore3 = "run"
+    q_explore1 = "how does the shape work"
 else:
     sym1 = "get"
     explore2 = "get set lookup"
@@ -344,6 +350,7 @@ rebaseline_mcp elixir-small
 rebaseline_mcp haskell-small
 rebaseline_mcp objc-small
 rebaseline_mcp perl-small
+rebaseline_mcp erlang-small
 
 echo ""
 echo "=== Rebaseline complete ==="
