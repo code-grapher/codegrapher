@@ -25,6 +25,8 @@ const (
 	// LangTSX selects the tree-sitter `tsx` grammar, a superset of the
 	// typescript grammar that also parses JSX. Used for .tsx/.jsx files.
 	LangTSX
+	// LangPython selects the tree-sitter `python` grammar (Python 3).
+	LangPython
 )
 
 // Point is a (row, column) position in source text (0-indexed).
@@ -135,6 +137,8 @@ func NewParser(lang Language) (*Parser, error) {
 		return &Parser{lang: grammars.TypescriptLanguage()}, nil
 	case LangTSX:
 		return &Parser{lang: grammars.TsxLanguage()}, nil
+	case LangPython:
+		return &Parser{lang: grammars.PythonLanguage()}, nil
 	default:
 		return nil, fmt.Errorf("tsparse: unknown language %d", lang)
 	}
