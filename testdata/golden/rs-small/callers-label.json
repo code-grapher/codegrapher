@@ -1,0 +1,11 @@
+{
+  "symbol": "label",
+  "callers": [
+    {
+      "name": "run",
+      "kind": "method",
+      "filePath": "app.rs",
+      "startLine": 9
+    }
+  ]
+}

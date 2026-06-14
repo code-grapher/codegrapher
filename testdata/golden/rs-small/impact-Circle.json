@@ -1,0 +1,74 @@
+{
+  "symbol": "Circle",
+  "depth": 2,
+  "nodeCount": 11,
+  "edgeCount": 9,
+  "affected": [
+    {
+      "name": "Circle",
+      "kind": "import",
+      "filePath": "app.rs",
+      "startLine": 2
+    },
+    {
+      "name": "Circle",
+      "kind": "import",
+      "filePath": "app.rs",
+      "startLine": 6
+    },
+    {
+      "name": "Circle",
+      "kind": "struct",
+      "filePath": "shapes.rs",
+      "startLine": 10
+    },
+    {
+      "name": "app",
+      "kind": "module",
+      "filePath": "app.rs",
+      "startLine": 5
+    },
+    {
+      "name": "app.rs",
+      "kind": "file",
+      "filePath": "app.rs",
+      "startLine": 1
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.rs",
+      "startLine": 26
+    },
+    {
+      "name": "diameter",
+      "kind": "method",
+      "filePath": "shapes.rs",
+      "startLine": 20
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "shapes.rs",
+      "startLine": 30
+    },
+    {
+      "name": "new",
+      "kind": "method",
+      "filePath": "shapes.rs",
+      "startLine": 16
+    },
+    {
+      "name": "radius",
+      "kind": "field",
+      "filePath": "shapes.rs",
+      "startLine": 11
+    },
+    {
+      "name": "run",
+      "kind": "method",
+      "filePath": "app.rs",
+      "startLine": 9
+    }
+  ]
+}

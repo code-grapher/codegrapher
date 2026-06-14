@@ -106,6 +106,7 @@ capture cs-small "dog" "Speak" "Describe" "MakeDog" "Dog" "Label" "Dog::Speak"
 capture java-small "circle" "area" "label" "run" "Circle" "Shape" "Circle::area"
 capture kt-small "circle" "area" "label" "run" "Circle" "Shape" "Circle::area"
 capture rb-small "dog" "speak" "describe" "make_dog" "Dog" "breed" "Dog::speak"
+capture rs-small "circle" "area" "label" "run" "Circle" "Shape" "Circle::area"
 
 echo ""
 echo "=== MCP goldens ==="
@@ -226,6 +227,11 @@ elif fixture == "rb-small":
     explore2 = "speak describe make_dog"
     explore3 = "describe"
     q_explore1 = "how does the dog work"
+elif fixture == "rs-small":
+    sym1 = "area"
+    explore2 = "area label run"
+    explore3 = "run"
+    q_explore1 = "how does the circle work"
 else:
     sym1 = "get"
     explore2 = "get set lookup"
@@ -261,6 +267,7 @@ rebaseline_mcp cs-small
 rebaseline_mcp java-small
 rebaseline_mcp kt-small
 rebaseline_mcp rb-small
+rebaseline_mcp rs-small
 
 echo ""
 echo "=== Rebaseline complete ==="

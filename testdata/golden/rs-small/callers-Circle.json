@@ -1,0 +1,17 @@
+{
+  "symbol": "Circle",
+  "callers": [
+    {
+      "name": "app.rs",
+      "kind": "file",
+      "filePath": "app.rs",
+      "startLine": 1
+    },
+    {
+      "name": "app",
+      "kind": "module",
+      "filePath": "app.rs",
+      "startLine": 5
+    }
+  ]
+}

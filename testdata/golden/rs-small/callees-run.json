@@ -1,0 +1,17 @@
+{
+  "symbol": "run",
+  "callees": [
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.rs",
+      "startLine": 5
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "shapes.rs",
+      "startLine": 6
+    }
+  ]
+}

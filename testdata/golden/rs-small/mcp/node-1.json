@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "**2 definitions named \"area\"**\nReturning 2 in full \u2014 pick the one you need (no Read required).\n\n## area (method)\n\n**Location:** shapes.rs:5\n**Signature:** `fn area(&self) -> f64`\n\n/ Shape is implemented by geometric figures.\n\n```rust\n5\t        fn area(&self) -> f64;\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Called by \u2190** run (app.rs:9)\n\n---\n\n## area (method)\n\n**Location:** shapes.rs:26\n**Signature:** `fn area(&self) -> f64`\n\n```rust\n26\t        fn area(&self) -> f64 {\n27\t            3.14159 * self.radius * self.radius\n28\t        }\n```"
+      }
+    ]
+  }
+}

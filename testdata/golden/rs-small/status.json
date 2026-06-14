@@ -1,0 +1,40 @@
+{
+  "initialized": true,
+  "version": "0.9.9",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/rust/testdata/fixtures/rs-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/rust/testdata/fixtures/rs-small/.codegraph",
+  "lastIndexed": "",
+  "fileCount": 2,
+  "nodeCount": 22,
+  "edgeCount": 35,
+  "dbSizeBytes": 147456,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "constant": 1,
+    "enum": 1,
+    "enum_member": 3,
+    "field": 1,
+    "file": 2,
+    "import": 3,
+    "interface": 1,
+    "method": 7,
+    "module": 2,
+    "struct": 1
+  },
+  "languages": [
+    "rust"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "0.9.9",
+    "builtWithExtractionVersion": 14,
+    "currentExtractionVersion": 14,
+    "reindexRecommended": false
+  }
+}

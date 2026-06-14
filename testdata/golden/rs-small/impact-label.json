@@ -1,0 +1,26 @@
+{
+  "symbol": "label",
+  "depth": 2,
+  "nodeCount": 3,
+  "edgeCount": 2,
+  "affected": [
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "shapes.rs",
+      "startLine": 6
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "shapes.rs",
+      "startLine": 30
+    },
+    {
+      "name": "run",
+      "kind": "method",
+      "filePath": "app.rs",
+      "startLine": 9
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "path": "app.rs",
+    "language": "rust",
+    "nodeCount": 6,
+    "size": 416
+  },
+  {
+    "path": "shapes.rs",
+    "language": "rust",
+    "nodeCount": 16,
+    "size": 948
+  }
+]

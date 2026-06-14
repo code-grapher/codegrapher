@@ -1,0 +1,202 @@
+[
+  {
+    "node": {
+      "id": "struct:afecd7f8570d3a97f194370195c7af24",
+      "kind": "struct",
+      "name": "Circle",
+      "qualifiedName": "shapes::Circle",
+      "filePath": "shapes.rs",
+      "language": "rust",
+      "startLine": 10,
+      "endLine": 12,
+      "startColumn": 4,
+      "endColumn": 5,
+      "visibility": "pub",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781425867972
+    },
+    "score": 86.7474763845261
+  },
+  {
+    "node": {
+      "id": "import:416ed1615c3f396fbdf8441117835932",
+      "kind": "import",
+      "name": "Circle",
+      "qualifiedName": "Circle",
+      "filePath": "app.rs",
+      "language": "rust",
+      "startLine": 2,
+      "endLine": 2,
+      "startColumn": 0,
+      "endColumn": 26,
+      "signature": "use crate::shapes::Circle;",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781425867972
+    },
+    "score": 81.74044404661691
+  },
+  {
+    "node": {
+      "id": "import:a888ef0e5a5c7004479bff560f9c6640",
+      "kind": "import",
+      "name": "Circle",
+      "qualifiedName": "app::Circle",
+      "filePath": "app.rs",
+      "language": "rust",
+      "startLine": 6,
+      "endLine": 6,
+      "startColumn": 4,
+      "endColumn": 30,
+      "signature": "use crate::shapes::Circle;",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781425867972
+    },
+    "score": 81.73753377344656
+  },
+  {
+    "node": {
+      "id": "method:3105a7b4a97811a6047df3d462bea52f",
+      "kind": "method",
+      "name": "new",
+      "qualifiedName": "Circle::new",
+      "filePath": "shapes.rs",
+      "language": "rust",
+      "startLine": 16,
+      "endLine": 18,
+      "startColumn": 8,
+      "endColumn": 9,
+      "signature": "fn new(radius: f64) -\u003e Circle",
+      "visibility": "pub",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "Circle",
+      "updatedAt": 1781425867972
+    },
+    "score": 10.643282948711112
+  },
+  {
+    "node": {
+      "id": "method:b66b054e582184345fb02f133f1eb6ec",
+      "kind": "method",
+      "name": "diameter",
+      "qualifiedName": "Circle::diameter",
+      "filePath": "shapes.rs",
+      "language": "rust",
+      "startLine": 20,
+      "endLine": 22,
+      "startColumn": 8,
+      "endColumn": 9,
+      "signature": "fn diameter(\u0026self) -\u003e f64",
+      "visibility": "pub",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "f64",
+      "updatedAt": 1781425867972
+    },
+    "score": 10.613442459369281
+  },
+  {
+    "node": {
+      "id": "method:eb314ceb3c64114a7588111ac443ec20",
+      "kind": "method",
+      "name": "area",
+      "qualifiedName": "Circle::area",
+      "filePath": "shapes.rs",
+      "language": "rust",
+      "startLine": 26,
+      "endLine": 28,
+      "startColumn": 8,
+      "endColumn": 9,
+      "signature": "fn area(\u0026self) -\u003e f64",
+      "visibility": "private",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "f64",
+      "updatedAt": 1781425867972
+    },
+    "score": 10.613442459369281
+  },
+  {
+    "node": {
+      "id": "method:a23fe40344eca08a19d000be0e3695ee",
+      "kind": "method",
+      "name": "label",
+      "qualifiedName": "Circle::label",
+      "filePath": "shapes.rs",
+      "language": "rust",
+      "startLine": 30,
+      "endLine": 32,
+      "startColumn": 8,
+      "endColumn": 9,
+      "signature": "fn label(\u0026self) -\u003e String",
+      "visibility": "private",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "String",
+      "updatedAt": 1781425867972
+    },
+    "score": 10.613442459369281
+  },
+  {
+    "node": {
+      "id": "module:e58dbfa8b2cb39a8ea88ceea4ffd93cd",
+      "kind": "module",
+      "name": "shapes",
+      "qualifiedName": "shapes",
+      "filePath": "shapes.rs",
+      "language": "rust",
+      "startLine": 2,
+      "endLine": 43,
+      "startColumn": 0,
+      "endColumn": 1,
+      "docstring": "shapes defines a Shape trait and a Circle struct implementing it.",
+      "visibility": "pub",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781425867972
+    },
+    "score": 4.260422809397648
+  },
+  {
+    "node": {
+      "id": "field:850e121b358178f9426e15e0667b4a4a",
+      "kind": "field",
+      "name": "radius",
+      "qualifiedName": "shapes::Circle::radius",
+      "filePath": "shapes.rs",
+      "language": "rust",
+      "startLine": 11,
+      "endLine": 11,
+      "startColumn": 8,
+      "endColumn": 23,
+      "visibility": "pub",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781425867972
+    },
+    "score": 3.647747187373928
+  }
+]

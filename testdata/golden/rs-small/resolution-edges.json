@@ -1,0 +1,11 @@
+[{"source":"file:app.rs","target":"interface:baab570eded85c960f0fab62983f2dc1","kind":"imports","provenance":null,"line":3,"col":4},
+{"source":"file:app.rs","target":"struct:afecd7f8570d3a97f194370195c7af24","kind":"imports","provenance":null,"line":2,"col":4},
+{"source":"method:3105a7b4a97811a6047df3d462bea52f","target":"struct:afecd7f8570d3a97f194370195c7af24","kind":"instantiates","provenance":null,"line":17,"col":12},
+{"source":"method:9f6f65ffa91721fb0ada66798c43b547","target":"method:6aba023ce4a3644d24285eebb24c06d7","kind":"calls","provenance":null,"line":13,"col":16},
+{"source":"method:9f6f65ffa91721fb0ada66798c43b547","target":"method:e90363a555867f598ec251888a4935d7","kind":"calls","provenance":null,"line":11,"col":16},
+{"source":"method:9f6f65ffa91721fb0ada66798c43b547","target":"struct:afecd7f8570d3a97f194370195c7af24","kind":"instantiates","provenance":null,"line":10,"col":16},
+{"source":"method:9f6f65ffa91721fb0ada66798c43b547","target":"struct:afecd7f8570d3a97f194370195c7af24","kind":"instantiates","provenance":null,"line":12,"col":18},
+{"source":"method:a23fe40344eca08a19d000be0e3695ee","target":"method:6aba023ce4a3644d24285eebb24c06d7","kind":"overrides","provenance":null,"line":30,"col":8},
+{"source":"method:eb314ceb3c64114a7588111ac443ec20","target":"method:e90363a555867f598ec251888a4935d7","kind":"overrides","provenance":null,"line":26,"col":8},
+{"source":"module:361da5c44c6cb31a7756a5bee88526a8","target":"struct:afecd7f8570d3a97f194370195c7af24","kind":"imports","provenance":null,"line":6,"col":8},
+{"source":"struct:afecd7f8570d3a97f194370195c7af24","target":"interface:baab570eded85c960f0fab62983f2dc1","kind":"implements","provenance":null,"line":25,"col":4}]

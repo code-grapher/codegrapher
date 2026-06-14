@@ -1,0 +1,11 @@
+{
+  "symbol": "Shape",
+  "callers": [
+    {
+      "name": "app.rs",
+      "kind": "file",
+      "filePath": "app.rs",
+      "startLine": 1
+    }
+  ]
+}

@@ -87,6 +87,12 @@ func TestParityRbSmall(t *testing.T) {
 	testParity(t, "rb-small")
 }
 
+// TestParityRsSmall runs our extractor over all files in testdata/fixtures/rs-small
+// and compares against the golden.
+func TestParityRsSmall(t *testing.T) {
+	testParity(t, "rs-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 
