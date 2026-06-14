@@ -1,0 +1,11 @@
+{
+  "symbol": "stats",
+  "callers": [
+    {
+      "name": "main.R",
+      "kind": "file",
+      "filePath": "main.R",
+      "startLine": 1
+    }
+  ]
+}

@@ -66,6 +66,8 @@ func (r externalRepo) repoLang() model.Language {
 		return model.LangErlang
 	case "julia":
 		return model.LangJulia
+	case "r":
+		return model.LangR
 	default:
 		return model.LangPython
 	}
@@ -110,6 +112,8 @@ func (r externalRepo) sourceExts() []string {
 		return []string{".erl", ".hrl"}
 	case model.LangJulia:
 		return []string{".jl"}
+	case model.LangR:
+		return []string{".R", ".r"}
 	default:
 		return []string{".py", ".pyi"}
 	}

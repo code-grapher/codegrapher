@@ -1,0 +1,8 @@
+[{"source":"file:main.R","target":"constant:d6f3d80cb98d0d4bcb8cf1167f1b2efd","kind":"contains"},
+{"source":"file:main.R","target":"function:9f42d014d942ea822543a8a5c77f1060","kind":"contains"},
+{"source":"file:main.R","target":"import:257e3eb785d54a18579a98747acd9a9e","kind":"contains"},
+{"source":"file:main.R","target":"import:3dc90ee72c11ff7619b63a07ed7c1e0b","kind":"contains"},
+{"source":"file:util.R","target":"function:268357e5485a812df59e8c27a33fb692","kind":"contains"},
+{"source":"file:util.R","target":"function:42a8dd1c13f48009f6a8d730f7bbe5e0","kind":"contains"},
+{"source":"function:9f42d014d942ea822543a8a5c77f1060","target":"variable:c9339e29867dfd1ff03903faa0211ba0","kind":"contains"},
+{"source":"function:9f42d014d942ea822543a8a5c77f1060","target":"variable:f41a766262839107b23a24cfeb363b71","kind":"contains"}]

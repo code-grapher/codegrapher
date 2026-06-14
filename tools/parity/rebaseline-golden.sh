@@ -120,6 +120,7 @@ capture objc-small "circle" "area" "label" "run" "Circle" "Shape" "Drawable"
 capture perl-small "dog" "speak" "new" "Dog" "Animal" "Dog::speak" "Animal::new"
 capture erlang-small "shape" "area" "run" "shape" "app" "circle" "shape::area"
 capture julia-small "circle" "area" "describe" "Circle" "Rectangle" "Shape" "Shapes::area"
+capture r-small "area" "area" "twice" "run" "util" "RADIUS" "stats"
 
 echo ""
 echo "=== MCP goldens ==="

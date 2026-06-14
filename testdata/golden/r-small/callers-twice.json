@@ -1,0 +1,11 @@
+{
+  "symbol": "twice",
+  "callers": [
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "main.R",
+      "startLine": 7
+    }
+  ]
+}
