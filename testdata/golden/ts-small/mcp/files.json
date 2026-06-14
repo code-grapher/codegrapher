@@ -5,7 +5,7 @@
     "content": [
       {
         "type": "text",
-        "text": "## Project Structure (6 files)\n\n\u251c\u2500\u2500 src\n\u2502   \u251c\u2500\u2500 badge.jsx (jsx, 2 symbols)\n\u2502   \u251c\u2500\u2500 cache.ts (typescript, 8 symbols)\n\u2502   \u251c\u2500\u2500 card.tsx (tsx, 2 symbols)\n\u2502   \u251c\u2500\u2500 main.ts (typescript, 3 symbols)\n\u2502   \u2514\u2500\u2500 store.ts (typescript, 10 symbols)\n\u2514\u2500\u2500 package.json (package.json, 6 symbols)"
+        "text": "## Project Structure (6 files)\n\n\u251c\u2500\u2500 src\n\u2502   \u251c\u2500\u2500 badge.jsx (jsx, 2 symbols)\n\u2502   \u251c\u2500\u2500 cache.ts (typescript, 8 symbols)\n\u2502   \u251c\u2500\u2500 main.ts (typescript, 3 symbols)\n\u2502   \u251c\u2500\u2500 store.ts (typescript, 10 symbols)\n\u2502   \u2514\u2500\u2500 widget.tsx (tsx, 2 symbols)\n\u2514\u2500\u2500 package.json (package.json, 6 symbols)"
       }
     ]
   }

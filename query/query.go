@@ -262,6 +262,25 @@ func isExactVerbMatch(name, symbol string) bool {
 		strings.HasSuffix(name, "::"+symbol)
 }
 
+// HasExactMatch reports whether s contains a symbol whose name exactly matches
+// the query (the whole name, or a `.`/`::`-qualified suffix), as opposed to
+// only a fuzzy/substring search hit. Multi-store callers use this to prefer
+// exact-match scopes, so a verb like callers/callees/impact does not leak a
+// substring hit from a scope where the symbol appears only as a substring
+// (e.g. "get" matching "Widget").
+func HasExactMatch(s *store.Store, symbol string) (bool, error) {
+	matches, err := verbMatches(s, symbol)
+	if err != nil {
+		return false, err
+	}
+	for _, m := range matches {
+		if isExactVerbMatch(m.Node.Name, symbol) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // verbLimit is the CLI default --limit for callers/callees.
 const verbLimit = 20
 

@@ -12,10 +12,10 @@
     "size": 281
   },
   {
-    "path": "src/card.tsx",
+    "path": "src/widget.tsx",
     "language": "tsx",
     "nodeCount": 2,
-    "size": 208
+    "size": 212
   },
   {
     "path": "src/cache.ts",

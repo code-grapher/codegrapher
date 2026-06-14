@@ -11,11 +11,11 @@
 {"source":"file:src/badge.jsx","target":"function:d44c759283c923f1a9222e831083f481","kind":"contains"},
 {"source":"file:src/cache.ts","target":"class:0d5520d0381688557f80e89772308f74","kind":"contains"},
 {"source":"file:src/cache.ts","target":"import:297a7c70612498716cce139b0a71edaf","kind":"contains"},
-{"source":"file:src/card.tsx","target":"function:7e3e3e478ef8e8b0a507d20fb565a4bd","kind":"contains"},
 {"source":"file:src/main.ts","target":"function:3fc045df3f91ffa132630224317127ca","kind":"contains"},
 {"source":"file:src/main.ts","target":"import:e506cbc64d7d28885aeb0cb512507cd2","kind":"contains"},
 {"source":"file:src/store.ts","target":"class:d704799d2aefd3d2a1b36523104285a1","kind":"contains"},
 {"source":"file:src/store.ts","target":"function:d026420e602a3b4ee0a14b152c9141c4","kind":"contains"},
 {"source":"file:src/store.ts","target":"function:fa49140276ee036abee022cd44e94cd7","kind":"contains"},
 {"source":"file:src/store.ts","target":"interface:bcb36d70b44cb95075c0012fcd672e55","kind":"contains"},
-{"source":"file:src/store.ts","target":"type_alias:2c71234c91d067a3f05191b2e16c9b03","kind":"contains"}]
+{"source":"file:src/store.ts","target":"type_alias:2c71234c91d067a3f05191b2e16c9b03","kind":"contains"},
+{"source":"file:src/widget.tsx","target":"function:6bfcd2e977bd9b1f1f7356826c22ca58","kind":"contains"}]

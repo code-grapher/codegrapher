@@ -88,10 +88,42 @@ func (q *StoreQuerier) SearchNodes(rawQuery string, opts SearchOptions) ([]model
 	return deduped, nil
 }
 
+// storesForSymbol narrows the callers/callees/impact fan-out to the scopes that
+// contain symbol as an EXACT match, when any do. query.{Callers,Callees,Impact}
+// match symbols fuzzily (substring) and only suppress fuzzy hits when a single
+// store has more than one match; the per-scope fan-out can otherwise leak a
+// fuzzy hit from a scope where the symbol appears only as a substring (e.g.
+// "get" matching "Widget"). Preferring exact-match scopes mirrors single-merged-
+// store behavior. When no scope has an exact match, every scope is kept so the
+// fuzzy single-match fallback still works (e.g. for partial-name lookups).
+func (q *StoreQuerier) storesForSymbol(symbol string) ([]*store.Store, error) {
+	if len(q.stores) <= 1 {
+		return q.stores, nil
+	}
+	var exact []*store.Store
+	for _, s := range q.stores {
+		ok, err := query.HasExactMatch(s, symbol)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			exact = append(exact, s)
+		}
+	}
+	if len(exact) > 0 {
+		return exact, nil
+	}
+	return q.stores, nil
+}
+
 func (q *StoreQuerier) Callers(symbol string) (*CallersResult, error) {
 	out := &CallersResult{Symbol: symbol, Callers: []SymbolRef{}}
 	seen := make(map[symbolRefKey]struct{})
-	for _, s := range q.stores {
+	stores, err := q.storesForSymbol(symbol)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range stores {
 		r, err := query.Callers(s, symbol)
 		if err != nil {
 			return nil, err
@@ -114,7 +146,11 @@ func (q *StoreQuerier) Callers(symbol string) (*CallersResult, error) {
 func (q *StoreQuerier) Callees(symbol string) (*CalleesResult, error) {
 	out := &CalleesResult{Symbol: symbol, Callees: []SymbolRef{}}
 	seen := make(map[symbolRefKey]struct{})
-	for _, s := range q.stores {
+	stores, err := q.storesForSymbol(symbol)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range stores {
 		r, err := query.Callees(s, symbol)
 		if err != nil {
 			return nil, err
@@ -137,7 +173,11 @@ func (q *StoreQuerier) Callees(symbol string) (*CalleesResult, error) {
 func (q *StoreQuerier) Impact(symbol string, depth int) (*ImpactResult, error) {
 	out := &ImpactResult{Symbol: symbol, Affected: []SymbolRef{}}
 	seen := make(map[symbolRefKey]struct{})
-	for _, s := range q.stores {
+	stores, err := q.storesForSymbol(symbol)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range stores {
 		r, err := query.Impact(s, symbol, depth)
 		if err != nil {
 			return nil, err
