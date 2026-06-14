@@ -35,6 +35,8 @@ const (
 	LangKotlin
 	// LangRuby selects the tree-sitter `ruby` grammar.
 	LangRuby
+	// LangPHP selects the tree-sitter `php` grammar.
+	LangPHP
 )
 
 // Point is a (row, column) position in source text (0-indexed).
@@ -155,6 +157,8 @@ func NewParser(lang Language) (*Parser, error) {
 		return &Parser{lang: grammars.KotlinLanguage()}, nil
 	case LangRuby:
 		return &Parser{lang: grammars.RubyLanguage()}, nil
+	case LangPHP:
+		return &Parser{lang: grammars.PhpLanguage()}, nil
 	default:
 		return nil, fmt.Errorf("tsparse: unknown language %d", lang)
 	}
