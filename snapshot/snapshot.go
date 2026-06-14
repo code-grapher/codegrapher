@@ -64,6 +64,12 @@ func Export(dbPath, outDir, projectRoot string) error {
 	if err := exportMetadata(s, outDir); err != nil {
 		return fmt.Errorf("snapshot: metadata: %w", err)
 	}
+	if err := exportCoverage(s, outDir); err != nil {
+		return fmt.Errorf("snapshot: coverage: %w", err)
+	}
+	if err := exportNodeCoverage(s, outDir); err != nil {
+		return fmt.Errorf("snapshot: node_coverage: %w", err)
+	}
 	if err := writeREADME(outDir, projectRoot); err != nil {
 		return fmt.Errorf("snapshot: readme: %w", err)
 	}
@@ -92,6 +98,13 @@ func Import(dbPath, inDir string) error {
 	}
 	if err := importMetadata(s, ingrPath(inDir, "project_metadata")); err != nil {
 		return fmt.Errorf("snapshot: metadata: %w", err)
+	}
+	// Coverage recordsets are optional: older snapshots omit them.
+	if err := importCoverage(s, ingrPath(inDir, "coverage")); err != nil {
+		return fmt.Errorf("snapshot: coverage: %w", err)
+	}
+	if err := importNodeCoverage(s, ingrPath(inDir, "node_coverage")); err != nil {
+		return fmt.Errorf("snapshot: node_coverage: %w", err)
 	}
 	return nil
 }

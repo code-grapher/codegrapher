@@ -30,9 +30,11 @@ type ManifestScope struct {
 
 // Counts are the row counts of a scope, used for tree labels and progress.
 type Counts struct {
-	Nodes int `json:"nodes"`
-	Files int `json:"files"`
-	Edges int `json:"edges"`
+	Nodes        int `json:"nodes"`
+	Files        int `json:"files"`
+	Edges        int `json:"edges"`
+	Coverage     int `json:"coverage,omitempty"`
+	NodeCoverage int `json:"node_coverage,omitempty"`
 }
 
 // RecordsetSize reports the original and compressed byte sizes of one exported
@@ -45,8 +47,10 @@ type RecordsetSize struct {
 	Gzip     int
 }
 
-// scopedRecordsets are the four recordsets exported per scope, paired with the
-// exporter that writes each.
+// scopedRecordsets are the recordsets exported per scope, paired with the
+// exporter that writes each. coverage / node_coverage are emitted like the
+// others (compressed *.ingr.zst + *.ingr.gz); when a scope has no coverage the
+// recordset is simply empty.
 var scopedRecordsets = []struct {
 	name   string
 	export func(*store.Store, string) error
@@ -55,6 +59,8 @@ var scopedRecordsets = []struct {
 	{"edges", exportEdges},
 	{"files", exportFiles},
 	{"project_metadata", exportMetadata},
+	{"coverage", exportCoverage},
+	{"node_coverage", exportNodeCoverage},
 }
 
 // ExportScoped writes each scope's graph under baseOutDir/{lang}/{version}/ as
@@ -143,11 +149,22 @@ func manifestScope(s *store.Store, sc scope.Scope) (ManifestScope, error) {
 	if err != nil {
 		return ManifestScope{}, fmt.Errorf("snapshot: stats %s: %w", sc.Key(), err)
 	}
+	covCount, err := s.GetAllCoverage()
+	if err != nil {
+		return ManifestScope{}, fmt.Errorf("snapshot: coverage count %s: %w", sc.Key(), err)
+	}
+	nodeCovCount, err := s.GetAllNodeCoverage()
+	if err != nil {
+		return ManifestScope{}, fmt.Errorf("snapshot: node_coverage count %s: %w", sc.Key(), err)
+	}
 	entry := ManifestScope{
 		Language: string(sc.Language),
 		Version:  sc.Version,
 		Key:      sc.Key(),
-		Counts:   Counts{Nodes: stats.NodeCount, Files: stats.FileCount, Edges: stats.EdgeCount},
+		Counts: Counts{
+			Nodes: stats.NodeCount, Files: stats.FileCount, Edges: stats.EdgeCount,
+			Coverage: len(covCount), NodeCoverage: len(nodeCovCount),
+		},
 	}
 	if ms, err := s.GetLastIndexedAt(); err == nil && ms > 0 {
 		entry.IndexedAt = time.UnixMilli(ms).UTC().Format(time.RFC3339)

@@ -31,7 +31,7 @@ var schemaSQL string
 const DatabaseFilename = "codegraph.db"
 
 // CurrentSchemaVersion mirrors CURRENT_SCHEMA_VERSION in the original.
-const CurrentSchemaVersion = 5
+const CurrentSchemaVersion = 6
 
 // NowFunc returns the current time in Unix milliseconds. Injectable for tests.
 type NowFunc func() int64
@@ -245,6 +245,29 @@ var migrations = []migration{
 		DROP INDEX IF EXISTS idx_edges_target;`},
 	{5, "Add nodes.return_type — normalized return/result type for receiver-type inference (#645)",
 		`ALTER TABLE nodes ADD COLUMN return_type TEXT;`},
+	{6, "Add coverage + node_coverage tables for Go line-coverage attribution", `
+		CREATE TABLE IF NOT EXISTS coverage (
+			file_path     TEXT NOT NULL,
+			content_hash  TEXT NOT NULL,
+			mode          TEXT NOT NULL,
+			ranges        TEXT NOT NULL,
+			lines_covered   INTEGER NOT NULL,
+			lines_uncovered INTEGER NOT NULL,
+			pct_covered     REAL NOT NULL,
+			run_at        INTEGER NOT NULL,
+			PRIMARY KEY (file_path)
+		);
+		CREATE TABLE IF NOT EXISTS node_coverage (
+			node_id         TEXT NOT NULL,
+			content_hash    TEXT NOT NULL,
+			lines_covered   INTEGER NOT NULL,
+			lines_uncovered INTEGER NOT NULL,
+			pct_covered     REAL NOT NULL,
+			run_at          INTEGER NOT NULL,
+			PRIMARY KEY (node_id),
+			FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE
+		);
+		CREATE INDEX IF NOT EXISTS idx_node_coverage_hash ON node_coverage(content_hash);`},
 }
 
 func (s *Store) runMigrations(from int) error {
