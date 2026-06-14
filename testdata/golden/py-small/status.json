@@ -1,0 +1,39 @@
+{
+  "initialized": true,
+  "version": "0.9.9",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/python/testdata/fixtures/py-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/python/testdata/fixtures/py-small/.codegraph",
+  "lastIndexed": "",
+  "fileCount": 3,
+  "nodeCount": 26,
+  "edgeCount": 32,
+  "dbSizeBytes": 147456,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "class": 2,
+    "constant": 2,
+    "field": 3,
+    "file": 3,
+    "function": 6,
+    "import": 3,
+    "method": 4,
+    "property": 1,
+    "variable": 2
+  },
+  "languages": [
+    "python"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "0.9.9",
+    "builtWithExtractionVersion": 14,
+    "currentExtractionVersion": 14,
+    "reindexRecommended": false
+  }
+}

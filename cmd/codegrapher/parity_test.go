@@ -71,6 +71,11 @@ var fixtures = []fixture{
 		query:   "store",
 		symbols: []string{"get", "set", "lookup", "normalize", "describe", "Cache::lookup"},
 	},
+	{
+		name:    "py-small",
+		query:   "dog",
+		symbols: []string{"speak", "describe", "make_dog", "Dog", "label", "Dog::speak"},
+	},
 }
 
 // TestParityGoldens runs the binary against all goldens and asserts full-value parity.

@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "**2 definitions named \"speak\"**\nReturning 2 in full \u2014 pick the one you need (no Read required).\n\n## speak (method)\n\n**Location:** models.py:12\n**Signature:** `def speak(self)`\n\n```python\n12\t    def speak(self):\n13\t        return DEFAULT_SOUND\n```\n\n---\n\n## speak (method)\n\n**Location:** models.py:27\n**Signature:** `def speak(self)`\n\n```python\n27\t    def speak(self):\n28\t        return \"woof\"\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Called by \u2190** describe (service.py:12)"
+      }
+    ]
+  }
+}

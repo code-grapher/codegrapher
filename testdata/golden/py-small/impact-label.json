@@ -1,0 +1,14 @@
+{
+  "symbol": "label",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "label",
+      "kind": "property",
+      "filePath": "models.py",
+      "startLine": 24
+    }
+  ]
+}

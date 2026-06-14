@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 8,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Impact: \"speak\" affects 3 symbols\n\n**models.py:**\nspeak:12, speak:27\n\n**service.py:**\ndescribe:12\n\n\n> **Note:** Aggregated results across 2 symbols named \"speak\": method at models.py:12, method at models.py:27"
+      }
+    ]
+  }
+}

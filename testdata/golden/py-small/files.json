@@ -1,0 +1,20 @@
+[
+  {
+    "path": "models.py",
+    "language": "python",
+    "nodeCount": 12,
+    "size": 436
+  },
+  {
+    "path": "service.py",
+    "language": "python",
+    "nodeCount": 8,
+    "size": 242
+  },
+  {
+    "path": "util.py",
+    "language": "python",
+    "nodeCount": 6,
+    "size": 361
+  }
+]

@@ -101,6 +101,7 @@ capture() {
 
 capture go-small "store" "Get" "Set" "Lookup" "normalize" "handleGreet" "Store::Get"
 capture ts-small "store" "get" "set" "lookup" "normalize" "describe" "Cache::lookup"
+capture py-small "dog" "speak" "describe" "make_dog" "Dog" "label" "Dog::speak"
 
 echo ""
 echo "=== MCP goldens ==="
@@ -196,6 +197,11 @@ if fixture == "go-small":
     explore2 = "Get Set Lookup"
     explore3 = "normalize"
     q_explore1 = "how does the store work"
+elif fixture == "py-small":
+    sym1 = "speak"
+    explore2 = "speak describe make_dog"
+    explore3 = "describe"
+    q_explore1 = "how does the dog work"
 else:
     sym1 = "get"
     explore2 = "get set lookup"
@@ -226,6 +232,7 @@ PYEOF
 
 rebaseline_mcp go-small
 rebaseline_mcp ts-small
+rebaseline_mcp py-small
 
 echo ""
 echo "=== Rebaseline complete ==="

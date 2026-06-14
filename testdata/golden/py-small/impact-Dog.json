@@ -1,0 +1,68 @@
+{
+  "symbol": "Dog",
+  "depth": 2,
+  "nodeCount": 10,
+  "edgeCount": 8,
+  "affected": [
+    {
+      "name": "Dog",
+      "kind": "class",
+      "filePath": "models.py",
+      "startLine": 16
+    },
+    {
+      "name": "Dog",
+      "kind": "import",
+      "filePath": "service.py",
+      "startLine": 3
+    },
+    {
+      "name": "__init__",
+      "kind": "method",
+      "filePath": "models.py",
+      "startLine": 19
+    },
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "service.py",
+      "startLine": 12
+    },
+    {
+      "name": "label",
+      "kind": "property",
+      "filePath": "models.py",
+      "startLine": 24
+    },
+    {
+      "name": "legs",
+      "kind": "field",
+      "filePath": "models.py",
+      "startLine": 21
+    },
+    {
+      "name": "make_dog",
+      "kind": "function",
+      "filePath": "service.py",
+      "startLine": 8
+    },
+    {
+      "name": "name",
+      "kind": "field",
+      "filePath": "models.py",
+      "startLine": 20
+    },
+    {
+      "name": "service.py",
+      "kind": "file",
+      "filePath": "service.py",
+      "startLine": 1
+    },
+    {
+      "name": "speak",
+      "kind": "method",
+      "filePath": "models.py",
+      "startLine": 27
+    }
+  ]
+}

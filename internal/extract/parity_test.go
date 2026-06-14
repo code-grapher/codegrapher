@@ -57,6 +57,12 @@ func TestParityTsSmall(t *testing.T) {
 	testParity(t, "ts-small")
 }
 
+// TestParityPySmall runs our extractor over all files in testdata/fixtures/py-small
+// and compares against the golden.
+func TestParityPySmall(t *testing.T) {
+	testParity(t, "py-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 

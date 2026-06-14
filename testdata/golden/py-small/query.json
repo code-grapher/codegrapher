@@ -1,0 +1,245 @@
+[
+  {
+    "node": {
+      "id": "class:c317e6e98070944d981aaf46e7f7b26b",
+      "kind": "class",
+      "name": "Dog",
+      "qualifiedName": "Dog",
+      "filePath": "models.py",
+      "language": "python",
+      "startLine": 16,
+      "endLine": 28,
+      "startColumn": 0,
+      "endColumn": 21,
+      "docstring": "A dog.",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781421605078
+    },
+    "score": 88.63163186850046
+  },
+  {
+    "node": {
+      "id": "import:99a8dc64180bd287892413f2bda66bb2",
+      "kind": "import",
+      "name": "Dog",
+      "qualifiedName": "Dog",
+      "filePath": "service.py",
+      "language": "python",
+      "startLine": 3,
+      "endLine": 3,
+      "startColumn": 0,
+      "endColumn": 22,
+      "signature": "from models import Dog",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781421605077
+    },
+    "score": 81.62707280354469
+  },
+  {
+    "node": {
+      "id": "function:4a7168c2af553f2961cddc673b24f254",
+      "kind": "function",
+      "name": "make_dog",
+      "qualifiedName": "make_dog",
+      "filePath": "service.py",
+      "language": "python",
+      "startLine": 8,
+      "endLine": 9,
+      "startColumn": 0,
+      "endColumn": 20,
+      "signature": "def make_dog(name)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781421605077
+    },
+    "score": 20.6217132069332
+  },
+  {
+    "node": {
+      "id": "constant:3e2dd820a62ff115fa8407ca3b5b2935",
+      "kind": "constant",
+      "name": "MAX_DOGS",
+      "qualifiedName": "MAX_DOGS",
+      "filePath": "service.py",
+      "language": "python",
+      "startLine": 5,
+      "endLine": 5,
+      "startColumn": 0,
+      "endColumn": 13,
+      "signature": "= 10",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781421605077
+    },
+    "score": 13.627730505267719
+  },
+  {
+    "node": {
+      "id": "method:8885d1cd81c730c72f7074401fe87a68",
+      "kind": "method",
+      "name": "speak",
+      "qualifiedName": "Dog::speak",
+      "filePath": "models.py",
+      "language": "python",
+      "startLine": 27,
+      "endLine": 28,
+      "startColumn": 4,
+      "endColumn": 21,
+      "signature": "def speak(self)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781421605078
+    },
+    "score": 10.52325464129338
+  },
+  {
+    "node": {
+      "id": "method:d3099007e623c162c0c072be77cdb2ce",
+      "kind": "method",
+      "name": "__init__",
+      "qualifiedName": "Dog::__init__",
+      "filePath": "models.py",
+      "language": "python",
+      "startLine": 19,
+      "endLine": 21,
+      "startColumn": 4,
+      "endColumn": 21,
+      "signature": "def __init__(self, name)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781421605078
+    },
+    "score": 10.513285451742602
+  },
+  {
+    "node": {
+      "id": "field:51a9e6f0f0aec584c5da2eda42c838f3",
+      "kind": "field",
+      "name": "name",
+      "qualifiedName": "Dog::name",
+      "filePath": "models.py",
+      "language": "python",
+      "startLine": 20,
+      "endLine": 20,
+      "startColumn": 8,
+      "endColumn": 24,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781421605078
+    },
+    "score": 3.5556294657414638
+  },
+  {
+    "node": {
+      "id": "field:9da88633718bbb76704b79432ae98779",
+      "kind": "field",
+      "name": "legs",
+      "qualifiedName": "Dog::legs",
+      "filePath": "models.py",
+      "language": "python",
+      "startLine": 21,
+      "endLine": 21,
+      "startColumn": 8,
+      "endColumn": 21,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781421605078
+    },
+    "score": 3.5556294657414638
+  },
+  {
+    "node": {
+      "id": "property:087bed26da4500d4bd41bf940b37f503",
+      "kind": "property",
+      "name": "label",
+      "qualifiedName": "Dog::label",
+      "filePath": "models.py",
+      "language": "python",
+      "startLine": 24,
+      "endLine": 25,
+      "startColumn": 4,
+      "endColumn": 24,
+      "signature": "def label(self)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "decorators": [
+        "property"
+      ],
+      "updatedAt": 1781421605078
+    },
+    "score": 3.5232546412933803
+  },
+  {
+    "node": {
+      "id": "variable:28a680d2919c58cb7f6127b34c31d9a4",
+      "kind": "variable",
+      "name": "d",
+      "qualifiedName": "describe::d",
+      "filePath": "service.py",
+      "language": "python",
+      "startLine": 13,
+      "endLine": 13,
+      "startColumn": 4,
+      "endColumn": 17,
+      "signature": "= Dog(name)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781421605077
+    },
+    "score": 2.4165293636143144
+  },
+  {
+    "node": {
+      "id": "import:fc1828807662a3b4c2ec18244c2d04c6",
+      "kind": "import",
+      "name": "models",
+      "qualifiedName": "models",
+      "filePath": "service.py",
+      "language": "python",
+      "startLine": 3,
+      "endLine": 3,
+      "startColumn": 0,
+      "endColumn": 22,
+      "signature": "from models import Dog",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781421605077
+    },
+    "score": 1.401028747983629
+  }
+]

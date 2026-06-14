@@ -1,0 +1,11 @@
+{
+  "symbol": "Dog",
+  "callers": [
+    {
+      "name": "service.py",
+      "kind": "file",
+      "filePath": "service.py",
+      "startLine": 1
+    }
+  ]
+}

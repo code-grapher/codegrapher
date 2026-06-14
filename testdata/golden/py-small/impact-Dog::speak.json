@@ -1,0 +1,20 @@
+{
+  "symbol": "Dog::speak",
+  "depth": 2,
+  "nodeCount": 2,
+  "edgeCount": 1,
+  "affected": [
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "service.py",
+      "startLine": 12
+    },
+    {
+      "name": "speak",
+      "kind": "method",
+      "filePath": "models.py",
+      "startLine": 27
+    }
+  ]
+}

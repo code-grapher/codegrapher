@@ -1,0 +1,9 @@
+[{"source":"class:c317e6e98070944d981aaf46e7f7b26b","target":"class:f17cce712e41ade7c160a47eb06ea1c4","kind":"extends","provenance":null,"line":16,"col":10},
+{"source":"file:service.py","target":"class:c317e6e98070944d981aaf46e7f7b26b","kind":"imports","provenance":null,"line":3,"col":19},
+{"source":"file:service.py","target":"import:fc1828807662a3b4c2ec18244c2d04c6","kind":"imports","provenance":null,"line":3,"col":5},
+{"source":"file:util.py","target":"import:f76dc9363c06c384c01352829da5492a","kind":"imports","provenance":null,"line":3,"col":7},
+{"source":"function:351770e1ea79ae46e7a8c94cf4b27b36","target":"function:a55565052cf8a0226e49181b1ff39000","kind":"calls","provenance":null,"line":21,"col":11},
+{"source":"function:351770e1ea79ae46e7a8c94cf4b27b36","target":"function:cc4fb875fc4f85a40e9e06e7234463a6","kind":"decorates","provenance":null,"line":17,"col":null},
+{"source":"function:4a7168c2af553f2961cddc673b24f254","target":"class:c317e6e98070944d981aaf46e7f7b26b","kind":"instantiates","provenance":null,"line":9,"col":11},
+{"source":"function:8f6d0e34c1abb5051b20536baf697b1a","target":"class:c317e6e98070944d981aaf46e7f7b26b","kind":"instantiates","provenance":null,"line":13,"col":8},
+{"source":"function:8f6d0e34c1abb5051b20536baf697b1a","target":"method:8885d1cd81c730c72f7074401fe87a68","kind":"calls","provenance":null,"line":14,"col":12}]

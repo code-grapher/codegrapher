@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 12,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Exploration: describe\n\nFound 10 symbols across 2 files.\n\n### Source Code\n\n> The code below is the **verbatim, current on-disk source** of these files \u2014 re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.\n\n#### service.py \u2014 describe(function), d(variable), sound(variable), make_dog(function)\n\n```python\n1\t\"\"\"Service layer exercising cross-module imports and inferred calls.\"\"\"\n2\t\n3\tfrom models import Dog\n4\t\n5\tMAX_DOGS = 10\n6\t\n7\t\n8\tdef make_dog(name):\n9\t    return Dog(name)\n10\t\n11\t\n12\tdef describe(name):\n13\t    d = Dog(name)\n14\t    sound = d.speak()\n15\t    return d.label, sound\n```\n\n#### models.py \u2014 speak(method), Dog(class), __init__(method), Animal(class)\n\n```python\n1\t\"\"\"Domain models for the py-small fixture.\"\"\"\n2\t\n3\tDEFAULT_SOUND = \"...\"\n4\t\n5\t\n6\tclass Animal:\n7\t    \"\"\"Base animal.\"\"\"\n8\t\n9\t    def __init__(self, name):\n10\t        self.name = name\n11\t\n12\t    def speak(self):\n13\t        return DEFAULT_SOUND\n14\t\n15\t\n16\tclass Dog(Animal):\n17\t    \"\"\"A dog.\"\"\"\n18\t\n19\t    def __init__(self, name):\n20\t        self.name = name\n21\t        self.legs = 4\n22\t\n23\t    @property\n24\t    def label(self):\n25\t        return self.name\n26\t\n27\t    def speak(self):\n28\t        return \"woof\"\n```\n"
+      }
+    ]
+  }
+}

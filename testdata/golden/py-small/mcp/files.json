@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Project Structure (3 files)\n\n\u251c\u2500\u2500 models.py (python, 12 symbols)\n\u251c\u2500\u2500 service.py (python, 8 symbols)\n\u2514\u2500\u2500 util.py (python, 6 symbols)"
+      }
+    ]
+  }
+}
