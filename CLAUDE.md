@@ -48,6 +48,15 @@ Go language support is the priority; TypeScript effort is PARKED for now
 beyond what the Go repo needs, typescript-go adoption (task #15). Don't
 spend tokens/agents on TS until the owner unparks it.
 
+## New-language work un-parked (owner decision, 2026-06-14)
+
+The owner un-parked new-language support for **Python, then C# and Java**
+(Python first as the template). This is additive language coverage, not the
+parked TS bug-fix work above — TS-side bug fixes (UB-2/UB-3) remain parked.
+Each new language gets full intelligence (symbols + cross-file resolution),
+its own deterministic self-goldens, and its own spec → plan → implementation
+cycle. See docs/superpowers/specs/2026-06-14-python-extraction-design.md.
+
 ## Standing rules
 
 - **Goldens are immutable by hand.** Never hand-edit testdata/golden/**.
