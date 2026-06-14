@@ -80,6 +80,12 @@
       "url": "https://github.com/rrousselGit/state_notifier.git",
       "sha": "0d692f96fd39c9629e57ec1cfcc540befda3a847",
       "lang": "dart"
+    },
+    {
+      "name": "middleclass",
+      "url": "https://github.com/kikito/middleclass.git",
+      "sha": "dc0fb3612da5d41866a2f06076a4ecea5614ef78",
+      "lang": "lua"
     }
   ]
 }

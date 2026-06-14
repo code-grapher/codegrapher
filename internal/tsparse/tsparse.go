@@ -49,6 +49,8 @@ const (
 	LangCPP
 	// LangDart selects the tree-sitter `dart` grammar.
 	LangDart
+	// LangLua selects the tree-sitter `lua` grammar.
+	LangLua
 )
 
 // Point is a (row, column) position in source text (0-indexed).
@@ -183,6 +185,8 @@ func NewParser(lang Language) (*Parser, error) {
 		return &Parser{lang: grammars.CppLanguage()}, nil
 	case LangDart:
 		return &Parser{lang: grammars.DartLanguage()}, nil
+	case LangLua:
+		return &Parser{lang: grammars.LuaLanguage()}, nil
 	default:
 		return nil, fmt.Errorf("tsparse: unknown language %d", lang)
 	}

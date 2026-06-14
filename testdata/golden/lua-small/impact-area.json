@@ -1,0 +1,32 @@
+{
+  "symbol": "area",
+  "depth": 2,
+  "nodeCount": 4,
+  "edgeCount": 3,
+  "affected": [
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shape.lua",
+      "startLine": 13
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "shape.lua",
+      "startLine": 18
+    },
+    {
+      "name": "main.lua",
+      "kind": "file",
+      "filePath": "main.lua",
+      "startLine": 1
+    },
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "main.lua",
+      "startLine": 4
+    }
+  ]
+}

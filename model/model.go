@@ -93,6 +93,7 @@ const (
 	LangScala       Language = "scala"
 	LangSwift       Language = "swift"
 	LangDart        Language = "dart"
+	LangLua         Language = "lua"
 	LangGoMod       Language = "go.mod"
 	LangPackageJSON Language = "package.json"
 	LangNode        Language = "node"

@@ -1,0 +1,199 @@
+[
+  {
+    "node": {
+      "id": "module:d0bf466c46d97266d197a7f76317f2ef",
+      "kind": "module",
+      "name": "Shape",
+      "qualifiedName": "Shape",
+      "filePath": "shape.lua",
+      "language": "lua",
+      "startLine": 2,
+      "endLine": 2,
+      "startColumn": 6,
+      "endColumn": 16,
+      "signature": "= {}",
+      "visibility": "private",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430238739
+    },
+    "score": 97.00000213323204
+  },
+  {
+    "node": {
+      "id": "import:af21f0c44fc6d3d1dd0fdf84e085339e",
+      "kind": "import",
+      "name": "shape",
+      "qualifiedName": "shape",
+      "filePath": "main.lua",
+      "language": "lua",
+      "startLine": 2,
+      "endLine": 2,
+      "startColumn": 14,
+      "endColumn": 30,
+      "signature": "require(\"shape\")",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430238739
+    },
+    "score": 81.00000211963359
+  },
+  {
+    "node": {
+      "id": "file:shape.lua",
+      "kind": "file",
+      "name": "shape.lua",
+      "qualifiedName": "shape.lua",
+      "filePath": "shape.lua",
+      "language": "lua",
+      "startLine": 1,
+      "endLine": 23,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430238739
+    },
+    "score": 40.00000210370662
+  },
+  {
+    "node": {
+      "id": "method:ff6966ad2149977ce307ac186289ef25",
+      "kind": "method",
+      "name": "area",
+      "qualifiedName": "Shape::area",
+      "filePath": "shape.lua",
+      "language": "lua",
+      "startLine": 13,
+      "endLine": 15,
+      "startColumn": 0,
+      "endColumn": 3,
+      "signature": "function Shape:area()",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430238739
+    },
+    "score": 23.000001863290507
+  },
+  {
+    "node": {
+      "id": "method:465f7507a6c9e4de3222c4154f69d6f9",
+      "kind": "method",
+      "name": "label",
+      "qualifiedName": "Shape::label",
+      "filePath": "shape.lua",
+      "language": "lua",
+      "startLine": 18,
+      "endLine": 20,
+      "startColumn": 0,
+      "endColumn": 3,
+      "signature": "function Shape.label(s)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430238739
+    },
+    "score": 23.000001836488813
+  },
+  {
+    "node": {
+      "id": "method:a2a77adc83a26c434ccad2f301c31561",
+      "kind": "method",
+      "name": "new",
+      "qualifiedName": "Shape::new",
+      "filePath": "shape.lua",
+      "language": "lua",
+      "startLine": 7,
+      "endLine": 10,
+      "startColumn": 0,
+      "endColumn": 3,
+      "signature": "function Shape.new(width, height)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430238739
+    },
+    "score": 23.000001810447216
+  },
+  {
+    "node": {
+      "id": "variable:7886d8573875222e088c91c78a2ad254",
+      "kind": "variable",
+      "name": "a",
+      "qualifiedName": "run::a",
+      "filePath": "main.lua",
+      "language": "lua",
+      "startLine": 6,
+      "endLine": 6,
+      "startColumn": 8,
+      "endColumn": 25,
+      "signature": "= Shape.area(s)",
+      "visibility": "private",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430238739
+    },
+    "score": 2.000001347647616
+  },
+  {
+    "node": {
+      "id": "variable:417a482f748bf9f4357ed1e246571ba0",
+      "kind": "variable",
+      "name": "text",
+      "qualifiedName": "run::text",
+      "filePath": "main.lua",
+      "language": "lua",
+      "startLine": 7,
+      "endLine": 7,
+      "startColumn": 8,
+      "endColumn": 29,
+      "signature": "= Shape.label(s)",
+      "visibility": "private",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430238739
+    },
+    "score": 2.000001347647616
+  },
+  {
+    "node": {
+      "id": "variable:2c24cf14b2eb33b65461794994fec683",
+      "kind": "variable",
+      "name": "s",
+      "qualifiedName": "run::s",
+      "filePath": "main.lua",
+      "language": "lua",
+      "startLine": 5,
+      "endLine": 5,
+      "startColumn": 8,
+      "endColumn": 27,
+      "signature": "= Shape.new(3, 4)",
+      "visibility": "private",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430238739
+    },
+    "score": 2.000001299634592
+  }
+]

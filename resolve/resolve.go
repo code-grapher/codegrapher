@@ -137,6 +137,8 @@ func resolveRef(
 		return resolveCPPRef(ref, s)
 	case model.LangDart:
 		return resolveDartRef(ref, s)
+	case model.LangLua:
+		return resolveLuaRef(ref, s)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -1892,6 +1894,210 @@ func resolveDartImportNodeRef(ref model.UnresolvedReference, s *store.Store) *mo
 		}
 	}
 	return nil
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Lua resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolveLuaRef resolves a Lua unresolved reference into an edge. Lua is
+// dynamically typed with no native classes, so resolution is deliberately the
+// simplest dynamic path: by-name lookup + through-require, with no constructor
+// inference (tables are too dynamic to infer deterministically — documented).
+//
+//   - dotted calls "M.f": resolve f as a member of the module table M (matched
+//     by qualified-name parent), else a strict unambiguous method-name lookup.
+//   - imports: target the real cross-file definition (the required module file)
+//     when one exists; otherwise the local import node.
+//   - bare names (calls/references): resolve through a local require import to
+//     the real cross-file definition.
+//   - anything else: generic name resolution.
+func resolveLuaRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	name := ref.ReferenceName
+
+	if ref.ReferenceKind == model.EdgeCalls {
+		if dotIdx := strings.Index(name, "."); dotIdx > 0 {
+			table := name[:dotIdx]
+			member := name[dotIdx+1:]
+			if member == "" || strings.ContainsAny(member, "./") {
+				return nil
+			}
+			if edge := resolveLuaMemberOnModule(ref, s, table, member); edge != nil {
+				return edge
+			}
+			return resolveLuaDottedFallback(ref, s, member)
+		}
+	}
+
+	if ref.ReferenceKind == model.EdgeImports {
+		if edge := resolveLuaImportsRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveGenericRef(ref, s)
+	}
+
+	if ref.ReferenceKind == model.EdgeCalls || ref.ReferenceKind == model.EdgeReferences {
+		if !strings.Contains(name, ".") {
+			if edge := resolveLuaBareThroughImport(ref, s); edge != nil {
+				return edge
+			}
+		}
+	}
+
+	return resolveGenericRef(ref, s)
+}
+
+// resolveLuaDefinitionByName returns the best real (non-import, non-file) Lua
+// definition node named name, preferring same-file/same-dir.
+func resolveLuaDefinitionByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangLua {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolveLuaBareThroughImport resolves a bare-name call/reference whose best
+// same-file candidate is a local require import: it resolves THROUGH the import
+// to the real cross-file definition.
+func resolveLuaBareThroughImport(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	sameFile, err := s.GetNodesByFile(ref.FilePath)
+	if err != nil {
+		return nil
+	}
+	hasLocalImport := false
+	for i := range sameFile {
+		if sameFile[i].Kind == model.KindImport && sameFile[i].Name == ref.ReferenceName {
+			hasLocalImport = true
+			break
+		}
+	}
+	if !hasLocalImport {
+		return nil
+	}
+	target := resolveLuaDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   ref.ReferenceKind,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolveLuaImportsRef resolves an `imports` ref. `require "mod"` first targets
+// the in-repo module file whose basename (minus .lua) is the required module
+// name (the spec's module-path → file mapping); failing that, a cross-file
+// definition named like the module. Returns nil otherwise (fall back to the
+// local import node).
+func resolveLuaImportsRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	if file := resolveLuaModuleFile(ref.ReferenceName, ref.FilePath, s); file != nil {
+		return &model.Edge{
+			Source: ref.FromNodeID,
+			Target: file.ID,
+			Kind:   model.EdgeImports,
+			Line:   ref.Line,
+			Column: ref.Column,
+		}
+	}
+	target := resolveLuaDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   model.EdgeImports,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolveLuaModuleFile returns the in-repo Lua file node whose basename minus
+// the .lua extension equals the required module name (preferring same-dir),
+// or nil. modName uses the trailing module-path segment (e.g. "shape").
+func resolveLuaModuleFile(modName, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(modName + ".lua")
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var files []model.Node
+	for _, n := range candidates {
+		if n.Kind == model.KindFile && n.Language == model.LangLua {
+			files = append(files, n)
+		}
+	}
+	if len(files) == 0 {
+		return nil
+	}
+	return pickBestNode(files, refFilePath)
+}
+
+// resolveLuaMemberOnModule resolves member as a function/method contained by the
+// module table named table: a member's qualified name is "table::member".
+func resolveLuaMemberOnModule(ref model.UnresolvedReference, s *store.Store, table, member string) *model.Edge {
+	candidates, err := s.GetNodesByName(member)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	prefix := table + "::"
+	for i := range candidates {
+		n := &candidates[i]
+		if n.Language != model.LangLua {
+			continue
+		}
+		if strings.HasPrefix(n.QualifiedName, prefix) {
+			return &model.Edge{
+				Source: ref.FromNodeID,
+				Target: n.ID,
+				Kind:   ref.ReferenceKind,
+				Line:   ref.Line,
+				Column: ref.Column,
+			}
+		}
+	}
+	return nil
+}
+
+// resolveLuaDottedFallback resolves a dotted call whose module table is unknown:
+// emits an edge only when exactly one Lua method/function named member exists.
+func resolveLuaDottedFallback(ref model.UnresolvedReference, s *store.Store, member string) *model.Edge {
+	candidates, err := s.GetNodesByName(member)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var matches []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangLua && (n.Kind == model.KindMethod || n.Kind == model.KindFunction) {
+			matches = append(matches, n)
+		}
+	}
+	if len(matches) != 1 {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: matches[0].ID,
+		Kind:   ref.ReferenceKind,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

@@ -1,0 +1,6 @@
+[{"source":"file:main.lua","target":"file:shape.lua","kind":"imports","provenance":null,"line":2,"col":22},
+{"source":"file:main.lua","target":"function:2e79a8526bc21158567782e37b77dd17","kind":"calls","provenance":null,"line":12,"col":null},
+{"source":"function:2e79a8526bc21158567782e37b77dd17","target":"method:465f7507a6c9e4de3222c4154f69d6f9","kind":"calls","provenance":null,"line":7,"col":15},
+{"source":"function:2e79a8526bc21158567782e37b77dd17","target":"method:a2a77adc83a26c434ccad2f301c31561","kind":"calls","provenance":null,"line":5,"col":12},
+{"source":"function:2e79a8526bc21158567782e37b77dd17","target":"method:ff6966ad2149977ce307ac186289ef25","kind":"calls","provenance":null,"line":6,"col":12},
+{"source":"method:465f7507a6c9e4de3222c4154f69d6f9","target":"method:ff6966ad2149977ce307ac186289ef25","kind":"calls","provenance":null,"line":19,"col":29}]

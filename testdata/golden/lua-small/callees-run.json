@@ -1,0 +1,23 @@
+{
+  "symbol": "run",
+  "callees": [
+    {
+      "name": "new",
+      "kind": "method",
+      "filePath": "shape.lua",
+      "startLine": 7
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shape.lua",
+      "startLine": 13
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "shape.lua",
+      "startLine": 18
+    }
+  ]
+}

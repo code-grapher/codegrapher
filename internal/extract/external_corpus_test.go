@@ -52,6 +52,8 @@ func (r externalRepo) repoLang() model.Language {
 		return model.LangCPP
 	case "dart":
 		return model.LangDart
+	case "lua":
+		return model.LangLua
 	default:
 		return model.LangPython
 	}
@@ -82,6 +84,8 @@ func (r externalRepo) sourceExts() []string {
 		return []string{".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx"}
 	case model.LangDart:
 		return []string{".dart"}
+	case model.LangLua:
+		return []string{".lua"}
 	default:
 		return []string{".py", ".pyi"}
 	}

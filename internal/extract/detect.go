@@ -62,6 +62,8 @@ func DetectLanguage(filePath string) model.Language {
 		return model.LangSwift
 	case ".dart":
 		return model.LangDart
+	case ".lua":
+		return model.LangLua
 	// File-level-only languages: tracked in the files table with zero
 	// symbol nodes, matching isFileLevelOnlyLanguage() in grammars.ts.
 	case ".yml", ".yaml":

@@ -1,0 +1,17 @@
+{
+  "symbol": "area",
+  "callers": [
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "main.lua",
+      "startLine": 4
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "shape.lua",
+      "startLine": 18
+    }
+  ]
+}

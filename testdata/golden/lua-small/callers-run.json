@@ -1,0 +1,11 @@
+{
+  "symbol": "run",
+  "callers": [
+    {
+      "name": "main.lua",
+      "kind": "file",
+      "filePath": "main.lua",
+      "startLine": 1
+    }
+  ]
+}

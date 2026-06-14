@@ -113,6 +113,7 @@ capture scala-small "circle" "area" "label" "run" "Circle" "Shape" "Circle::area
 capture swift-small "circle" "area" "label" "run" "Circle" "Shape" "Point::area"
 capture cpp-small "shape" "area" "distanceTo" "run" "Circle" "Shape" "Point"
 capture dart-small "circle" "area" "label" "run" "Circle" "Shape" "Circle::area"
+capture lua-small "shape" "area" "label" "run" "Shape" "new" "Shape::area"
 
 echo ""
 echo "=== MCP goldens ==="
@@ -268,6 +269,11 @@ elif fixture == "dart-small":
     explore2 = "area label run"
     explore3 = "run"
     q_explore1 = "how does the circle work"
+elif fixture == "lua-small":
+    sym1 = "area"
+    explore2 = "area label run"
+    explore3 = "run"
+    q_explore1 = "how does the shape work"
 else:
     sym1 = "get"
     explore2 = "get set lookup"

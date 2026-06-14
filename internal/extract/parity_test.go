@@ -129,6 +129,12 @@ func TestParityDartSmall(t *testing.T) {
 	testParity(t, "dart-small")
 }
 
+// TestParityLuaSmall runs our extractor over all files in testdata/fixtures/lua-small
+// and compares against the golden.
+func TestParityLuaSmall(t *testing.T) {
+	testParity(t, "lua-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 

@@ -90,6 +90,10 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 		// Dart scope uses the fallback version this pass: no pubspec.yaml
 		// parsing yet. majorVersion("") → fallbackVersion ("v0").
 		ver = ""
+	case model.LangLua:
+		// Lua scope uses the fallback version this pass: no rockspec/.luarc
+		// parsing yet. majorVersion("") → fallbackVersion ("v0").
+		ver = ""
 	}
 	return majorVersion(ver)
 }

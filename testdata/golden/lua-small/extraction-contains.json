@@ -1,0 +1,11 @@
+[{"source":"file:main.lua","target":"function:2e79a8526bc21158567782e37b77dd17","kind":"contains"},
+{"source":"file:main.lua","target":"import:af21f0c44fc6d3d1dd0fdf84e085339e","kind":"contains"},
+{"source":"file:shape.lua","target":"constant:a4b988bb1739b660282fdb267ca3f274","kind":"contains"},
+{"source":"file:shape.lua","target":"module:d0bf466c46d97266d197a7f76317f2ef","kind":"contains"},
+{"source":"function:2e79a8526bc21158567782e37b77dd17","target":"variable:2c24cf14b2eb33b65461794994fec683","kind":"contains"},
+{"source":"function:2e79a8526bc21158567782e37b77dd17","target":"variable:417a482f748bf9f4357ed1e246571ba0","kind":"contains"},
+{"source":"function:2e79a8526bc21158567782e37b77dd17","target":"variable:7886d8573875222e088c91c78a2ad254","kind":"contains"},
+{"source":"method:a2a77adc83a26c434ccad2f301c31561","target":"variable:1e395379a807581049f97f5c12e0b3a7","kind":"contains"},
+{"source":"module:d0bf466c46d97266d197a7f76317f2ef","target":"method:465f7507a6c9e4de3222c4154f69d6f9","kind":"contains"},
+{"source":"module:d0bf466c46d97266d197a7f76317f2ef","target":"method:a2a77adc83a26c434ccad2f301c31561","kind":"contains"},
+{"source":"module:d0bf466c46d97266d197a7f76317f2ef","target":"method:ff6966ad2149977ce307ac186289ef25","kind":"contains"}]

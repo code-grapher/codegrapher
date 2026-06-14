@@ -1,0 +1,37 @@
+{
+  "initialized": true,
+  "version": "0.9.9",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/lua/testdata/fixtures/lua-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/lua/testdata/fixtures/lua-small/.codegraph",
+  "lastIndexed": "",
+  "fileCount": 2,
+  "nodeCount": 13,
+  "edgeCount": 17,
+  "dbSizeBytes": 147456,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "constant": 1,
+    "file": 2,
+    "function": 1,
+    "import": 1,
+    "method": 3,
+    "module": 1,
+    "variable": 4
+  },
+  "languages": [
+    "lua"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "0.9.9",
+    "builtWithExtractionVersion": 14,
+    "currentExtractionVersion": 14,
+    "reindexRecommended": false
+  }
+}
