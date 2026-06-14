@@ -1,0 +1,11 @@
+{
+  "symbol": "Circle",
+  "callers": [
+    {
+      "name": "App",
+      "kind": "module",
+      "filePath": "app.ex",
+      "startLine": 3
+    }
+  ]
+}

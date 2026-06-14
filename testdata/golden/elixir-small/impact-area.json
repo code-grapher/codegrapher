@@ -1,0 +1,32 @@
+{
+  "symbol": "area",
+  "depth": 2,
+  "nodeCount": 4,
+  "edgeCount": 2,
+  "affected": [
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.ex",
+      "startLine": 7
+    },
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shapes.ex",
+      "startLine": 13
+    },
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shapes.ex",
+      "startLine": 25
+    },
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "app.ex",
+      "startLine": 6
+    }
+  ]
+}

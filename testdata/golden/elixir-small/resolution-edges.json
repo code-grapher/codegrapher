@@ -1,0 +1,5 @@
+[{"source":"function:906ee321a11f3fdbec54c4397a89afec","target":"function:2be2e9ca43fa54b8201b9a28c96cb6df","kind":"calls","provenance":null,"line":25,"col":24},
+{"source":"function:e6148172662db6c68f5ceee825968219","target":"function:2be2e9ca43fa54b8201b9a28c96cb6df","kind":"calls","provenance":null,"line":8,"col":8},
+{"source":"function:e6148172662db6c68f5ceee825968219","target":"function:623777c8b72fe6a0d57af7d04c3a79ba","kind":"calls","provenance":null,"line":9,"col":11},
+{"source":"module:98d12991dff2a3e301550d00d64e992b","target":"interface:248f1888c61dfb96c200a3b5d0671f4a","kind":"implements","provenance":null,"line":24,"col":null},
+{"source":"module:ec0ba08569a51442d0ab4bcea0cc566d","target":"module:75bb64fe6c7f7352a2ffbdb6b2925dd5","kind":"imports","provenance":null,"line":4,"col":2}]

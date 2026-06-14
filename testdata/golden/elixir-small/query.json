@@ -1,0 +1,220 @@
+[
+  {
+    "node": {
+      "id": "struct:722f7a29dc63a334f6a175dd0975a45c",
+      "kind": "struct",
+      "name": "Circle",
+      "qualifiedName": "Circle::Circle",
+      "filePath": "shapes.ex",
+      "language": "elixir",
+      "startLine": 11,
+      "endLine": 11,
+      "startColumn": 2,
+      "endColumn": 28,
+      "signature": "defstruct",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430431484
+    },
+    "score": 86.00000212543554
+  },
+  {
+    "node": {
+      "id": "module:75bb64fe6c7f7352a2ffbdb6b2925dd5",
+      "kind": "module",
+      "name": "Circle",
+      "qualifiedName": "Circle",
+      "filePath": "shapes.ex",
+      "language": "elixir",
+      "startLine": 10,
+      "endLine": 22,
+      "startColumn": 0,
+      "endColumn": 3,
+      "signature": "defmodule Circle",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430431484
+    },
+    "score": 84.00000211746143
+  },
+  {
+    "node": {
+      "id": "module:98d12991dff2a3e301550d00d64e992b",
+      "kind": "module",
+      "name": "Shape.Circle",
+      "qualifiedName": "Shape.Circle",
+      "filePath": "shapes.ex",
+      "language": "elixir",
+      "startLine": 24,
+      "endLine": 26,
+      "startColumn": 0,
+      "endColumn": 3,
+      "signature": "defimpl Shape, for: Circle",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430431484
+    },
+    "score": 14.000002080261797
+  },
+  {
+    "node": {
+      "id": "function:623777c8b72fe6a0d57af7d04c3a79ba",
+      "kind": "function",
+      "name": "label",
+      "qualifiedName": "Circle::label",
+      "filePath": "shapes.ex",
+      "language": "elixir",
+      "startLine": 17,
+      "endLine": 19,
+      "startColumn": 2,
+      "endColumn": 5,
+      "signature": "def label(circle)",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430431484
+    },
+    "score": 10.000001854689042
+  },
+  {
+    "node": {
+      "id": "function:906ee321a11f3fdbec54c4397a89afec",
+      "kind": "function",
+      "name": "area",
+      "qualifiedName": "Shape.Circle::area",
+      "filePath": "shapes.ex",
+      "language": "elixir",
+      "startLine": 25,
+      "endLine": 25,
+      "startColumn": 2,
+      "endColumn": 43,
+      "signature": "def area(circle)",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430431484
+    },
+    "score": 10.00000182709326
+  },
+  {
+    "node": {
+      "id": "function:2be2e9ca43fa54b8201b9a28c96cb6df",
+      "kind": "function",
+      "name": "area",
+      "qualifiedName": "Circle::area",
+      "filePath": "shapes.ex",
+      "language": "elixir",
+      "startLine": 13,
+      "endLine": 15,
+      "startColumn": 2,
+      "endColumn": 5,
+      "signature": "def area(%Circle{radius: r})",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430431484
+    },
+    "score": 10.00000180030663
+  },
+  {
+    "node": {
+      "id": "function:5d8d1892f5b6db8f3e0a7a54cef90a14",
+      "kind": "function",
+      "name": "scale",
+      "qualifiedName": "Circle::scale",
+      "filePath": "shapes.ex",
+      "language": "elixir",
+      "startLine": 21,
+      "endLine": 21,
+      "startColumn": 2,
+      "endColumn": 26,
+      "signature": "defp scale(r)",
+      "visibility": "private",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430431484
+    },
+    "score": 10.000001745123537
+  },
+  {
+    "node": {
+      "id": "field:afc6fd1c56bb8839b9e33c6393234366",
+      "kind": "field",
+      "name": "radius",
+      "qualifiedName": "Circle::Circle::radius",
+      "filePath": "shapes.ex",
+      "language": "elixir",
+      "startLine": 11,
+      "endLine": 11,
+      "startColumn": 13,
+      "endColumn": 20,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430431484
+    },
+    "score": 3.000001990507268
+  },
+  {
+    "node": {
+      "id": "field:cc7cf358b49743f1fa61bdc08ff5a8ae",
+      "kind": "field",
+      "name": "name",
+      "qualifiedName": "Circle::Circle::name",
+      "filePath": "shapes.ex",
+      "language": "elixir",
+      "startLine": 11,
+      "endLine": 11,
+      "startColumn": 22,
+      "endColumn": 27,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430431484
+    },
+    "score": 3.000001990507268
+  },
+  {
+    "node": {
+      "id": "import:75e9b20aedd5e7cc6ecbc1cabe776a80",
+      "kind": "import",
+      "name": "C",
+      "qualifiedName": "Circle",
+      "filePath": "app.ex",
+      "language": "elixir",
+      "startLine": 4,
+      "endLine": 4,
+      "startColumn": 2,
+      "endColumn": 21,
+      "signature": "alias Circle",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781430431483
+    },
+    "score": 1.0000019124592834
+  }
+]

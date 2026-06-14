@@ -51,6 +51,8 @@ const (
 	LangDart
 	// LangLua selects the tree-sitter `lua` grammar.
 	LangLua
+	// LangElixir selects the tree-sitter `elixir` grammar.
+	LangElixir
 )
 
 // Point is a (row, column) position in source text (0-indexed).
@@ -187,6 +189,8 @@ func NewParser(lang Language) (*Parser, error) {
 		return &Parser{lang: grammars.DartLanguage()}, nil
 	case LangLua:
 		return &Parser{lang: grammars.LuaLanguage()}, nil
+	case LangElixir:
+		return &Parser{lang: grammars.ElixirLanguage()}, nil
 	default:
 		return nil, fmt.Errorf("tsparse: unknown language %d", lang)
 	}

@@ -1,0 +1,17 @@
+{
+  "symbol": "area",
+  "callers": [
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "app.ex",
+      "startLine": 6
+    },
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shapes.ex",
+      "startLine": 25
+    }
+  ]
+}

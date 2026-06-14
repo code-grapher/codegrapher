@@ -86,6 +86,12 @@
       "url": "https://github.com/kikito/middleclass.git",
       "sha": "dc0fb3612da5d41866a2f06076a4ecea5614ef78",
       "lang": "lua"
+    },
+    {
+      "name": "norm",
+      "url": "https://github.com/keathley/norm.git",
+      "sha": "b91a154339f995cdee8437a58c0cf9e4935644af",
+      "lang": "elixir"
     }
   ]
 }

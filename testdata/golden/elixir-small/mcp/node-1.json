@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "**3 definitions named \"area\"**\nReturning 3 in full \u2014 pick the one you need (no Read required).\n\n## area (method)\n\n**Location:** shapes.ex:7\n**Signature:** `def area(shape)`\n\n```elixir\n7\t  def area(shape)\n```\n\n---\n\n## area (function)\n\n**Location:** shapes.ex:13\n**Signature:** `def area(%Circle{radius: r})`\n\n```elixir\n13\t  def area(%Circle{radius: r}) do\n14\t    r * r * 3\n15\t  end\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Called by \u2190** run (app.ex:6), area (shapes.ex:25)\n\n---\n\n## area (function)\n\n**Location:** shapes.ex:25\n**Signature:** `def area(circle)`\n\n```elixir\n25\t  def area(circle), do: Circle.area(circle)\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Calls \u2192** area (shapes.ex:13)"
+      }
+    ]
+  }
+}

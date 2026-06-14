@@ -136,6 +136,11 @@ var fixtures = []fixture{
 		query:   "shape",
 		symbols: []string{"area", "label", "run", "Shape", "new", "Shape::area"},
 	},
+	{
+		name:    "elixir-small",
+		query:   "circle",
+		symbols: []string{"area", "label", "run", "Circle", "Shape", "Circle::area"},
+	},
 }
 
 // TestParityGoldens runs the binary against all goldens and asserts full-value parity.

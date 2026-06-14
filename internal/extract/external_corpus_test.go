@@ -54,6 +54,8 @@ func (r externalRepo) repoLang() model.Language {
 		return model.LangDart
 	case "lua":
 		return model.LangLua
+	case "elixir":
+		return model.LangElixir
 	default:
 		return model.LangPython
 	}
@@ -86,6 +88,8 @@ func (r externalRepo) sourceExts() []string {
 		return []string{".dart"}
 	case model.LangLua:
 		return []string{".lua"}
+	case model.LangElixir:
+		return []string{".ex", ".exs"}
 	default:
 		return []string{".py", ".pyi"}
 	}

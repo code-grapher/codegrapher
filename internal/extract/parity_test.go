@@ -135,6 +135,12 @@ func TestParityLuaSmall(t *testing.T) {
 	testParity(t, "lua-small")
 }
 
+// TestParityElixirSmall runs our extractor over all files in testdata/fixtures/elixir-small
+// and compares against the golden.
+func TestParityElixirSmall(t *testing.T) {
+	testParity(t, "elixir-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 
