@@ -1,0 +1,56 @@
+{
+  "symbol": "Circle",
+  "depth": 2,
+  "nodeCount": 8,
+  "edgeCount": 6,
+  "affected": [
+    {
+      "name": "App.java",
+      "kind": "file",
+      "filePath": "com/example/app/App.java",
+      "startLine": 1
+    },
+    {
+      "name": "Circle",
+      "kind": "import",
+      "filePath": "com/example/app/App.java",
+      "startLine": 3
+    },
+    {
+      "name": "Circle",
+      "kind": "class",
+      "filePath": "com/example/shapes/Circle.java",
+      "startLine": 4
+    },
+    {
+      "name": "Circle",
+      "kind": "method",
+      "filePath": "com/example/shapes/Circle.java",
+      "startLine": 9
+    },
+    {
+      "name": "PI",
+      "kind": "constant",
+      "filePath": "com/example/shapes/Circle.java",
+      "startLine": 5
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "com/example/shapes/Circle.java",
+      "startLine": 14
+    },
+    {
+      "name": "radius",
+      "kind": "field",
+      "filePath": "com/example/shapes/Circle.java",
+      "startLine": 7
+    },
+    {
+      "name": "run",
+      "kind": "method",
+      "filePath": "com/example/app/App.java",
+      "startLine": 7
+    }
+  ]
+}

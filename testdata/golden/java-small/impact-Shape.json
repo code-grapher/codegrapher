@@ -1,0 +1,56 @@
+{
+  "symbol": "Shape",
+  "depth": 2,
+  "nodeCount": 8,
+  "edgeCount": 7,
+  "affected": [
+    {
+      "name": "Base",
+      "kind": "class",
+      "filePath": "com/example/shapes/Base.java",
+      "startLine": 4
+    },
+    {
+      "name": "Base",
+      "kind": "method",
+      "filePath": "com/example/shapes/Base.java",
+      "startLine": 7
+    },
+    {
+      "name": "Circle",
+      "kind": "class",
+      "filePath": "com/example/shapes/Circle.java",
+      "startLine": 4
+    },
+    {
+      "name": "Shape",
+      "kind": "interface",
+      "filePath": "com/example/shapes/Shape.java",
+      "startLine": 4
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "com/example/shapes/Shape.java",
+      "startLine": 5
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "com/example/shapes/Base.java",
+      "startLine": 11
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "com/example/shapes/Shape.java",
+      "startLine": 7
+    },
+    {
+      "name": "name",
+      "kind": "field",
+      "filePath": "com/example/shapes/Base.java",
+      "startLine": 5
+    }
+  ]
+}

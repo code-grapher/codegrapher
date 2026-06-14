@@ -38,6 +38,8 @@ func DetectLanguage(filePath string) model.Language {
 		return model.LangPython
 	case ".cs":
 		return model.LangCSharp
+	case ".java":
+		return model.LangJava
 	// File-level-only languages: tracked in the files table with zero
 	// symbol nodes, matching isFileLevelOnlyLanguage() in grammars.ts.
 	case ".yml", ".yaml":

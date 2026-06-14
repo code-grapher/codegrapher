@@ -1,0 +1,14 @@
+{
+  "symbol": "run",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "run",
+      "kind": "method",
+      "filePath": "com/example/app/App.java",
+      "startLine": 7
+    }
+  ]
+}

@@ -390,7 +390,7 @@ func reportSliceDiff[T any](t *testing.T, label string, got, want []T, key func(
 // --- the gates ---------------------------------------------------------------
 
 func TestGoldenInit(t *testing.T) {
-	for _, fixture := range []string{"go-small", "ts-small", "py-small", "cs-small"} {
+	for _, fixture := range []string{"go-small", "ts-small", "py-small", "cs-small", "java-small"} {
 		t.Run(fixture, func(t *testing.T) {
 			root := repoRootDir(t)
 			fixtureCopy := copyFixture(t, filepath.Join(root, "testdata", "fixtures", fixture))
