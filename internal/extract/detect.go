@@ -81,6 +81,8 @@ func DetectLanguage(filePath string) model.Language {
 	// R sources use .R or .r (lowercase).
 	case ".r":
 		return model.LangR
+	case ".ps1", ".psm1", ".psd1":
+		return model.LangPowerShell
 	// File-level-only languages: tracked in the files table with zero
 	// symbol nodes, matching isFileLevelOnlyLanguage() in grammars.ts.
 	case ".yml", ".yaml":
