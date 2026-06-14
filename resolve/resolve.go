@@ -149,6 +149,8 @@ func resolveRef(
 		return resolvePerlRef(ref, s, pyVarTypeCache)
 	case model.LangErlang:
 		return resolveErlangRef(ref, s)
+	case model.LangFSharp:
+		return resolveFSharpRef(ref, s)
 	default:
 		return resolveGenericRef(ref, s)
 	}

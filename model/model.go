@@ -99,6 +99,7 @@ const (
 	LangObjC        Language = "objc"
 	LangPerl        Language = "perl"
 	LangErlang      Language = "erlang"
+	LangFSharp      Language = "fsharp"
 	LangGoMod       Language = "go.mod"
 	LangPackageJSON Language = "package.json"
 	LangNode        Language = "node"
