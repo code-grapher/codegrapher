@@ -171,6 +171,11 @@ var fixtures = []fixture{
 		query:   "circle",
 		symbols: []string{"Radius", "run", "Shapes", "App", "Circle", "Shapes::area"},
 	},
+	{
+		name:    "bash-small",
+		query:   "greet",
+		symbols: []string{"greet", "helper", "MAX_RETRIES", "name"},
+	},
 }
 
 // TestParityGoldens runs the binary against all goldens and asserts full-value parity.

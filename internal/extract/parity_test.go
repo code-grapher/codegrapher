@@ -177,6 +177,12 @@ func TestParityFsharpSmall(t *testing.T) {
 	testParity(t, "fsharp-small")
 }
 
+// TestParityBashSmall runs our extractor over all files in testdata/fixtures/bash-small
+// and compares against the golden.
+func TestParityBashSmall(t *testing.T) {
+	testParity(t, "bash-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 

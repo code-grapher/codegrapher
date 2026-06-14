@@ -68,6 +68,8 @@ func (r externalRepo) repoLang() model.Language {
 		return model.LangJulia
 	case "fsharp":
 		return model.LangFSharp
+	case "bash":
+		return model.LangBash
 	default:
 		return model.LangPython
 	}
@@ -114,6 +116,8 @@ func (r externalRepo) sourceExts() []string {
 		return []string{".jl"}
 	case model.LangFSharp:
 		return []string{".fs", ".fsi", ".fsx"}
+	case model.LangBash:
+		return []string{".sh", ".bash"}
 	default:
 		return []string{".py", ".pyi"}
 	}

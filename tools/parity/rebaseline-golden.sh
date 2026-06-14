@@ -121,6 +121,7 @@ capture perl-small "dog" "speak" "new" "Dog" "Animal" "Dog::speak" "Animal::new"
 capture erlang-small "shape" "area" "run" "shape" "app" "circle" "shape::area"
 capture julia-small "circle" "area" "describe" "Circle" "Rectangle" "Shape" "Shapes::area"
 capture fsharp-small "circle" "Radius" "run" "Shapes" "App" "Circle" "Shapes::area"
+capture bash-small "greet" "greet" "helper" "MAX_RETRIES" "name"
 
 echo ""
 echo "=== MCP goldens ==="
