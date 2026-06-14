@@ -1,0 +1,26 @@
+{
+  "symbol": "circle",
+  "depth": 2,
+  "nodeCount": 3,
+  "edgeCount": 2,
+  "affected": [
+    {
+      "name": "circle",
+      "kind": "struct",
+      "filePath": "shape.erl",
+      "startLine": 5
+    },
+    {
+      "name": "name",
+      "kind": "field",
+      "filePath": "shape.erl",
+      "startLine": 5
+    },
+    {
+      "name": "radius",
+      "kind": "field",
+      "filePath": "shape.erl",
+      "startLine": 5
+    }
+  ]
+}

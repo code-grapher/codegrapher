@@ -1,0 +1,14 @@
+[
+  {
+    "path": "app.erl",
+    "language": "erlang",
+    "nodeCount": 3,
+    "size": 165
+  },
+  {
+    "path": "shape.erl",
+    "language": "erlang",
+    "nodeCount": 6,
+    "size": 172
+  }
+]

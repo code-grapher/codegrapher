@@ -1,0 +1,7 @@
+[{"source":"file:app.erl","target":"module:0ba6e2b140c72106631e6a1f1d88e3f7","kind":"contains"},
+{"source":"file:shape.erl","target":"module:d1a9929b9e8a96455e85cba1d1e7e622","kind":"contains"},
+{"source":"module:0ba6e2b140c72106631e6a1f1d88e3f7","target":"function:4e1e3cff665a81c9e6f54ece3533c746","kind":"contains"},
+{"source":"module:d1a9929b9e8a96455e85cba1d1e7e622","target":"function:30ca3fddf8b4db48d73f70b7016c3874","kind":"contains"},
+{"source":"module:d1a9929b9e8a96455e85cba1d1e7e622","target":"struct:3633afa949cd808ad8be7de19dfe4946","kind":"contains"},
+{"source":"struct:3633afa949cd808ad8be7de19dfe4946","target":"field:5c8c1b786e2b708befc693a423f1a986","kind":"contains"},
+{"source":"struct:3633afa949cd808ad8be7de19dfe4946","target":"field:aa5091dd7206402f07e54fc0bda6ad4a","kind":"contains"}]

@@ -145,6 +145,8 @@ func resolveRef(
 		return resolveHaskellRef(ref, s)
 	case model.LangObjC:
 		return resolveObjCRef(ref, s)
+	case model.LangErlang:
+		return resolveErlangRef(ref, s)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -3347,6 +3349,180 @@ func resolveElixirImportsRef(ref model.UnresolvedReference, s *store.Store) *mod
 		return nil
 	}
 	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeImports, Line: ref.Line, Column: ref.Column}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Erlang resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolveErlangRef resolves an Erlang unresolved reference into an edge.
+//
+//   - implements (`-behaviour(mod)`): resolve mod to its KindModule definition
+//     by name.
+//   - imports (`-include`/`-include_lib`/`-import`): resolve through to the real
+//     module/file definition by name; else fall back to the local import node.
+//   - calls: `mod:func` resolves func on module mod (a function whose qualified
+//     parent segment equals mod); a bare `func` resolves to a same-module or
+//     -import'ed function, resolving THROUGH a local import shadow.
+func resolveErlangRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	name := ref.ReferenceName
+
+	switch ref.ReferenceKind {
+	case model.EdgeImplements:
+		target := resolveErlangModuleByName(name, ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeImplements, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeImports:
+		if target := resolveErlangModuleByName(name, ref.FilePath, s); target != nil {
+			return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeImports, Line: ref.Line, Column: ref.Column}
+		}
+		return resolveGenericRef(ref, s)
+
+	case model.EdgeCalls:
+		if colon := strings.LastIndex(name, ":"); colon > 0 {
+			module := name[:colon]
+			fn := name[colon+1:]
+			if fn == "" {
+				return nil
+			}
+			if edge := resolveErlangFunctionOnModule(ref, s, module, fn); edge != nil {
+				return edge
+			}
+			return resolveErlangDottedFallback(ref, s, fn)
+		}
+		// Bare call: resolve through a local -import shadow, else by name.
+		if edge := resolveErlangBareThroughImport(ref, s); edge != nil {
+			return edge
+		}
+		target := resolveErlangDefinitionByName(name, ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+	}
+
+	return resolveGenericRef(ref, s)
+}
+
+// resolveErlangModuleByName returns the best Erlang KindModule named name,
+// preferring same-file/same-dir.
+func resolveErlangModuleByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangErlang && n.Kind == model.KindModule {
+			defs = append(defs, n)
+		}
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolveErlangDefinitionByName returns the best real (non-import, non-file)
+// Erlang definition node named name, preferring same-file/same-dir.
+func resolveErlangDefinitionByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangErlang {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolveErlangFunctionOnModule resolves fn as a function contained by the module
+// named module — a candidate whose qualified-name parent segment equals module.
+func resolveErlangFunctionOnModule(ref model.UnresolvedReference, s *store.Store, module, fn string) *model.Edge {
+	candidates, err := s.GetNodesByName(fn)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	for i := range candidates {
+		n := &candidates[i]
+		if n.Language != model.LangErlang || n.Kind != model.KindFunction {
+			continue
+		}
+		if erlangQualParent(n.QualifiedName) == module {
+			return &model.Edge{Source: ref.FromNodeID, Target: n.ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+		}
+	}
+	return nil
+}
+
+// erlangQualParent returns the parent module segment of a "::"-joined qualified
+// name (foo::bar → "foo"). Returns "" when there is no parent.
+func erlangQualParent(qn string) string {
+	idx := strings.LastIndex(qn, "::")
+	if idx < 0 {
+		return ""
+	}
+	parent := qn[:idx]
+	if j := strings.LastIndex(parent, "::"); j >= 0 {
+		parent = parent[j+2:]
+	}
+	return parent
+}
+
+// resolveErlangDottedFallback resolves a `mod:func` call whose module didn't
+// match: emit an edge only when exactly one Erlang function named fn exists.
+func resolveErlangDottedFallback(ref model.UnresolvedReference, s *store.Store, fn string) *model.Edge {
+	candidates, err := s.GetNodesByName(fn)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var matches []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangErlang && n.Kind == model.KindFunction {
+			matches = append(matches, n)
+		}
+	}
+	if len(matches) != 1 {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: matches[0].ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+}
+
+// resolveErlangBareThroughImport resolves a bare-name call when the file has an
+// -import binding: it resolves THROUGH to the real cross-file definition.
+func resolveErlangBareThroughImport(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	sameFile, err := s.GetNodesByFile(ref.FilePath)
+	if err != nil {
+		return nil
+	}
+	hasImport := false
+	for i := range sameFile {
+		if sameFile[i].Kind == model.KindImport {
+			hasImport = true
+			break
+		}
+	}
+	if !hasImport {
+		return nil
+	}
+	target := resolveErlangDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

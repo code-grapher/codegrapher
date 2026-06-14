@@ -153,6 +153,12 @@ func TestParityObjcSmall(t *testing.T) {
 	testParity(t, "objc-small")
 }
 
+// TestParityErlangSmall runs our extractor over all files in testdata/fixtures/erlang-small
+// and compares against the golden.
+func TestParityErlangSmall(t *testing.T) {
+	testParity(t, "erlang-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 

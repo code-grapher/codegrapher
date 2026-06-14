@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Project Structure (2 files)\n\n\u251c\u2500\u2500 app.erl (erlang, 3 symbols)\n\u2514\u2500\u2500 shape.erl (erlang, 6 symbols)"
+      }
+    ]
+  }
+}

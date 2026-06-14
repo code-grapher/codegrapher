@@ -117,6 +117,7 @@ capture lua-small "shape" "area" "label" "run" "Shape" "new" "Shape::area"
 capture elixir-small "circle" "area" "label" "run" "Circle" "Shape" "Circle::area"
 capture haskell-small "circle" "area" "label" "run" "Circle" "Shape" "Shape.Circle::area"
 capture objc-small "circle" "area" "label" "run" "Circle" "Shape" "Drawable"
+capture erlang-small "shape" "area" "run" "shape" "app" "circle" "shape::area"
 
 echo ""
 echo "=== MCP goldens ==="
@@ -292,6 +293,11 @@ elif fixture == "objc-small":
     explore2 = "area label run"
     explore3 = "run"
     q_explore1 = "how does the circle work"
+elif fixture == "erlang-small":
+    sym1 = "area"
+    explore2 = "area run shape"
+    explore3 = "run"
+    q_explore1 = "how does the shape work"
 else:
     sym1 = "get"
     explore2 = "get set lookup"
@@ -337,6 +343,7 @@ rebaseline_mcp dart-small
 rebaseline_mcp elixir-small
 rebaseline_mcp haskell-small
 rebaseline_mcp objc-small
+rebaseline_mcp erlang-small
 
 echo ""
 echo "=== Rebaseline complete ==="

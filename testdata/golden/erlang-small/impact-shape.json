@@ -1,0 +1,50 @@
+{
+  "symbol": "shape",
+  "depth": 2,
+  "nodeCount": 7,
+  "edgeCount": 6,
+  "affected": [
+    {
+      "name": "app",
+      "kind": "module",
+      "filePath": "app.erl",
+      "startLine": 2
+    },
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shape.erl",
+      "startLine": 7
+    },
+    {
+      "name": "circle",
+      "kind": "struct",
+      "filePath": "shape.erl",
+      "startLine": 5
+    },
+    {
+      "name": "name",
+      "kind": "field",
+      "filePath": "shape.erl",
+      "startLine": 5
+    },
+    {
+      "name": "radius",
+      "kind": "field",
+      "filePath": "shape.erl",
+      "startLine": 5
+    },
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "app.erl",
+      "startLine": 6
+    },
+    {
+      "name": "shape",
+      "kind": "module",
+      "filePath": "shape.erl",
+      "startLine": 2
+    }
+  ]
+}
