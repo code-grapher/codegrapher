@@ -30,6 +30,9 @@ go.work.sum
 # codegraph index artifacts (per-scope SQLite stores written by `init`)
 .codegraph/
 
+# external corpus clone cache (opt-in TestExternalCorpus, CODEGRAPH_EXTERNAL_CORPUS=1)
+testdata/external/cache/
+
 # Editor/IDE
 # .idea/
 # .vscode/

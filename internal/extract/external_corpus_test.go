@@ -1,0 +1,179 @@
+package extract_test
+
+import (
+	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+
+	"github.com/specscore/codegrapher/internal/extract"
+	"github.com/specscore/codegrapher/model"
+)
+
+// py3MaxParseErrorRate is a generous ceiling for the Python 3 corpus. The
+// extractor should parse real-world Py3 source with very few hard failures;
+// exceeding this signals a regression worth investigating.
+const py3MaxParseErrorRate = 0.10
+
+type externalRepo struct {
+	Name   string `json:"name"`
+	URL    string `json:"url"`
+	SHA    string `json:"sha"`
+	Python int    `json:"python"`
+}
+
+type externalManifest struct {
+	Repos []externalRepo `json:"repos"`
+}
+
+// TestExternalCorpus is an OPT-IN, informational parse/robustness corpus. It is
+// NOT a golden and requires network access, so it is skipped unless
+// CODEGRAPH_EXTERNAL_CORPUS=1. It shallow-clones each manifest repo at a pinned
+// commit sha and runs every .py/.pyi file through the extractor, asserting no
+// panics and (for the Python 3 repo) a low parse-error rate.
+func TestExternalCorpus(t *testing.T) {
+	if os.Getenv("CODEGRAPH_EXTERNAL_CORPUS") != "1" {
+		t.Skip("external corpus is opt-in and needs network; set CODEGRAPH_EXTERNAL_CORPUS=1 to run")
+	}
+
+	manifestPath := filepath.Join(repoRoot, "testdata", "external", "manifest.json")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	var manifest externalManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("parse manifest: %v", err)
+	}
+	if len(manifest.Repos) == 0 {
+		t.Fatalf("manifest has no repos")
+	}
+
+	cacheDir := filepath.Join(repoRoot, "testdata", "external", "cache")
+
+	for _, repo := range manifest.Repos {
+		repo := repo
+		t.Run(repo.Name, func(t *testing.T) {
+			dest := filepath.Join(cacheDir, repo.Name)
+			if err := ensureClone(t, dest, repo.URL, repo.SHA); err != nil {
+				t.Logf("WARNING: clone/fetch %s failed (offline?): %v", repo.Name, err)
+				t.Skipf("skipping %s: could not obtain repo at %s", repo.Name, repo.SHA)
+			}
+
+			files, err := collectPythonFiles(dest)
+			if err != nil {
+				t.Fatalf("walk clone %s: %v", dest, err)
+			}
+			sort.Strings(files)
+
+			var fileCount, errorFiles, totalNodes int
+			for _, absPath := range files {
+				content, err := os.ReadFile(absPath)
+				if err != nil {
+					t.Fatalf("read %s: %v", absPath, err)
+				}
+				lang := extract.DetectLanguage(absPath)
+				if lang != model.LangPython {
+					continue
+				}
+				relPath, err := filepath.Rel(dest, absPath)
+				if err != nil {
+					t.Fatalf("rel path: %v", err)
+				}
+				relPath = filepath.ToSlash(relPath)
+
+				// A panic here fails the test, satisfying the no-panic assertion.
+				result, err := extract.ExtractFile(relPath, content, lang)
+				if err != nil {
+					// A hard extractor error is itself a parse failure for this file.
+					errorFiles++
+					fileCount++
+					continue
+				}
+				fileCount++
+				totalNodes += len(result.Nodes)
+				if len(result.Errors) > 0 {
+					errorFiles++
+				}
+			}
+
+			var rate float64
+			if fileCount > 0 {
+				rate = float64(errorFiles) / float64(fileCount)
+			}
+			t.Logf("%s (python%d): files=%d nodes=%d parse-error-files=%d parse-error-rate=%.4f",
+				repo.Name, repo.Python, fileCount, totalNodes, errorFiles, rate)
+
+			if repo.Python == 3 {
+				t.Logf("%s: enforcing parse-error-rate <= %.2f (threshold)", repo.Name, py3MaxParseErrorRate)
+				if rate > py3MaxParseErrorRate {
+					t.Errorf("%s: parse-error rate %.4f exceeds threshold %.2f", repo.Name, rate, py3MaxParseErrorRate)
+				}
+			}
+		})
+	}
+}
+
+// ensureClone shallow-fetches url at sha into dest if not already populated.
+func ensureClone(t *testing.T, dest, url, sha string) error {
+	t.Helper()
+	if _, err := os.Stat(filepath.Join(dest, ".git")); err == nil {
+		return nil // already cloned
+	}
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		return err
+	}
+	steps := [][]string{
+		{"init", "-q"},
+		{"remote", "add", "origin", url},
+		{"fetch", "--depth", "1", "origin", sha},
+		{"checkout", "-q", "FETCH_HEAD"},
+	}
+	for _, args := range steps {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dest
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmtCmdErr(args, out, err)
+		}
+	}
+	return nil
+}
+
+func fmtCmdErr(args []string, out []byte, err error) error {
+	return &cmdError{cmd: "git " + strings.Join(args, " "), out: string(out), err: err}
+}
+
+type cmdError struct {
+	cmd string
+	out string
+	err error
+}
+
+func (e *cmdError) Error() string {
+	return e.cmd + ": " + e.err.Error() + "\n" + e.out
+}
+
+// collectPythonFiles returns absolute paths of all .py/.pyi files under root.
+func collectPythonFiles(root string) ([]string, error) {
+	var files []string
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			if info.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		ext := strings.ToLower(filepath.Ext(path))
+		if ext == ".py" || ext == ".pyi" {
+			files = append(files, path)
+		}
+		return nil
+	})
+	return files, err
+}

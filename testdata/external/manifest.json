@@ -1,0 +1,7 @@
+{
+  "_note": "Opt-in external parse/robustness corpus (TestExternalCorpus, CODEGRAPH_EXTERNAL_CORPUS=1). NOT a golden. SHAs are pinned to tagged release commits verified to exist on GitHub; if a repo is force-pushed or removed, update the sha.",
+  "repos": [
+    {"name": "requests", "url": "https://github.com/psf/requests.git", "sha": "147c8511ddbfa5e8f71bbf5c18ede0c4ceb3bba4", "python": 3},
+    {"name": "six", "url": "https://github.com/benjaminp/six.git", "sha": "c3ec058bf8c4d6329224eac53366c8e9ce511417", "python": 2}
+  ]
+}
