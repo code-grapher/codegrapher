@@ -66,6 +66,8 @@ func DetectLanguage(filePath string) model.Language {
 		return model.LangLua
 	case ".ex", ".exs":
 		return model.LangElixir
+	case ".m", ".mm":
+		return model.LangObjC
 	// File-level-only languages: tracked in the files table with zero
 	// symbol nodes, matching isFileLevelOnlyLanguage() in grammars.ts.
 	case ".yml", ".yaml":
@@ -79,14 +81,23 @@ func DetectLanguage(filePath string) model.Language {
 // header (which DetectLanguage defaults to C) as actually C++.
 var cppHeaderMarkers = regexp.MustCompile(`\bclass\b|\bnamespace\b|\btemplate\b|::|\bpublic:|\bprivate:|\bprotected:`)
 
+// objcHeaderMarkers matches Objective-C-only constructs used to disambiguate a
+// `.h` header as Objective-C rather than C/C++ (Obj-C `@`-directives and
+// `#import`, which plain C/C++ headers do not use).
+var objcHeaderMarkers = regexp.MustCompile(`@interface\b|@protocol\b|@implementation\b|#import\b`)
+
 // DetectLanguageContent returns the model.Language for path, using content to
 // disambiguate ambiguous extensions. For unambiguous extensions it delegates to
 // the path-only DetectLanguage. For `.h` (which DetectLanguage defaults to C for
-// back-compat) it sniffs content for C++ markers and returns LangCPP when found,
+// back-compat) it sniffs content: Objective-C markers (`@interface`/`@protocol`/
+// `@implementation`/`#import`) win first → LangObjC; else C++ markers → LangCPP;
 // else LangC. Callers that have the file content available (the indexer extract
 // path, the parity test) should prefer this over DetectLanguage.
 func DetectLanguageContent(path string, content []byte) model.Language {
 	if strings.ToLower(filepath.Ext(path)) == ".h" {
+		if objcHeaderMarkers.Match(content) {
+			return model.LangObjC
+		}
 		if cppHeaderMarkers.Match(content) {
 			return model.LangCPP
 		}

@@ -141,6 +141,8 @@ func resolveRef(
 		return resolveLuaRef(ref, s)
 	case model.LangElixir:
 		return resolveElixirRef(ref, s)
+	case model.LangObjC:
+		return resolveObjCRef(ref, s)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -2718,6 +2720,141 @@ func resolveCImportNodeRef(ref model.UnresolvedReference, s *store.Store) *model
 				Column: ref.Column,
 			}
 		}
+	}
+	return nil
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Objective-C resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolveObjCRef resolves an Objective-C unresolved reference. Objective-C is a
+// strict C superset with an added object layer; resolution is name-based against
+// the global symbol table (through-import aware, like C), with:
+//
+//   - imports (#import/#include): resolve to the in-repo header file node
+//     (relative-path then unique-basename), else the local KindImport node.
+//   - extends: resolve the superclass name to its class node.
+//   - implements: resolve the protocol name to its interface node.
+//   - instantiates: resolve the class name ([Class alloc]/new).
+//   - calls (selector): resolve the selector to a KindMethod by name
+//     (best/proximity pick), through-import aware (whole-repo by-name search).
+//   - references: resolve a type by name.
+func resolveObjCRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	switch ref.ReferenceKind {
+	case model.EdgeImports:
+		if edge := resolveObjCIncludeRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveCImportNodeRef(ref, s)
+
+	case model.EdgeExtends:
+		if target := resolveObjCTypeByName(ref.ReferenceName, ref.FilePath, s); target != nil {
+			return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeExtends, Line: ref.Line, Column: ref.Column}
+		}
+		return nil
+
+	case model.EdgeImplements:
+		if target := resolveObjCTypeByName(ref.ReferenceName, ref.FilePath, s); target != nil {
+			return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeImplements, Line: ref.Line, Column: ref.Column}
+		}
+		return nil
+
+	case model.EdgeInstantiates:
+		if target := resolveObjCTypeByName(ref.ReferenceName, ref.FilePath, s); target != nil {
+			return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeInstantiates, Line: ref.Line, Column: ref.Column}
+		}
+		return nil
+	}
+
+	// calls / references: resolve by name against the Obj-C symbol table.
+	return resolveObjCByName(ref, s)
+}
+
+// resolveObjCByName resolves a name to the best Obj-C definition (same-file/dir
+// preference), promoting a class target of a `calls` ref to instantiates.
+func resolveObjCByName(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	name := ref.ReferenceName
+	if !strings.Contains(name, ":") && cBuiltins[name] {
+		return nil
+	}
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangObjC {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	target := pickBestNode(defs, ref.FilePath)
+	if target == nil {
+		return nil
+	}
+	kind := ref.ReferenceKind
+	if kind == model.EdgeCalls && target.Kind == model.KindClass {
+		kind = model.EdgeInstantiates
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: kind, Line: ref.Line, Column: ref.Column}
+}
+
+// resolveObjCTypeByName returns the best Obj-C class/interface/struct/enum/alias
+// named name.
+func resolveObjCTypeByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var types []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangObjC {
+			continue
+		}
+		switch n.Kind {
+		case model.KindClass, model.KindInterface, model.KindStruct,
+			model.KindEnum, model.KindTypeAlias:
+			types = append(types, n)
+		}
+	}
+	if len(types) == 0 {
+		return nil
+	}
+	return pickBestNode(types, refFilePath)
+}
+
+// resolveObjCIncludeRef resolves a `#import "x.h"` / `#include "x.h"` ref to the
+// in-repo header file node (relative-path then unique-basename), matching Obj-C
+// file nodes. Mirrors resolveCIncludeRef but for LangObjC file nodes.
+func resolveObjCIncludeRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	header := ref.ReferenceName
+
+	relDir := filepath.Dir(ref.FilePath)
+	candPath := filepath.ToSlash(filepath.Clean(filepath.Join(relDir, header)))
+	if n, err := s.GetNodeByID(model.FileNodeID(candPath)); err == nil && n != nil {
+		return cIncludeEdge(ref, n)
+	}
+
+	base := filepath.Base(header)
+	byName, err := s.GetNodesByName(base)
+	if err != nil {
+		return nil
+	}
+	var matches []model.Node
+	for _, n := range byName {
+		if n.Kind == model.KindFile && n.Language == model.LangObjC {
+			matches = append(matches, n)
+		}
+	}
+	if len(matches) == 1 {
+		return cIncludeEdge(ref, &matches[0])
 	}
 	return nil
 }
