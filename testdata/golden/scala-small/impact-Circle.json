@@ -1,0 +1,62 @@
+{
+  "symbol": "Circle",
+  "depth": 2,
+  "nodeCount": 9,
+  "edgeCount": 7,
+  "affected": [
+    {
+      "name": "App.scala",
+      "kind": "file",
+      "filePath": "com/example/app/App.scala",
+      "startLine": 1
+    },
+    {
+      "name": "Circle",
+      "kind": "import",
+      "filePath": "com/example/app/App.scala",
+      "startLine": 3
+    },
+    {
+      "name": "Circle",
+      "kind": "class",
+      "filePath": "com/example/shapes/Circle.scala",
+      "startLine": 3
+    },
+    {
+      "name": "Circle",
+      "kind": "class",
+      "filePath": "com/example/shapes/Circle.scala",
+      "startLine": 7
+    },
+    {
+      "name": "Pi",
+      "kind": "field",
+      "filePath": "com/example/shapes/Circle.scala",
+      "startLine": 8
+    },
+    {
+      "name": "apply",
+      "kind": "method",
+      "filePath": "com/example/shapes/Circle.scala",
+      "startLine": 10
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "com/example/shapes/Circle.scala",
+      "startLine": 4
+    },
+    {
+      "name": "radius",
+      "kind": "field",
+      "filePath": "com/example/shapes/Circle.scala",
+      "startLine": 3
+    },
+    {
+      "name": "run",
+      "kind": "method",
+      "filePath": "com/example/app/App.scala",
+      "startLine": 11
+    }
+  ]
+}

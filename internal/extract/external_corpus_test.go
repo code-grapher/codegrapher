@@ -44,6 +44,8 @@ func (r externalRepo) repoLang() model.Language {
 		return model.LangPHP
 	case "c":
 		return model.LangC
+	case "scala":
+		return model.LangScala
 	default:
 		return model.LangPython
 	}
@@ -66,6 +68,8 @@ func (r externalRepo) sourceExts() []string {
 		return []string{".php"}
 	case model.LangC:
 		return []string{".c", ".h"}
+	case model.LangScala:
+		return []string{".scala", ".sc"}
 	default:
 		return []string{".py", ".pyi"}
 	}

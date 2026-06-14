@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Exploration: how does the circle work\n\nFound 16 symbols across 4 files.\n\n### Blast radius \u2014 what depends on these (update/verify before editing)\n\n- `Circle` (com/example/shapes/Circle.scala:3) \u2014 1 caller; tests: `com/example/app/App.scala`\n- `area` (com/example/shapes/Circle.scala:4) \u2014 1 caller; tests: `com/example/app/App.scala`\n\n### Source Code\n\n> The code below is the **verbatim, current on-disk source** of these files \u2014 re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.\n\n#### com/example/shapes/Circle.scala \u2014 Circle(class), apply(method), area(method)\n\n```scala\n1\tpackage com.example.shapes\n2\t\n3\tclass Circle(name: String, val radius: Double) extends Base(name) with Shape {\n4\t  override def area(): Double = Circle.Pi * radius * radius\n5\t}\n6\t\n7\tobject Circle {\n8\t  val Pi: Double = 3.14159\n9\t\n10\t  def apply(radius: Double): Circle = new Circle(\"unit\", radius)\n11\t}\n```\n\n#### com/example/app/App.scala \u2014 run(method), c(variable), d(variable), a(variable), App(class), +2 more\n\n```scala\n1\tpackage com.example.app\n2\t\n3\timport com.example.shapes.Circle\n4\timport com.example.shapes.Shape\n5\t\n6\tobject Registry {\n7\t  def describe(s: Shape): String = s.label()\n8\t}\n9\t\n10\tclass App {\n11\t  def run(): Double = {\n12\t    val c = new Circle(\"unit\", 1.0)\n13\t    val d = Circle(2.0)\n14\t    val a = c.area()\n15\t    a\n16\t  }\n17\t}\n```\n\n#### com/example/shapes/Shape.scala \u2014 Shape(interface), area(method), label(method)\n\n```scala\n1\tpackage com.example.shapes\n2\t\n3\ttrait Shape {\n4\t  def area(): Double\n5\t\n6\t  def label(): String\n7\t}\n```\n\n#### com/example/shapes/Base.scala \u2014 Base(class), label(method)\n\n```scala\n1\tpackage com.example.shapes\n2\t\n3\tabstract class Base(val name: String) extends Shape {\n4\t  override def label(): String = name\n5\t}\n```\n"
+      }
+    ]
+  }
+}

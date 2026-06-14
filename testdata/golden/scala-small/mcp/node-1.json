@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "**2 definitions named \"area\"**\nReturning 2 in full \u2014 pick the one you need (no Read required).\n\n## area (method)\n\n**Location:** com/example/shapes/Circle.scala:4\n**Signature:** `def area(): Double`\n\n```scala\n4\t  override def area(): Double = Circle.Pi * radius * radius\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Called by \u2190** run (com/example/app/App.scala:11)\n\n---\n\n## area (method)\n\n**Location:** com/example/shapes/Shape.scala:4\n**Signature:** `def area(): Double`\n\n```scala\n4\t  def area(): Double\n```"
+      }
+    ]
+  }
+}

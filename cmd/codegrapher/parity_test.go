@@ -111,6 +111,11 @@ var fixtures = []fixture{
 		query:   "shape",
 		symbols: []string{"area", "label", "run", "Shape", "Kind", "PI"},
 	},
+	{
+		name:    "scala-small",
+		query:   "circle",
+		symbols: []string{"area", "label", "run", "Circle", "Shape", "Circle::area"},
+	},
 }
 
 // TestParityGoldens runs the binary against all goldens and asserts full-value parity.

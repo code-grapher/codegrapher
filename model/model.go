@@ -90,6 +90,7 @@ const (
 	LangPHP         Language = "php"
 	LangC           Language = "c"
 	LangCPP         Language = "cpp"
+	LangScala       Language = "scala"
 	LangGoMod       Language = "go.mod"
 	LangPackageJSON Language = "package.json"
 	LangNode        Language = "node"

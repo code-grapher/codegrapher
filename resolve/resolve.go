@@ -129,6 +129,8 @@ func resolveRef(
 		return resolvePHPRef(ref, s, pyVarTypeCache)
 	case model.LangC:
 		return resolveCRef(ref, s)
+	case model.LangScala:
+		return resolveScalaRef(ref, s, jvmCtxCache)
 	default:
 		return resolveGenericRef(ref, s)
 	}

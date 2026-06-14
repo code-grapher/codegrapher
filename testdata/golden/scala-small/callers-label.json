@@ -1,0 +1,11 @@
+{
+  "symbol": "label",
+  "callers": [
+    {
+      "name": "describe",
+      "kind": "method",
+      "filePath": "com/example/app/App.scala",
+      "startLine": 7
+    }
+  ]
+}

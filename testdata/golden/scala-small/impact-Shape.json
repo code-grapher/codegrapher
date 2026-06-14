@@ -1,0 +1,68 @@
+{
+  "symbol": "Shape",
+  "depth": 2,
+  "nodeCount": 10,
+  "edgeCount": 8,
+  "affected": [
+    {
+      "name": "App.scala",
+      "kind": "file",
+      "filePath": "com/example/app/App.scala",
+      "startLine": 1
+    },
+    {
+      "name": "Base",
+      "kind": "class",
+      "filePath": "com/example/shapes/Base.scala",
+      "startLine": 3
+    },
+    {
+      "name": "Circle",
+      "kind": "class",
+      "filePath": "com/example/shapes/Circle.scala",
+      "startLine": 3
+    },
+    {
+      "name": "Shape",
+      "kind": "import",
+      "filePath": "com/example/app/App.scala",
+      "startLine": 4
+    },
+    {
+      "name": "Shape",
+      "kind": "interface",
+      "filePath": "com/example/shapes/Shape.scala",
+      "startLine": 3
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "com/example/shapes/Shape.scala",
+      "startLine": 4
+    },
+    {
+      "name": "describe",
+      "kind": "method",
+      "filePath": "com/example/app/App.scala",
+      "startLine": 7
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "com/example/shapes/Base.scala",
+      "startLine": 4
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "com/example/shapes/Shape.scala",
+      "startLine": 6
+    },
+    {
+      "name": "name",
+      "kind": "field",
+      "filePath": "com/example/shapes/Base.scala",
+      "startLine": 3
+    }
+  ]
+}

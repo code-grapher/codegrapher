@@ -1,0 +1,223 @@
+[
+  {
+    "node": {
+      "id": "class:44aef24e25cce6436d74b618bf15e91d",
+      "kind": "class",
+      "name": "Circle",
+      "qualifiedName": "Circle",
+      "filePath": "com/example/shapes/Circle.scala",
+      "language": "scala",
+      "startLine": 3,
+      "endLine": 5,
+      "startColumn": 0,
+      "endColumn": 1,
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781427809501
+    },
+    "score": 87.89832418130598
+  },
+  {
+    "node": {
+      "id": "class:dff3d4cb7691113e316a8eeef785abf4",
+      "kind": "class",
+      "name": "Circle",
+      "qualifiedName": "Circle",
+      "filePath": "com/example/shapes/Circle.scala",
+      "language": "scala",
+      "startLine": 7,
+      "endLine": 11,
+      "startColumn": 0,
+      "endColumn": 1,
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": true,
+      "isAbstract": false,
+      "updatedAt": 1781427809501
+    },
+    "score": 87.89832418130598
+  },
+  {
+    "node": {
+      "id": "import:dafc759f5dbe9b51ba86a97caaa76529",
+      "kind": "import",
+      "name": "Circle",
+      "qualifiedName": "Circle",
+      "filePath": "com/example/app/App.scala",
+      "language": "scala",
+      "startLine": 3,
+      "endLine": 3,
+      "startColumn": 0,
+      "endColumn": 32,
+      "signature": "import com.example.shapes.Circle",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781427809500
+    },
+    "score": 67.86784283225107
+  },
+  {
+    "node": {
+      "id": "file:com/example/shapes/Circle.scala",
+      "kind": "file",
+      "name": "Circle.scala",
+      "qualifiedName": "com/example/shapes/Circle.scala",
+      "filePath": "com/example/shapes/Circle.scala",
+      "language": "scala",
+      "startLine": 1,
+      "endLine": 12,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781427809501
+    },
+    "score": 24.83291007864648
+  },
+  {
+    "node": {
+      "id": "method:f8b2cccec3398365a705fe86d8bb4682",
+      "kind": "method",
+      "name": "apply",
+      "qualifiedName": "Circle::apply",
+      "filePath": "com/example/shapes/Circle.scala",
+      "language": "scala",
+      "startLine": 10,
+      "endLine": 10,
+      "startColumn": 2,
+      "endColumn": 64,
+      "signature": "def apply(radius: Double): Circle",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "Circle",
+      "updatedAt": 1781427809501
+    },
+    "score": 9.64247908496958
+  },
+  {
+    "node": {
+      "id": "method:d3b17fcc53db9b9ce3e2c38d6c9a4c3b",
+      "kind": "method",
+      "name": "area",
+      "qualifiedName": "Circle::area",
+      "filePath": "com/example/shapes/Circle.scala",
+      "language": "scala",
+      "startLine": 4,
+      "endLine": 4,
+      "startColumn": 2,
+      "endColumn": 59,
+      "signature": "def area(): Double",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "Double",
+      "updatedAt": 1781427809501
+    },
+    "score": 9.595990665083383
+  },
+  {
+    "node": {
+      "id": "field:20046b3ebf75364b69df78185f43dd07",
+      "kind": "field",
+      "name": "radius",
+      "qualifiedName": "Circle::radius",
+      "filePath": "com/example/shapes/Circle.scala",
+      "language": "scala",
+      "startLine": 3,
+      "endLine": 3,
+      "startColumn": 27,
+      "endColumn": 45,
+      "signature": "val radius: Double",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "Double",
+      "updatedAt": 1781427809501
+    },
+    "score": 2.5959906650833826
+  },
+  {
+    "node": {
+      "id": "field:5ad5c43c1bc8195f79b7cdb16abab845",
+      "kind": "field",
+      "name": "Pi",
+      "qualifiedName": "Circle::Pi",
+      "filePath": "com/example/shapes/Circle.scala",
+      "language": "scala",
+      "startLine": 8,
+      "endLine": 8,
+      "startColumn": 2,
+      "endColumn": 26,
+      "signature": "val Pi: Double = 3.14159",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "Double",
+      "updatedAt": 1781427809501
+    },
+    "score": 2.5444991856445274
+  },
+  {
+    "node": {
+      "id": "variable:7e64038fd6021ec5582a23363bdfe592",
+      "kind": "variable",
+      "name": "d",
+      "qualifiedName": "App::run::d",
+      "filePath": "com/example/app/App.scala",
+      "language": "scala",
+      "startLine": 13,
+      "endLine": 13,
+      "startColumn": 4,
+      "endColumn": 23,
+      "signature": "val d = Circle(2.0)",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781427809500
+    },
+    "score": -11.858893847972732
+  },
+  {
+    "node": {
+      "id": "variable:0e75df8aec68b65b7f9eedf79d037876",
+      "kind": "variable",
+      "name": "c",
+      "qualifiedName": "App::run::c",
+      "filePath": "com/example/app/App.scala",
+      "language": "scala",
+      "startLine": 12,
+      "endLine": 12,
+      "startColumn": 4,
+      "endColumn": 35,
+      "signature": "val c = new Circle(\"unit\", 1.0)",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781427809500
+    },
+    "score": -11.923069609066928
+  }
+]

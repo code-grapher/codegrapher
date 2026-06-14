@@ -78,6 +78,10 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 		// C / C++ scope uses the fallback version this pass: no build-system
 		// (CMake/Make/compile_commands) parsing. majorVersion("") → "v0".
 		ver = ""
+	case model.LangScala:
+		// Scala scope uses the fallback version this pass: no build.sbt
+		// parsing yet. majorVersion("") → fallbackVersion ("v0").
+		ver = ""
 	}
 	return majorVersion(ver)
 }

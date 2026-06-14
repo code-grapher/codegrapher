@@ -1,0 +1,11 @@
+{
+  "symbol": "Circle::area",
+  "callers": [
+    {
+      "name": "run",
+      "kind": "method",
+      "filePath": "com/example/app/App.scala",
+      "startLine": 11
+    }
+  ]
+}

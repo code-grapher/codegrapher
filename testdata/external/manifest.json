@@ -56,6 +56,12 @@
       "url": "https://github.com/antirez/sds.git",
       "sha": "568d691c80cd997bf8c15c47d10c3ebc0a879737",
       "lang": "c"
+    },
+    {
+      "name": "scopt",
+      "url": "https://github.com/scopt/scopt.git",
+      "sha": "2fa057d35517219a465d0181b83bc60f46e92646",
+      "lang": "scala"
     }
   ]
 }
