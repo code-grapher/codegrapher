@@ -347,4 +347,3 @@ func parseGitRemote(url, fallbackRepo string) (org, repo string, isGitHub bool) 
 
 	return "unknown", fallbackRepo, false
 }
-
