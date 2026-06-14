@@ -1,0 +1,11 @@
+{
+  "symbol": "greet",
+  "callers": [
+    {
+      "name": "main.sh",
+      "kind": "file",
+      "filePath": "main.sh",
+      "startLine": 1
+    }
+  ]
+}

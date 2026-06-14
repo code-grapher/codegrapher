@@ -122,6 +122,7 @@ capture erlang-small "shape" "area" "run" "shape" "app" "circle" "shape::area"
 capture julia-small "circle" "area" "describe" "Circle" "Rectangle" "Shape" "Shapes::area"
 capture fsharp-small "circle" "Radius" "run" "Shapes" "App" "Circle" "Shapes::area"
 capture r-small "area" "area" "twice" "run" "util" "RADIUS" "stats"
+capture bash-small "greet" "greet" "helper" "MAX_RETRIES" "name"
 
 echo ""
 echo "=== MCP goldens ==="

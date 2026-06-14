@@ -134,6 +134,12 @@
       "url": "https://github.com/gaborcsardi/praise.git",
       "sha": "2c8c1229c06f953d8dddc1f45e85bcbf6f7e5278",
       "lang": "r"
+    },
+    {
+      "name": "shlib",
+      "url": "https://github.com/client9/shlib.git",
+      "sha": "1d3c4befaa8f6e61be231a9b8c2c345ed55e561d",
+      "lang": "bash"
     }
   ]
 }

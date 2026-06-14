@@ -1,0 +1,24 @@
+[
+  {
+    "node": {
+      "id": "function:60479631c1bfce3f57ccc9e7ac208e89",
+      "kind": "function",
+      "name": "greet",
+      "qualifiedName": "greet",
+      "filePath": "lib.sh",
+      "language": "bash",
+      "startLine": 8,
+      "endLine": 11,
+      "startColumn": 0,
+      "endColumn": 1,
+      "signature": "greet()",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781436370162
+    },
+    "score": 93.11559747413654
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "symbol": "helper",
+  "callers": [
+    {
+      "name": "greet",
+      "kind": "function",
+      "filePath": "lib.sh",
+      "startLine": 8
+    }
+  ]
+}

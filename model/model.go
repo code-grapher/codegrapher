@@ -102,6 +102,7 @@ const (
 	LangJulia       Language = "julia"
 	LangFSharp      Language = "fsharp"
 	LangR           Language = "r"
+	LangBash        Language = "bash"
 	LangGoMod       Language = "go.mod"
 	LangPackageJSON Language = "package.json"
 	LangNode        Language = "node"

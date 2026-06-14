@@ -1,0 +1,14 @@
+[
+  {
+    "path": "lib.sh",
+    "language": "bash",
+    "nodeCount": 3,
+    "size": 123
+  },
+  {
+    "path": "main.sh",
+    "language": "bash",
+    "nodeCount": 4,
+    "size": 145
+  }
+]

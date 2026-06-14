@@ -1,0 +1,5 @@
+[{"source":"file:lib.sh","target":"function:42ce645fdd4feeb5a9fd769d5fd83c3b","kind":"contains"},
+{"source":"file:lib.sh","target":"function:60479631c1bfce3f57ccc9e7ac208e89","kind":"contains"},
+{"source":"file:main.sh","target":"constant:992e7980cf67eb98cdd4022c3b5589f3","kind":"contains"},
+{"source":"file:main.sh","target":"import:d59e9dab8418f9d219a467a670096e5c","kind":"contains"},
+{"source":"file:main.sh","target":"variable:ed417259fc020f200e8975dec0ed1b3d","kind":"contains"}]
