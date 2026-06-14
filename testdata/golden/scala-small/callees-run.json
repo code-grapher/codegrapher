@@ -1,0 +1,11 @@
+{
+  "symbol": "run",
+  "callees": [
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "com/example/shapes/Circle.scala",
+      "startLine": 4
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "symbol": "label",
+  "depth": 2,
+  "nodeCount": 3,
+  "edgeCount": 1,
+  "affected": [
+    {
+      "name": "describe",
+      "kind": "method",
+      "filePath": "com/example/app/App.scala",
+      "startLine": 7
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "com/example/shapes/Base.scala",
+      "startLine": 4
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "com/example/shapes/Shape.scala",
+      "startLine": 6
+    }
+  ]
+}

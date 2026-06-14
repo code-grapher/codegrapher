@@ -99,6 +99,12 @@ func TestParityPhpSmall(t *testing.T) {
 	testParity(t, "php-small")
 }
 
+// TestParityScalaSmall runs our extractor over all files in testdata/fixtures/scala-small
+// and compares against the golden.
+func TestParityScalaSmall(t *testing.T) {
+	testParity(t, "scala-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 

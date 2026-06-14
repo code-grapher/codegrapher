@@ -1,0 +1,20 @@
+{
+  "symbol": "Circle::area",
+  "depth": 2,
+  "nodeCount": 2,
+  "edgeCount": 1,
+  "affected": [
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "com/example/shapes/Circle.scala",
+      "startLine": 4
+    },
+    {
+      "name": "run",
+      "kind": "method",
+      "filePath": "com/example/app/App.scala",
+      "startLine": 11
+    }
+  ]
+}

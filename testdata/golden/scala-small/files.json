@@ -1,0 +1,32 @@
+[
+  {
+    "path": "com/example/app/App.scala",
+    "language": "scala",
+    "nodeCount": 11,
+    "size": 286
+  },
+  {
+    "path": "com/example/shapes/Base.scala",
+    "language": "scala",
+    "nodeCount": 5,
+    "size": 122
+  },
+  {
+    "path": "com/example/shapes/Circle.scala",
+    "language": "scala",
+    "nodeCount": 8,
+    "size": 281
+  },
+  {
+    "path": "com/example/shapes/Shape.scala",
+    "language": "scala",
+    "nodeCount": 5,
+    "size": 88
+  },
+  {
+    "path": "com/example/shapes/Size.scala",
+    "language": "scala",
+    "nodeCount": 6,
+    "size": 70
+  }
+]

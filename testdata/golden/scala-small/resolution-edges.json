@@ -1,0 +1,10 @@
+[{"source":"class:44aef24e25cce6436d74b618bf15e91d","target":"class:b8db87bc58fbd9d34b47ac82f0ee6fb2","kind":"extends","provenance":null,"line":3,"col":55},
+{"source":"class:44aef24e25cce6436d74b618bf15e91d","target":"interface:0c82dabead3b7ac1a8c6dd22b8362bb3","kind":"implements","provenance":null,"line":3,"col":71},
+{"source":"class:b8db87bc58fbd9d34b47ac82f0ee6fb2","target":"interface:0c82dabead3b7ac1a8c6dd22b8362bb3","kind":"extends","provenance":null,"line":3,"col":46},
+{"source":"file:com/example/app/App.scala","target":"class:44aef24e25cce6436d74b618bf15e91d","kind":"imports","provenance":null,"line":3,"col":null},
+{"source":"file:com/example/app/App.scala","target":"interface:0c82dabead3b7ac1a8c6dd22b8362bb3","kind":"imports","provenance":null,"line":4,"col":null},
+{"source":"method:a5e8476f16c91a9e459db538b34d13c3","target":"method:fdeebd6afe93a01a5f55b3f32e404c78","kind":"calls","provenance":null,"line":7,"col":35},
+{"source":"method:f8b2cccec3398365a705fe86d8bb4682","target":"class:44aef24e25cce6436d74b618bf15e91d","kind":"instantiates","provenance":null,"line":10,"col":38},
+{"source":"method:f963b0fe145ade913274dd90f14263c7","target":"class:44aef24e25cce6436d74b618bf15e91d","kind":"instantiates","provenance":null,"line":12,"col":12},
+{"source":"method:f963b0fe145ade913274dd90f14263c7","target":"class:44aef24e25cce6436d74b618bf15e91d","kind":"instantiates","provenance":null,"line":13,"col":12},
+{"source":"method:f963b0fe145ade913274dd90f14263c7","target":"method:d3b17fcc53db9b9ce3e2c38d6c9a4c3b","kind":"calls","provenance":null,"line":14,"col":12}]
