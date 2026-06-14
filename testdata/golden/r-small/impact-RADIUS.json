@@ -1,0 +1,14 @@
+{
+  "symbol": "RADIUS",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "RADIUS",
+      "kind": "constant",
+      "filePath": "main.R",
+      "startLine": 5
+    }
+  ]
+}

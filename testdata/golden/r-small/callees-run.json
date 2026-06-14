@@ -1,0 +1,17 @@
+{
+  "symbol": "run",
+  "callees": [
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "util.R",
+      "startLine": 4
+    },
+    {
+      "name": "twice",
+      "kind": "function",
+      "filePath": "util.R",
+      "startLine": 9
+    }
+  ]
+}

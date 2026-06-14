@@ -1,0 +1,20 @@
+{
+  "symbol": "stats",
+  "depth": 2,
+  "nodeCount": 2,
+  "edgeCount": 1,
+  "affected": [
+    {
+      "name": "main.R",
+      "kind": "file",
+      "filePath": "main.R",
+      "startLine": 1
+    },
+    {
+      "name": "stats",
+      "kind": "import",
+      "filePath": "main.R",
+      "startLine": 2
+    }
+  ]
+}

@@ -101,6 +101,7 @@ const (
 	LangErlang      Language = "erlang"
 	LangJulia       Language = "julia"
 	LangFSharp      Language = "fsharp"
+	LangR           Language = "r"
 	LangGoMod       Language = "go.mod"
 	LangPackageJSON Language = "package.json"
 	LangNode        Language = "node"

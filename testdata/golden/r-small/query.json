@@ -1,0 +1,46 @@
+[
+  {
+    "node": {
+      "id": "function:268357e5485a812df59e8c27a33fb692",
+      "kind": "function",
+      "name": "area",
+      "qualifiedName": "area",
+      "filePath": "util.R",
+      "language": "r",
+      "startLine": 4,
+      "endLine": 6,
+      "startColumn": 0,
+      "endColumn": 1,
+      "signature": "area \u003c- function(r)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781436138693
+    },
+    "score": 92.57276340740634
+  },
+  {
+    "node": {
+      "id": "variable:f41a766262839107b23a24cfeb363b71",
+      "kind": "variable",
+      "name": "a",
+      "qualifiedName": "run::a",
+      "filePath": "main.R",
+      "language": "r",
+      "startLine": 8,
+      "endLine": 8,
+      "startColumn": 2,
+      "endColumn": 19,
+      "signature": "= area(RADIUS)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781436138693
+    },
+    "score": 3.6544896896790617
+  }
+]

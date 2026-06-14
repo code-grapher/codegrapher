@@ -177,6 +177,12 @@ func TestParityFsharpSmall(t *testing.T) {
 	testParity(t, "fsharp-small")
 }
 
+// TestParityRSmall runs our extractor over all files in testdata/fixtures/r-small
+// and compares against the golden.
+func TestParityRSmall(t *testing.T) {
+	testParity(t, "r-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 
@@ -391,6 +397,8 @@ func TestExtractFileDetectLanguage(t *testing.T) {
 		{"Foo.kt", model.LangKotlin},
 		{"build.gradle.kts", model.LangKotlin},
 		{"foo.rb", model.LangRuby},
+		{"foo.R", model.LangR}, // R sources: .R and .r (lowercased by DetectLanguage)
+		{"foo.r", model.LangR},
 		{"foo.c", model.LangC},
 		{"foo.h", model.LangC},     // path-only: .h defaults to C for back-compat
 		{"foo.hpp", model.LangCPP}, // C++ header extensions

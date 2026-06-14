@@ -1,0 +1,14 @@
+{
+  "symbol": "util",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "util",
+      "kind": "import",
+      "filePath": "main.R",
+      "startLine": 3
+    }
+  ]
+}

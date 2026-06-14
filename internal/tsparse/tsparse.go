@@ -65,6 +65,8 @@ const (
 	LangJulia
 	// LangFSharp selects the tree-sitter `fsharp` grammar.
 	LangFSharp
+	// LangR selects the tree-sitter `r` grammar.
+	LangR
 )
 
 // Point is a (row, column) position in source text (0-indexed).
@@ -215,6 +217,8 @@ func NewParser(lang Language) (*Parser, error) {
 		return &Parser{lang: grammars.JuliaLanguage()}, nil
 	case LangFSharp:
 		return &Parser{lang: grammars.FsharpLanguage()}, nil
+	case LangR:
+		return &Parser{lang: grammars.RLanguage()}, nil
 	default:
 		return nil, fmt.Errorf("tsparse: unknown language %d", lang)
 	}

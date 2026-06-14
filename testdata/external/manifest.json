@@ -128,6 +128,12 @@
       "url": "https://github.com/fsprojects/Argu.git",
       "sha": "8cf83db2c951a93eee7d5f793ecdce6620306311",
       "lang": "fsharp"
+    },
+    {
+      "name": "praise",
+      "url": "https://github.com/gaborcsardi/praise.git",
+      "sha": "2c8c1229c06f953d8dddc1f45e85bcbf6f7e5278",
+      "lang": "r"
     }
   ]
 }
