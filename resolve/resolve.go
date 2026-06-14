@@ -139,6 +139,8 @@ func resolveRef(
 		return resolveDartRef(ref, s)
 	case model.LangLua:
 		return resolveLuaRef(ref, s)
+	case model.LangBash:
+		return resolveBashRef(ref, s)
 	case model.LangElixir:
 		return resolveElixirRef(ref, s)
 	case model.LangHaskell:
@@ -2584,6 +2586,103 @@ func resolveLuaDottedFallback(ref model.UnresolvedReference, s *store.Store, mem
 		Line:   ref.Line,
 		Column: ref.Column,
 	}
+}
+
+// resolveBashRef resolves a Bash unresolved reference into an edge. Bash is
+// structurally thin (functions + calls + source), so resolution mirrors the
+// Lua thin-dynamic path: by-name lookup + through-source, with one key filter —
+// a `calls` ref only resolves when its name matches a Bash *function* we
+// actually extracted. Commands that are NOT in-repo functions (ls, echo, grep,
+// external binaries, shell builtins) produce no edge.
+//
+//   - imports (`source x.sh`): target the in-repo file whose basename equals
+//     the sourced name; otherwise fall back to the local import node.
+//   - calls/references: resolve to an in-repo function (same-file →
+//     through-source import → any). No match → no edge.
+func resolveBashRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	if ref.ReferenceKind == model.EdgeImports {
+		if edge := resolveBashImportsRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveGenericRef(ref, s)
+	}
+
+	if ref.ReferenceKind == model.EdgeCalls || ref.ReferenceKind == model.EdgeReferences {
+		target := resolveBashFunctionByName(ref.ReferenceName, ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{
+			Source: ref.FromNodeID,
+			Target: target.ID,
+			Kind:   ref.ReferenceKind,
+			Line:   ref.Line,
+			Column: ref.Column,
+		}
+	}
+
+	return resolveGenericRef(ref, s)
+}
+
+// resolveBashFunctionByName returns the best in-repo Bash *function* named name,
+// preferring same-file/same-dir. Non-function nodes (variables, imports, files)
+// never match — this is the filter that keeps call edges off shell builtins and
+// external binaries (which are never extracted as functions).
+func resolveBashFunctionByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangBash {
+			continue
+		}
+		if n.Kind != model.KindFunction {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolveBashImportsRef resolves a `source` ref. It targets the in-repo file
+// whose basename equals the sourced name; failing that, returns nil so the
+// caller falls back to the local import node.
+func resolveBashImportsRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	file := resolveBashSourceFile(ref.ReferenceName, ref.FilePath, s)
+	if file == nil {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: file.ID,
+		Kind:   model.EdgeImports,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolveBashSourceFile returns the in-repo Bash file node whose basename equals
+// the sourced name (preferring same-dir), or nil.
+func resolveBashSourceFile(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var files []model.Node
+	for _, n := range candidates {
+		if n.Kind == model.KindFile && n.Language == model.LangBash {
+			files = append(files, n)
+		}
+	}
+	if len(files) == 0 {
+		return nil
+	}
+	return pickBestNode(files, refFilePath)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
