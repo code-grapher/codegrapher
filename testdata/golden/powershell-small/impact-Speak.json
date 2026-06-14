@@ -1,0 +1,26 @@
+{
+  "symbol": "Speak",
+  "depth": 2,
+  "nodeCount": 3,
+  "edgeCount": 1,
+  "affected": [
+    {
+      "name": "Invoke-Main",
+      "kind": "function",
+      "filePath": "main.ps1",
+      "startLine": 9
+    },
+    {
+      "name": "Speak",
+      "kind": "method",
+      "filePath": "lib.ps1",
+      "startLine": 9
+    },
+    {
+      "name": "Speak",
+      "kind": "method",
+      "filePath": "main.ps1",
+      "startLine": 4
+    }
+  ]
+}

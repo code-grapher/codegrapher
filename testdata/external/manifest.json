@@ -134,6 +134,12 @@
       "url": "https://github.com/gaborcsardi/praise.git",
       "sha": "2c8c1229c06f953d8dddc1f45e85bcbf6f7e5278",
       "lang": "r"
+    },
+    {
+      "name": "posh-git",
+      "url": "https://github.com/dahlbyk/posh-git.git",
+      "sha": "d8b126decc29193a78e71cca6f59598017703a85",
+      "lang": "powershell"
     }
   ]
 }

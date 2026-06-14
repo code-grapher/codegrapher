@@ -70,6 +70,8 @@ func (r externalRepo) repoLang() model.Language {
 		return model.LangFSharp
 	case "r":
 		return model.LangR
+	case "powershell":
+		return model.LangPowerShell
 	default:
 		return model.LangPython
 	}
@@ -118,6 +120,8 @@ func (r externalRepo) sourceExts() []string {
 		return []string{".fs", ".fsi", ".fsx"}
 	case model.LangR:
 		return []string{".R", ".r"}
+	case model.LangPowerShell:
+		return []string{".ps1", ".psm1"}
 	default:
 		return []string{".py", ".pyi"}
 	}

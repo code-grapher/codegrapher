@@ -1,0 +1,14 @@
+{
+  "symbol": "Invoke-Main",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "Invoke-Main",
+      "kind": "function",
+      "filePath": "main.ps1",
+      "startLine": 9
+    }
+  ]
+}

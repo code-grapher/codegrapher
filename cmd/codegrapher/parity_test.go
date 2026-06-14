@@ -176,6 +176,11 @@ var fixtures = []fixture{
 		query:   "area",
 		symbols: []string{"area", "twice", "run", "util", "RADIUS", "stats"},
 	},
+	{
+		name:    "powershell-small",
+		query:   "speak",
+		symbols: []string{"Get-Area", "Animal", "Dog", "Invoke-Main", "Speak", "Name"},
+	},
 }
 
 // TestParityGoldens runs the binary against all goldens and asserts full-value parity.

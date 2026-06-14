@@ -1,0 +1,14 @@
+{
+  "symbol": "Name",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "Name",
+      "kind": "property",
+      "filePath": "lib.ps1",
+      "startLine": 7
+    }
+  ]
+}

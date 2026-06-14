@@ -1,0 +1,14 @@
+[
+  {
+    "path": "lib.ps1",
+    "language": "powershell",
+    "nodeCount": 5,
+    "size": 164
+  },
+  {
+    "path": "main.ps1",
+    "language": "powershell",
+    "nodeCount": 5,
+    "size": 196
+  }
+]

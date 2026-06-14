@@ -1,0 +1,17 @@
+{
+  "symbol": "Invoke-Main",
+  "callees": [
+    {
+      "name": "Get-Area",
+      "kind": "function",
+      "filePath": "lib.ps1",
+      "startLine": 1
+    },
+    {
+      "name": "Speak",
+      "kind": "method",
+      "filePath": "main.ps1",
+      "startLine": 4
+    }
+  ]
+}
