@@ -1,0 +1,7 @@
+[{"source":"class:bef38890d2bc7477029f2a1f1d6f1367","target":"class:ec0c068fca61e35e50f336108727ab71","kind":"extends","provenance":null,"line":33,"col":18},
+{"source":"class:bef38890d2bc7477029f2a1f1d6f1367","target":"trait:705c1f3c159da24507238a8bff165898","kind":"implements","provenance":null,"line":34,"col":8},
+{"source":"class:ec0c068fca61e35e50f336108727ab71","target":"interface:9ecce3063be0126b2b4f6ff1bf95984d","kind":"implements","provenance":null,"line":21,"col":33},
+{"source":"file:service.php","target":"class:bef38890d2bc7477029f2a1f1d6f1367","kind":"imports","provenance":null,"line":6,"col":4},
+{"source":"function:07d06bc8a1aaedb4f23d8f607cdec7db","target":"class:bef38890d2bc7477029f2a1f1d6f1367","kind":"instantiates","provenance":null,"line":15,"col":9},
+{"source":"function:07d06bc8a1aaedb4f23d8f607cdec7db","target":"method:c484f0d64745dd94a4c1389f70b9a387","kind":"calls","provenance":null,"line":16,"col":13},
+{"source":"function:eb63fb53ce8517d1a08cfae09673f76d","target":"class:bef38890d2bc7477029f2a1f1d6f1367","kind":"instantiates","provenance":null,"line":11,"col":11}]

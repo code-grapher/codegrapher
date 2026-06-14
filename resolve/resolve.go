@@ -125,6 +125,8 @@ func resolveRef(
 		return resolveRubyRef(ref, s, pyVarTypeCache)
 	case model.LangRust:
 		return resolveRustRef(ref, s, pyVarTypeCache)
+	case model.LangPHP:
+		return resolvePHPRef(ref, s, pyVarTypeCache)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -983,6 +985,272 @@ func resolveRustImportsRef(ref model.UnresolvedReference, s *store.Store) *model
 		return nil
 	}
 	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeImports, Line: ref.Line, Column: ref.Column}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// PHP resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolvePHPRef resolves a PHP unresolved reference into an edge. PHP is
+// dynamically typed with namespaces, so resolution mirrors the Python/Ruby
+// heuristic plus `use`-alias through-import resolution:
+//
+//   - dotted calls "recv.method": infer recv's class from same-file
+//     `$x = new ClassName(...)` assignments; resolve method as a member of that
+//     class. A class-name scope ("Class.method", e.g. Logger::log) resolves to a
+//     method of that class. Unknown receiver → strict (unambiguous-only) lookup.
+//   - bare names (calls/references): resolve through a local `use` import to the
+//     real cross-file definition, promoting class targets to instantiates.
+//   - imports: target the real cross-file definition (the `use`d class) when one
+//     exists.
+//   - instantiates / extends / implements / decorates: generic name resolution,
+//     which is through-import aware via the imported alias.
+//
+// The shared varTypeCache is reused (PHP and Python never index the same file).
+func resolvePHPRef(
+	ref model.UnresolvedReference,
+	s *store.Store,
+	varTypeCache map[string]map[string]string,
+) *model.Edge {
+	name := ref.ReferenceName
+
+	if ref.ReferenceKind == model.EdgeCalls {
+		if dotIdx := strings.Index(name, "."); dotIdx > 0 {
+			recv := name[:dotIdx]
+			attr := name[dotIdx+1:]
+			if attr == "" || strings.ContainsAny(attr, "./") {
+				return nil
+			}
+
+			// Class-name scope (Foo::bar): resolve bar as a member of class Foo.
+			if phpIsClassName(recv) {
+				if edge := resolvePHPMemberOnClass(ref, s, recv, attr); edge != nil {
+					return edge
+				}
+			}
+
+			// (a) Type inference: recv's class from same-file `new` assignments.
+			if className := phpInferType(ref.FilePath, recv, s, varTypeCache); className != "" {
+				if edge := resolvePHPMemberOnClass(ref, s, className, attr); edge != nil {
+					return edge
+				}
+				return nil
+			}
+
+			// (b) Unknown receiver: strict method-name lookup (unambiguous only).
+			return resolvePHPDottedFallback(ref, s, attr)
+		}
+	}
+
+	if ref.ReferenceKind == model.EdgeImports {
+		if edge := resolvePHPImportsRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveGenericRef(ref, s)
+	}
+
+	// Bare names (calls / references / instantiates): resolve through a local
+	// `use` import to the real cross-file definition when one exists.
+	if !strings.Contains(name, ".") {
+		switch ref.ReferenceKind {
+		case model.EdgeCalls, model.EdgeReferences, model.EdgeInstantiates:
+			if edge := resolvePHPBareThroughImport(ref, s); edge != nil {
+				return edge
+			}
+		}
+	}
+
+	return resolveGenericRef(ref, s)
+}
+
+// resolvePHPDefinitionByName returns the best real (non-import, non-file) PHP
+// definition node named name, preferring same-file/same-dir.
+func resolvePHPDefinitionByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangPHP {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolvePHPBareThroughImport resolves a bare-name call/reference/instantiate
+// whose file has a local `use` import with this name: it resolves THROUGH the
+// import to the real cross-file definition, promoting class targets to
+// instantiates for calls. Returns nil when there is no local import shadow or no
+// real PHP definition (so the generic path can handle it).
+func resolvePHPBareThroughImport(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	sameFile, err := s.GetNodesByFile(ref.FilePath)
+	if err != nil {
+		return nil
+	}
+	hasLocalImport := false
+	for i := range sameFile {
+		if sameFile[i].Kind == model.KindImport && sameFile[i].Name == ref.ReferenceName {
+			hasLocalImport = true
+			break
+		}
+	}
+	if !hasLocalImport {
+		return nil
+	}
+
+	target := resolvePHPDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	kind := ref.ReferenceKind
+	if kind == model.EdgeCalls && target.Kind == model.KindClass {
+		kind = model.EdgeInstantiates
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   kind,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolvePHPImportsRef resolves an `imports` ref to the real cross-file
+// definition (the `use`d class/interface/trait/enum/function) when one exists.
+func resolvePHPImportsRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	target := resolvePHPDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   model.EdgeImports,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolvePHPMemberOnClass resolves attr as a method/field/constant contained by
+// the class named className. A member's qualified name is "[Ns::]ClassName::attr"
+// (className may be the trailing segment of a namespaced class), so match the
+// parent of the member's qualified name on its trailing "::"-segment.
+func resolvePHPMemberOnClass(ref model.UnresolvedReference, s *store.Store, className, attr string) *model.Edge {
+	candidates, err := s.GetNodesByName(attr)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	for i := range candidates {
+		n := &candidates[i]
+		if n.Language != model.LangPHP {
+			continue
+		}
+		idx := strings.LastIndex(n.QualifiedName, "::")
+		if idx < 0 {
+			continue
+		}
+		parent := n.QualifiedName[:idx] // strip "::attr"
+		seg := parent
+		if j := strings.LastIndex(parent, "::"); j >= 0 {
+			seg = parent[j+2:]
+		}
+		if seg == className {
+			return &model.Edge{
+				Source: ref.FromNodeID,
+				Target: n.ID,
+				Kind:   ref.ReferenceKind,
+				Line:   ref.Line,
+				Column: ref.Column,
+			}
+		}
+	}
+	return nil
+}
+
+// resolvePHPDottedFallback resolves a dotted call whose receiver type is unknown:
+// emits an edge only when exactly one PHP method/function named attr exists.
+func resolvePHPDottedFallback(ref model.UnresolvedReference, s *store.Store, attr string) *model.Edge {
+	candidates, err := s.GetNodesByName(attr)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var matches []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangPHP && (n.Kind == model.KindMethod || n.Kind == model.KindFunction) {
+			matches = append(matches, n)
+		}
+	}
+	if len(matches) != 1 {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: matches[0].ID,
+		Kind:   ref.ReferenceKind,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// phpInferType returns the class name bound to local variable varName in the
+// file at filePath, or "" if unknown. Built once per file from constructor
+// signatures of the form "= ClassName(...)" (the walker normalizes `new T(...)`
+// to this form), reusing pyConstructorClass.
+func phpInferType(
+	filePath, varName string,
+	s *store.Store,
+	cache map[string]map[string]string,
+) string {
+	m, ok := cache[filePath]
+	if !ok {
+		m = buildPHPVarTypeMap(filePath, s)
+		cache[filePath] = m
+	}
+	return m[varName]
+}
+
+// buildPHPVarTypeMap derives a varName→className map from the file's variable
+// nodes whose signature is "= ClassName(...)". Building the whole map up front
+// makes resolution order-independent.
+func buildPHPVarTypeMap(filePath string, s *store.Store) map[string]string {
+	m := make(map[string]string)
+	nodes, err := s.GetNodesByFile(filePath)
+	if err != nil {
+		return m
+	}
+	for i := range nodes {
+		n := &nodes[i]
+		if n.Language != model.LangPHP {
+			continue
+		}
+		if n.Kind != model.KindVariable && n.Kind != model.KindConstant {
+			continue
+		}
+		if className := pyConstructorClass(n.Signature); className != "" {
+			m[n.Name] = className
+		}
+	}
+	return m
+}
+
+// phpIsClassName reports whether name looks like a PHP class name (starts with an
+// uppercase letter), distinguishing scoped-call class scopes (Foo::bar) from
+// variable receivers.
+func phpIsClassName(name string) bool {
+	if name == "" {
+		return false
+	}
+	r := name[0]
+	return r >= 'A' && r <= 'Z'
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

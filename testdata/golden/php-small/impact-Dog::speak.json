@@ -1,0 +1,20 @@
+{
+  "symbol": "Dog::speak",
+  "depth": 2,
+  "nodeCount": 2,
+  "edgeCount": 1,
+  "affected": [
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "service.php",
+      "startLine": 14
+    },
+    {
+      "name": "speak",
+      "kind": "method",
+      "filePath": "models.php",
+      "startLine": 43
+    }
+  ]
+}

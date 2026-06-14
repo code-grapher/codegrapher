@@ -163,6 +163,19 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 				})
 			}
 		}
+	case model.LangPHP:
+		p, err := tsparse.NewParser(tsparse.LangPHP)
+		if err == nil {
+			tree, err = p.Parse(content)
+			if err != nil {
+				e.errors = append(e.errors, model.ExtractionError{
+					Message:  err.Error(),
+					FilePath: path,
+					Severity: "error",
+					Code:     "parse_error",
+				})
+			}
+		}
 	}
 
 	// Build the comment index so docstring lookup works during TS/JS symbol walking.
@@ -215,6 +228,10 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 	case model.LangRust:
 		if tree != nil {
 			e.walkRust(tree.RootNode())
+		}
+	case model.LangPHP:
+		if tree != nil {
+			e.walkPHP(tree.RootNode())
 		}
 	case model.LangGoMod:
 		e.extractGoMod(content)

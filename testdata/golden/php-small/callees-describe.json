@@ -1,0 +1,11 @@
+{
+  "symbol": "describe",
+  "callees": [
+    {
+      "name": "speak",
+      "kind": "method",
+      "filePath": "models.php",
+      "startLine": 43
+    }
+  ]
+}

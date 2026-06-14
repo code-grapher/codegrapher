@@ -142,7 +142,7 @@ impl Shape for Circle {
 		t.Error("impl Shape for Circle should emit implements Circle→Shape")
 	}
 	// overrides ref from Circle::area → Shape::area.
-	am := findNodeQN(res, model.KindMethod, "area", "Circle::area")
+	am := findRustNodeQN(res, model.KindMethod, "area", "Circle::area")
 	if am == nil {
 		t.Fatal("Circle::area method not found")
 	}
@@ -224,7 +224,7 @@ func TestRsAsyncFn(t *testing.T) {
 }
 
 // findNodeQN finds a node by kind, name, and qualified name.
-func findNodeQN(res model.ExtractionResult, kind model.NodeKind, name, qn string) *model.Node {
+func findRustNodeQN(res model.ExtractionResult, kind model.NodeKind, name, qn string) *model.Node {
 	for i := range res.Nodes {
 		n := &res.Nodes[i]
 		if n.Kind == kind && n.Name == name && n.QualifiedName == qn {

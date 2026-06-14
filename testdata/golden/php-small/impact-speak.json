@@ -1,0 +1,32 @@
+{
+  "symbol": "speak",
+  "depth": 2,
+  "nodeCount": 4,
+  "edgeCount": 1,
+  "affected": [
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "service.php",
+      "startLine": 14
+    },
+    {
+      "name": "speak",
+      "kind": "method",
+      "filePath": "models.php",
+      "startLine": 7
+    },
+    {
+      "name": "speak",
+      "kind": "method",
+      "filePath": "models.php",
+      "startLine": 28
+    },
+    {
+      "name": "speak",
+      "kind": "method",
+      "filePath": "models.php",
+      "startLine": 43
+    }
+  ]
+}

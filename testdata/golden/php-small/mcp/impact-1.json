@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 8,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Impact: \"speak\" affects 4 symbols\n\n**models.php:**\nspeak:7, speak:28, speak:43\n\n**service.php:**\ndescribe:14\n\n\n> **Note:** Aggregated results across 3 symbols named \"speak\": method at models.php:7, method at models.php:28, method at models.php:43"
+      }
+    ]
+  }
+}

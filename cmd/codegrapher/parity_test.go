@@ -101,6 +101,11 @@ var fixtures = []fixture{
 		query:   "circle",
 		symbols: []string{"area", "label", "run", "Circle", "Shape", "Circle::area"},
 	},
+	{
+		name:    "php-small",
+		query:   "dog",
+		symbols: []string{"speak", "describe", "make_dog", "Dog", "walk", "Dog::speak"},
+	},
 }
 
 // TestParityGoldens runs the binary against all goldens and asserts full-value parity.

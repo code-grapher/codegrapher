@@ -1,0 +1,68 @@
+{
+  "symbol": "Dog",
+  "depth": 2,
+  "nodeCount": 10,
+  "edgeCount": 8,
+  "affected": [
+    {
+      "name": "Dog",
+      "kind": "class",
+      "filePath": "models.php",
+      "startLine": 33
+    },
+    {
+      "name": "Dog",
+      "kind": "import",
+      "filePath": "service.php",
+      "startLine": 6
+    },
+    {
+      "name": "__construct",
+      "kind": "method",
+      "filePath": "models.php",
+      "startLine": 38
+    },
+    {
+      "name": "breed",
+      "kind": "field",
+      "filePath": "models.php",
+      "startLine": 36
+    },
+    {
+      "name": "breed",
+      "kind": "field",
+      "filePath": "models.php",
+      "startLine": 40
+    },
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "service.php",
+      "startLine": 14
+    },
+    {
+      "name": "make_dog",
+      "kind": "function",
+      "filePath": "service.php",
+      "startLine": 10
+    },
+    {
+      "name": "name",
+      "kind": "field",
+      "filePath": "models.php",
+      "startLine": 39
+    },
+    {
+      "name": "service.php",
+      "kind": "file",
+      "filePath": "service.php",
+      "startLine": 1
+    },
+    {
+      "name": "speak",
+      "kind": "method",
+      "filePath": "models.php",
+      "startLine": 43
+    }
+  ]
+}

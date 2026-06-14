@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "**3 definitions named \"speak\"**\nReturning 3 in full \u2014 pick the one you need (no Read required).\n\n## speak (method)\n\n**Location:** models.php:7\n**Signature:** `function speak(): string`\n\n```php\n7\t    public function speak(): string;\n```\n\n---\n\n## speak (method)\n\n**Location:** models.php:28\n**Signature:** `function speak(): string`\n\n```php\n28\t    public function speak(): string {\n29\t        return \"...\";\n30\t    }\n```\n\n---\n\n## speak (method)\n\n**Location:** models.php:43\n**Signature:** `function speak(): string`\n\n```php\n43\t    public function speak(): string {\n44\t        return \"woof\";\n45\t    }\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Called by \u2190** describe (service.php:14)"
+      }
+    ]
+  }
+}

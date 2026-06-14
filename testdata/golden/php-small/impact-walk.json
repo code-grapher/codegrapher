@@ -1,0 +1,14 @@
+{
+  "symbol": "walk",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "walk",
+      "kind": "method",
+      "filePath": "models.php",
+      "startLine": 11
+    }
+  ]
+}

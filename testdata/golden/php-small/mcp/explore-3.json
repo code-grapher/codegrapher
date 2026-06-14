@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 12,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Exploration: describe\n\nFound 13 symbols across 2 files.\n\n### Source Code\n\n> The code below is the **verbatim, current on-disk source** of these files \u2014 re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.\n\n#### service.php \u2014 describe(function), sound(variable), d(variable), make_dog(function)\n\n```php\n1\t<?php\n2\t// Service layer exercising use-imports + new + inferred instance-method calls.\n3\t\n4\tnamespace App\\Service;\n5\t\n6\tuse App\\Animals\\Dog;\n7\t\n8\tconst MAX_DOGS = 10;\n9\t\n10\tfunction make_dog(string $name): Dog {\n11\t    return new Dog($name, \"lab\");\n12\t}\n13\t\n14\tfunction describe(string $name): string {\n15\t    $d = new Dog($name, \"lab\");\n16\t    $sound = $d->speak();\n17\t    $d->walk();\n18\t    return $sound;\n19\t}\n```\n\n#### models.php \u2014 speak(method), Dog(class), __construct(method), Animal(class), Walkable(trait), +2 more\n\n```php\n1\t<?php\n2\t// Domain models for the php-small fixture.\n3\t\n4\tnamespace App\\Animals;\n5\t\n6\tinterface Speaker {\n7\t    public function speak(): string;\n8\t}\n9\t\n10\ttrait Walkable {\n11\t    public function walk(): string {\n12\t        return \"walking\";\n13\t    }\n14\t}\n15\t\n16\tenum Size: string {\n17\t    case Small = \"small\";\n18\t    case Large = \"large\";\n19\t}\n20\t\n21\tabstract class Animal implements Speaker {\n22\t    protected string $name = \"\";\n23\t\n24\t    public function __construct(string $name) {\n25\t        $this->name = $name;\n26\t    }\n27\t\n28\t    public function speak(): string {\n29\t        return \"...\";\n30\t    }\n31\t}\n32\t\n33\tclass Dog extends Animal {\n34\t    use Walkable;\n35\t\n36\t    public string $breed = \"\";\n37\t\n38\t    public function __construct(string $name, string $breed) {\n39\t        $this->name = $name;\n40\t        $this->breed = $breed;\n41\t    }\n42\t\n43\t    public function speak(): string {\n44\t        return \"woof\";\n45\t    }\n46\t}\n```\n"
+      }
+    ]
+  }
+}
