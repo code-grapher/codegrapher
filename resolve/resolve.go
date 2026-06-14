@@ -149,6 +149,8 @@ func resolveRef(
 		return resolvePerlRef(ref, s, pyVarTypeCache)
 	case model.LangErlang:
 		return resolveErlangRef(ref, s)
+	case model.LangJulia:
+		return resolveJuliaRef(ref, s)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -706,6 +708,176 @@ func rubyIsConstant(name string) bool {
 	}
 	r := name[0]
 	return r >= 'A' && r <= 'Z'
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Julia resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolveJuliaRef resolves a Julia unresolved reference into an edge. Julia is
+// dynamic with modules + multiple dispatch; resolution mirrors the Ruby
+// heuristic (a module qualifies its members).
+//
+//   - dotted calls "Mod.f": resolve f through the module to its function
+//     definition (member-on-module, then unambiguous-name fallback).
+//   - bare names (calls/references): resolve same-module → imported → any via a
+//     through-import lookup; calls to a struct become instantiates (T(args)).
+//   - imports: target the real cross-module definition when one exists.
+//   - extends/references: generic name resolution.
+func resolveJuliaRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	name := ref.ReferenceName
+
+	if ref.ReferenceKind == model.EdgeCalls {
+		if dotIdx := strings.Index(name, "."); dotIdx > 0 {
+			mod := name[:dotIdx]
+			fn := name[dotIdx+1:]
+			if fn == "" || strings.ContainsAny(fn, "./") {
+				return nil
+			}
+			// Mod.f → resolve f as a member of module Mod.
+			if edge := resolveJuliaMemberOnModule(ref, s, mod, fn); edge != nil {
+				return edge
+			}
+			// Fallback: unambiguous function named fn.
+			return resolveJuliaDottedFallback(ref, s, fn)
+		}
+	}
+
+	if ref.ReferenceKind == model.EdgeImports {
+		if edge := resolveJuliaImportsRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveGenericRef(ref, s)
+	}
+
+	if ref.ReferenceKind == model.EdgeCalls || ref.ReferenceKind == model.EdgeReferences {
+		if !strings.Contains(name, ".") {
+			if edge := resolveJuliaBareThroughImport(ref, s); edge != nil {
+				return edge
+			}
+		}
+	}
+
+	// extends/references and anything else: generic name resolution.
+	return resolveGenericRef(ref, s)
+}
+
+// resolveJuliaDefinitionByName returns the best real (non-import, non-file)
+// Julia definition node named name, preferring same-file/same-dir.
+func resolveJuliaDefinitionByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangJulia {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolveJuliaBareThroughImport resolves a bare-name call/reference to the real
+// cross-module definition. A call landing on a struct becomes instantiates.
+func resolveJuliaBareThroughImport(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	target := resolveJuliaDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	kind := ref.ReferenceKind
+	if kind == model.EdgeCalls && target.Kind == model.KindStruct {
+		kind = model.EdgeInstantiates
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   kind,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolveJuliaImportsRef resolves a using/import ref to the real cross-module
+// definition (module/function/struct) named like the imported symbol.
+func resolveJuliaImportsRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	target := resolveJuliaDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   model.EdgeImports,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolveJuliaMemberOnModule resolves fn as a function contained by the module
+// named mod (matching on the member's qualified-name parent's last segment).
+func resolveJuliaMemberOnModule(ref model.UnresolvedReference, s *store.Store, mod, fn string) *model.Edge {
+	candidates, err := s.GetNodesByName(fn)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	for i := range candidates {
+		n := &candidates[i]
+		if n.Language != model.LangJulia {
+			continue
+		}
+		idx := strings.LastIndex(n.QualifiedName, "::")
+		if idx < 0 {
+			continue
+		}
+		parent := n.QualifiedName[:idx]
+		seg := parent
+		if j := strings.LastIndex(parent, "::"); j >= 0 {
+			seg = parent[j+2:]
+		}
+		if seg == mod {
+			return &model.Edge{
+				Source: ref.FromNodeID,
+				Target: n.ID,
+				Kind:   ref.ReferenceKind,
+				Line:   ref.Line,
+				Column: ref.Column,
+			}
+		}
+	}
+	return nil
+}
+
+// resolveJuliaDottedFallback resolves a dotted call whose module is unknown:
+// emits an edge only when exactly one Julia function named fn exists.
+func resolveJuliaDottedFallback(ref model.UnresolvedReference, s *store.Store, fn string) *model.Edge {
+	candidates, err := s.GetNodesByName(fn)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var matches []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangJulia && n.Kind == model.KindFunction {
+			matches = append(matches, n)
+		}
+	}
+	if len(matches) != 1 {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: matches[0].ID,
+		Kind:   ref.ReferenceKind,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

@@ -61,6 +61,8 @@ const (
 	LangPerl
 	// LangErlang selects the tree-sitter `erlang` grammar.
 	LangErlang
+	// LangJulia selects the tree-sitter `julia` grammar.
+	LangJulia
 )
 
 // Point is a (row, column) position in source text (0-indexed).
@@ -207,6 +209,8 @@ func NewParser(lang Language) (*Parser, error) {
 		return &Parser{lang: grammars.PerlLanguage()}, nil
 	case LangErlang:
 		return &Parser{lang: grammars.ErlangLanguage()}, nil
+	case LangJulia:
+		return &Parser{lang: grammars.JuliaLanguage()}, nil
 	default:
 		return nil, fmt.Errorf("tsparse: unknown language %d", lang)
 	}
