@@ -4,6 +4,7 @@
     {"name": "requests", "url": "https://github.com/psf/requests.git", "sha": "147c8511ddbfa5e8f71bbf5c18ede0c4ceb3bba4", "lang": "python", "python": 3},
     {"name": "six", "url": "https://github.com/benjaminp/six.git", "sha": "c3ec058bf8c4d6329224eac53366c8e9ce511417", "lang": "python", "python": 2},
     {"name": "disposables", "url": "https://github.com/StephenCleary/Disposables.git", "sha": "1b661dfe72de274181dc11f1fa51c490567a571f", "lang": "csharp"},
-    {"name": "junit4", "url": "https://github.com/junit-team/junit4.git", "sha": "05fe2a64f59127c02135be22f416e91260d6ede6", "lang": "java"}
+    {"name": "junit4", "url": "https://github.com/junit-team/junit4.git", "sha": "05fe2a64f59127c02135be22f416e91260d6ede6", "lang": "java"},
+    {"name": "kotlinx.serialization", "url": "https://github.com/Kotlin/kotlinx.serialization.git", "sha": "6956af2e6073347c7832c3c5b374fa3b5a345956", "lang": "kotlin"}
   ]
 }

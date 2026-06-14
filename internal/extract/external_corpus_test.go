@@ -32,6 +32,8 @@ func (r externalRepo) repoLang() model.Language {
 	switch r.Lang {
 	case "java":
 		return model.LangJava
+	case "kotlin":
+		return model.LangKotlin
 	case "csharp":
 		return model.LangCSharp
 	default:
@@ -44,6 +46,8 @@ func (r externalRepo) sourceExts() []string {
 	switch r.repoLang() {
 	case model.LangJava:
 		return []string{".java"}
+	case model.LangKotlin:
+		return []string{".kt", ".kts"}
 	case model.LangCSharp:
 		return []string{".cs"}
 	default:

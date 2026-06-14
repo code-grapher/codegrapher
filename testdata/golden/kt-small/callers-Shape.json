@@ -1,0 +1,11 @@
+{
+  "symbol": "Shape",
+  "callers": [
+    {
+      "name": "App.kt",
+      "kind": "file",
+      "filePath": "com/example/app/App.kt",
+      "startLine": 1
+    }
+  ]
+}

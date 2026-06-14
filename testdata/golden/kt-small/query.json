@@ -1,0 +1,202 @@
+[
+  {
+    "node": {
+      "id": "class:eb92001f8f91f4aaf8b032a379df14b6",
+      "kind": "class",
+      "name": "Circle",
+      "qualifiedName": "Circle",
+      "filePath": "com/example/shapes/Circle.kt",
+      "language": "kotlin",
+      "startLine": 3,
+      "endLine": 15,
+      "startColumn": 0,
+      "endColumn": 1,
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781424588688
+    },
+    "score": 88.1947418230654
+  },
+  {
+    "node": {
+      "id": "import:cf8c9c54312f6cfc90508b19c1a16d73",
+      "kind": "import",
+      "name": "Circle",
+      "qualifiedName": "Circle",
+      "filePath": "com/example/app/App.kt",
+      "language": "kotlin",
+      "startLine": 3,
+      "endLine": 3,
+      "startColumn": 0,
+      "endColumn": 32,
+      "signature": "import com.example.shapes.Circle",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781424588689
+    },
+    "score": 68.15950090254557
+  },
+  {
+    "node": {
+      "id": "file:com/example/shapes/Circle.kt",
+      "kind": "file",
+      "name": "Circle.kt",
+      "qualifiedName": "com/example/shapes/Circle.kt",
+      "filePath": "com/example/shapes/Circle.kt",
+      "language": "kotlin",
+      "startLine": 1,
+      "endLine": 16,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781424588688
+    },
+    "score": 30.119113503972756
+  },
+  {
+    "node": {
+      "id": "method:92166a6cd9a12e55a65ee1ca6b7b7c5a",
+      "kind": "method",
+      "name": "unit",
+      "qualifiedName": "Circle::unit",
+      "filePath": "com/example/shapes/Circle.kt",
+      "language": "kotlin",
+      "startLine": 11,
+      "endLine": 13,
+      "startColumn": 8,
+      "endColumn": 9,
+      "signature": "fun unit(): Circle",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "Circle",
+      "updatedAt": 1781424588688
+    },
+    "score": 9.946653815674804
+  },
+  {
+    "node": {
+      "id": "method:189ecbcca0187ff93abb62d97e9f7dc3",
+      "kind": "method",
+      "name": "area",
+      "qualifiedName": "Circle::area",
+      "filePath": "com/example/shapes/Circle.kt",
+      "language": "kotlin",
+      "startLine": 4,
+      "endLine": 6,
+      "startColumn": 4,
+      "endColumn": 5,
+      "signature": "fun area(): Double",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "Double",
+      "updatedAt": 1781424588688
+    },
+    "score": 9.84519983276548
+  },
+  {
+    "node": {
+      "id": "field:4c4f0e0d7b8f4b21a7a07f49178ca085",
+      "kind": "field",
+      "name": "radius",
+      "qualifiedName": "Circle::radius",
+      "filePath": "com/example/shapes/Circle.kt",
+      "language": "kotlin",
+      "startLine": 3,
+      "endLine": 3,
+      "startColumn": 27,
+      "endColumn": 53,
+      "signature": "private val radius: Double",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "Double",
+      "updatedAt": 1781424588688
+    },
+    "score": 2.8149459316973404
+  },
+  {
+    "node": {
+      "id": "constant:69cc64d8c0206210bc9e0d10fd591cd9",
+      "kind": "constant",
+      "name": "PI",
+      "qualifiedName": "Circle::PI",
+      "filePath": "com/example/shapes/Circle.kt",
+      "language": "kotlin",
+      "startLine": 9,
+      "endLine": 9,
+      "startColumn": 8,
+      "endColumn": 30,
+      "signature": "const val PI = 3.14159",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781424588688
+    },
+    "score": 2.7856681128575467
+  },
+  {
+    "node": {
+      "id": "function:e2fbfed2a8c8e8ef3086779b4cd229c5",
+      "kind": "function",
+      "name": "makeUnit",
+      "qualifiedName": "makeUnit",
+      "filePath": "com/example/app/App.kt",
+      "language": "kotlin",
+      "startLine": 16,
+      "endLine": 18,
+      "startColumn": 0,
+      "endColumn": 1,
+      "signature": "fun makeUnit(): Circle",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "Circle",
+      "updatedAt": 1781424588689
+    },
+    "score": -3.502201836779669
+  },
+  {
+    "node": {
+      "id": "variable:8bff17e9414b7b02a9bde6353f74f11c",
+      "kind": "variable",
+      "name": "c",
+      "qualifiedName": "App::run::c",
+      "filePath": "com/example/app/App.kt",
+      "language": "kotlin",
+      "startLine": 22,
+      "endLine": 22,
+      "startColumn": 8,
+      "endColumn": 35,
+      "signature": "val c = Circle(\"unit\", 1.0)",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781424588689
+    },
+    "score": -11.718885230466821
+  }
+]

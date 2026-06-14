@@ -1,0 +1,68 @@
+{
+  "symbol": "Shape",
+  "depth": 2,
+  "nodeCount": 10,
+  "edgeCount": 8,
+  "affected": [
+    {
+      "name": "App.kt",
+      "kind": "file",
+      "filePath": "com/example/app/App.kt",
+      "startLine": 1
+    },
+    {
+      "name": "Base",
+      "kind": "class",
+      "filePath": "com/example/shapes/Base.kt",
+      "startLine": 3
+    },
+    {
+      "name": "Circle",
+      "kind": "class",
+      "filePath": "com/example/shapes/Circle.kt",
+      "startLine": 3
+    },
+    {
+      "name": "Shape",
+      "kind": "import",
+      "filePath": "com/example/app/App.kt",
+      "startLine": 4
+    },
+    {
+      "name": "Shape",
+      "kind": "interface",
+      "filePath": "com/example/shapes/Shape.kt",
+      "startLine": 3
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "com/example/shapes/Shape.kt",
+      "startLine": 4
+    },
+    {
+      "name": "describe",
+      "kind": "method",
+      "filePath": "com/example/app/App.kt",
+      "startLine": 7
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "com/example/shapes/Base.kt",
+      "startLine": 4
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "com/example/shapes/Shape.kt",
+      "startLine": 6
+    },
+    {
+      "name": "name",
+      "kind": "field",
+      "filePath": "com/example/shapes/Base.kt",
+      "startLine": 3
+    }
+  ]
+}

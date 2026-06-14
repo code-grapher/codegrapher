@@ -1,0 +1,10 @@
+[{"source":"class:eb92001f8f91f4aaf8b032a379df14b6","target":"class:f649d0575a345de1529eba9f87d46d75","kind":"extends","provenance":null,"line":3,"col":57},
+{"source":"class:f649d0575a345de1529eba9f87d46d75","target":"interface:c5db5f8acddf9cb63a2f79db98f3b9aa","kind":"implements","provenance":null,"line":3,"col":40},
+{"source":"file:com/example/app/App.kt","target":"class:eb92001f8f91f4aaf8b032a379df14b6","kind":"imports","provenance":null,"line":3,"col":null},
+{"source":"file:com/example/app/App.kt","target":"interface:c5db5f8acddf9cb63a2f79db98f3b9aa","kind":"imports","provenance":null,"line":4,"col":null},
+{"source":"function:e1d950ed225fa12915b3714057ea2960","target":"method:189ecbcca0187ff93abb62d97e9f7dc3","kind":"calls","provenance":null,"line":13,"col":11},
+{"source":"function:e2fbfed2a8c8e8ef3086779b4cd229c5","target":"class:eb92001f8f91f4aaf8b032a379df14b6","kind":"instantiates","provenance":null,"line":17,"col":11},
+{"source":"method:7222862aefa880beda252431288de1e7","target":"method:2f4831a27dac663a4c75fdea22865517","kind":"calls","provenance":null,"line":8,"col":15},
+{"source":"method:92166a6cd9a12e55a65ee1ca6b7b7c5a","target":"class:eb92001f8f91f4aaf8b032a379df14b6","kind":"instantiates","provenance":null,"line":12,"col":19},
+{"source":"method:c2ccfec094682c658d22cb43e495abe0","target":"class:eb92001f8f91f4aaf8b032a379df14b6","kind":"instantiates","provenance":null,"line":22,"col":16},
+{"source":"method:c2ccfec094682c658d22cb43e495abe0","target":"method:189ecbcca0187ff93abb62d97e9f7dc3","kind":"calls","provenance":null,"line":23,"col":16}]

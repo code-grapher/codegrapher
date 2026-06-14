@@ -1,0 +1,32 @@
+{
+  "symbol": "area",
+  "depth": 2,
+  "nodeCount": 4,
+  "edgeCount": 2,
+  "affected": [
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "com/example/shapes/Circle.kt",
+      "startLine": 4
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "com/example/shapes/Shape.kt",
+      "startLine": 4
+    },
+    {
+      "name": "run",
+      "kind": "method",
+      "filePath": "com/example/app/App.kt",
+      "startLine": 21
+    },
+    {
+      "name": "scaledArea",
+      "kind": "function",
+      "filePath": "com/example/app/App.kt",
+      "startLine": 12
+    }
+  ]
+}

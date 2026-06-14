@@ -1,0 +1,11 @@
+{
+  "symbol": "run",
+  "callees": [
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "com/example/shapes/Circle.kt",
+      "startLine": 4
+    }
+  ]
+}

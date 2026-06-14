@@ -104,6 +104,7 @@ capture ts-small "store" "get" "set" "lookup" "normalize" "describe" "Cache::loo
 capture py-small "dog" "speak" "describe" "make_dog" "Dog" "label" "Dog::speak"
 capture cs-small "dog" "Speak" "Describe" "MakeDog" "Dog" "Label" "Dog::Speak"
 capture java-small "circle" "area" "label" "run" "Circle" "Shape" "Circle::area"
+capture kt-small "circle" "area" "label" "run" "Circle" "Shape" "Circle::area"
 
 echo ""
 echo "=== MCP goldens ==="
@@ -214,6 +215,11 @@ elif fixture == "java-small":
     explore2 = "area label run"
     explore3 = "run"
     q_explore1 = "how does the circle work"
+elif fixture == "kt-small":
+    sym1 = "area"
+    explore2 = "area label run"
+    explore3 = "run"
+    q_explore1 = "how does the circle work"
 else:
     sym1 = "get"
     explore2 = "get set lookup"
@@ -247,6 +253,7 @@ rebaseline_mcp ts-small
 rebaseline_mcp py-small
 rebaseline_mcp cs-small
 rebaseline_mcp java-small
+rebaseline_mcp kt-small
 
 echo ""
 echo "=== Rebaseline complete ==="

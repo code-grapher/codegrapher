@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 12,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Exploration: run\n\nFound 13 symbols across 4 files.\n\n### Source Code\n\n> The code below is the **verbatim, current on-disk source** of these files \u2014 re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.\n\n#### com/example/app/App.kt \u2014 run(method), c(variable), a(variable), App(class), scaledArea(function), +1 more\n\n```kotlin\n1\tpackage com.example.app\n2\t\n3\timport com.example.shapes.Circle\n4\timport com.example.shapes.Shape\n5\t\n6\tobject Registry {\n7\t    fun describe(s: Shape): String {\n8\t        return s.label()\n9\t    }\n10\t}\n11\t\n12\tfun Shape.scaledArea(factor: Double): Double {\n13\t    return area() * factor\n14\t}\n15\t\n16\tfun makeUnit(): Circle {\n17\t    return Circle(\"unit\", 1.0)\n18\t}\n19\t\n20\tclass App {\n21\t    fun run(): Double {\n22\t        val c = Circle(\"unit\", 1.0)\n23\t        val a = c.area()\n24\t        return a\n25\t    }\n26\t}\n```\n\n#### com/example/shapes/Circle.kt \u2014 area(method), Circle(class), PI(constant), unit(method)\n\n```kotlin\n1\tpackage com.example.shapes\n2\t\n3\tclass Circle(name: String, private val radius: Double) : Base(name) {\n4\t    override fun area(): Double {\n5\t        return PI * radius * radius\n6\t    }\n7\t\n8\t    companion object {\n9\t        const val PI = 3.14159\n10\t\n11\t        fun unit(): Circle {\n12\t            return Circle(\"unit\", 1.0)\n13\t        }\n14\t    }\n15\t}\n```\n"
+      }
+    ]
+  }
+}

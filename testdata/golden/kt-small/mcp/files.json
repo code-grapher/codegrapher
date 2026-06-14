@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Project Structure (5 files)\n\n\u2514\u2500\u2500 com\n    \u2514\u2500\u2500 example\n        \u251c\u2500\u2500 app\n        \u2502   \u2514\u2500\u2500 App.kt (kotlin, 12 symbols)\n        \u2514\u2500\u2500 shapes\n            \u251c\u2500\u2500 Base.kt (kotlin, 5 symbols)\n            \u251c\u2500\u2500 Circle.kt (kotlin, 7 symbols)\n            \u251c\u2500\u2500 Shape.kt (kotlin, 5 symbols)\n            \u2514\u2500\u2500 Size.kt (kotlin, 6 symbols)"
+      }
+    ]
+  }
+}

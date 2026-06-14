@@ -1,0 +1,32 @@
+[
+  {
+    "path": "com/example/app/App.kt",
+    "language": "kotlin",
+    "nodeCount": 12,
+    "size": 438
+  },
+  {
+    "path": "com/example/shapes/Base.kt",
+    "language": "kotlin",
+    "nodeCount": 5,
+    "size": 139
+  },
+  {
+    "path": "com/example/shapes/Circle.kt",
+    "language": "kotlin",
+    "nodeCount": 7,
+    "size": 316
+  },
+  {
+    "path": "com/example/shapes/Shape.kt",
+    "language": "kotlin",
+    "nodeCount": 5,
+    "size": 96
+  },
+  {
+    "path": "com/example/shapes/Size.kt",
+    "language": "kotlin",
+    "nodeCount": 6,
+    "size": 81
+  }
+]

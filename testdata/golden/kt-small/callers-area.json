@@ -1,0 +1,17 @@
+{
+  "symbol": "area",
+  "callers": [
+    {
+      "name": "scaledArea",
+      "kind": "function",
+      "filePath": "com/example/app/App.kt",
+      "startLine": 12
+    },
+    {
+      "name": "run",
+      "kind": "method",
+      "filePath": "com/example/app/App.kt",
+      "startLine": 21
+    }
+  ]
+}
