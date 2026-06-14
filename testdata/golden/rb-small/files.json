@@ -1,0 +1,14 @@
+[
+  {
+    "path": "models.rb",
+    "language": "ruby",
+    "nodeCount": 17,
+    "size": 546
+  },
+  {
+    "path": "service.rb",
+    "language": "ruby",
+    "nodeCount": 7,
+    "size": 254
+  }
+]

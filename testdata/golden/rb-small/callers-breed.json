@@ -1,0 +1,11 @@
+{
+  "symbol": "breed",
+  "callers": [
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "service.rb",
+      "startLine": 11
+    }
+  ]
+}

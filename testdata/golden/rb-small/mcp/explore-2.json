@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 11,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Exploration: speak describe make_dog\n\nFound 16 symbols across 2 files.\n\n### Blast radius \u2014 what depends on these (update/verify before editing)\n\n- `speak` (models.rb:35) \u2014 1 caller in `service.rb`; \u26a0\ufe0f no covering tests found\n\n### Source Code\n\n> The code below is the **verbatim, current on-disk source** of these files \u2014 re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.\n\n#### models.rb \u2014 Dog(class), speak(method), initialize(method), create(method), Animal(class), +4 more\n\n```ruby\n1\t# Domain models for the rb-small fixture.\n2\t\n3\tDEFAULT_SOUND = \"...\"\n4\t\n5\tmodule Walkable\n6\t  def walk\n7\t    \"walking\"\n8\t  end\n9\tend\n10\t\n11\tmodule Animals\n12\t  class Animal\n13\t    attr_reader :name\n14\t\n15\t    def initialize(name)\n16\t      @name = name\n17\t    end\n18\t\n19\t    def speak\n20\t      DEFAULT_SOUND\n21\t    end\n22\t  end\n23\t\n24\t  class Dog < Animal\n25\t    include Walkable\n26\t\n27\t    attr_accessor :breed\n28\t\n29\t    def initialize(name, breed)\n30\t      super(name)\n31\t      @breed = breed\n32\t      @legs = 4\n33\t    end\n34\t\n35\t    def speak\n36\t      \"woof\"\n37\t    end\n38\t\n39\t    def self.create(name)\n40\t      Dog.new(name, \"mutt\")\n41\t    end\n42\t  end\n43\tend\n```\n\n#### service.rb \u2014 make_dog(function), describe(function), MAX_DOGS(constant), d(variable), sound(variable)\n\n```ruby\n1\t# Service layer exercising require_relative + inferred instance-method calls.\n2\t\n3\trequire_relative 'models'\n4\t\n5\tMAX_DOGS = 10\n6\t\n7\tdef make_dog(name)\n8\t  Dog.new(name, \"lab\")\n9\tend\n10\t\n11\tdef describe(name)\n12\t  d = Dog.new(name, \"lab\")\n13\t  sound = d.speak\n14\t  d.breed\n15\t  sound\n16\tend\n```\n"
+      }
+    ]
+  }
+}

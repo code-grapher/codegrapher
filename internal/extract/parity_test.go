@@ -75,6 +75,12 @@ func TestParityJavaSmall(t *testing.T) {
 	testParity(t, "java-small")
 }
 
+// TestParityRbSmall runs our extractor over all files in testdata/fixtures/rb-small
+// and compares against the golden.
+func TestParityRbSmall(t *testing.T) {
+	testParity(t, "rb-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 
@@ -286,7 +292,7 @@ func TestExtractFileDetectLanguage(t *testing.T) {
 		{"foo.py", model.LangPython},
 		{"foo.cs", model.LangCSharp},
 		{"Foo.java", model.LangJava},
-		{"foo.rb", model.LangUnknown},
+		{"foo.rb", model.LangRuby},
 		{"README.md", model.LangUnknown},
 	}
 	for _, c := range cases {

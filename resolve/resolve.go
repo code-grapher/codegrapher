@@ -535,19 +535,31 @@ func resolveRubyImportsRef(ref model.UnresolvedReference, s *store.Store) *model
 }
 
 // resolveRubyMemberOnClass resolves attr as a method/field/property contained
-// by the class named className (qualified-name prefix "className::").
+// by the class named className. A member's qualified name is
+// "[Module::...]ClassName::attr"; className may be the last segment of a
+// module-nested class (e.g. Animals::Dog), so match the parent of the member's
+// qualified name on its trailing "::"-segment rather than a flat prefix.
 func resolveRubyMemberOnClass(ref model.UnresolvedReference, s *store.Store, className, attr string) *model.Edge {
 	candidates, err := s.GetNodesByName(attr)
 	if err != nil || len(candidates) == 0 {
 		return nil
 	}
-	prefix := className + "::"
 	for i := range candidates {
 		n := &candidates[i]
 		if n.Language != model.LangRuby {
 			continue
 		}
-		if strings.HasPrefix(n.QualifiedName, prefix) {
+		idx := strings.LastIndex(n.QualifiedName, "::")
+		if idx < 0 {
+			continue
+		}
+		parent := n.QualifiedName[:idx] // strip "::attr"
+		// parent's last "::"-segment must equal className.
+		seg := parent
+		if j := strings.LastIndex(parent, "::"); j >= 0 {
+			seg = parent[j+2:]
+		}
+		if seg == className {
 			return &model.Edge{
 				Source: ref.FromNodeID,
 				Target: n.ID,

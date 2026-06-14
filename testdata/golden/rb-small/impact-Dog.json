@@ -1,0 +1,62 @@
+{
+  "symbol": "Dog",
+  "depth": 2,
+  "nodeCount": 9,
+  "edgeCount": 8,
+  "affected": [
+    {
+      "name": "@breed",
+      "kind": "field",
+      "filePath": "models.rb",
+      "startLine": 31
+    },
+    {
+      "name": "@legs",
+      "kind": "field",
+      "filePath": "models.rb",
+      "startLine": 32
+    },
+    {
+      "name": "Dog",
+      "kind": "class",
+      "filePath": "models.rb",
+      "startLine": 24
+    },
+    {
+      "name": "breed",
+      "kind": "property",
+      "filePath": "models.rb",
+      "startLine": 27
+    },
+    {
+      "name": "create",
+      "kind": "method",
+      "filePath": "models.rb",
+      "startLine": 39
+    },
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "service.rb",
+      "startLine": 11
+    },
+    {
+      "name": "initialize",
+      "kind": "method",
+      "filePath": "models.rb",
+      "startLine": 29
+    },
+    {
+      "name": "make_dog",
+      "kind": "function",
+      "filePath": "service.rb",
+      "startLine": 7
+    },
+    {
+      "name": "speak",
+      "kind": "method",
+      "filePath": "models.rb",
+      "startLine": 35
+    }
+  ]
+}
