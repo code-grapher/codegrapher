@@ -1,0 +1,14 @@
+{
+  "symbol": "Shape.Circle::area",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "Shape.hs",
+      "startLine": 13
+    }
+  ]
+}

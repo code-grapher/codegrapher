@@ -1,0 +1,14 @@
+[
+  {
+    "path": "App.hs",
+    "language": "haskell",
+    "nodeCount": 4,
+    "size": 165
+  },
+  {
+    "path": "Shape.hs",
+    "language": "haskell",
+    "nodeCount": 9,
+    "size": 279
+  }
+]

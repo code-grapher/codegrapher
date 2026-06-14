@@ -1,0 +1,38 @@
+{
+  "initialized": true,
+  "version": "0.9.9",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/haskell/testdata/fixtures/haskell-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/haskell/testdata/fixtures/haskell-small/.codegraph",
+  "lastIndexed": "",
+  "fileCount": 2,
+  "nodeCount": 13,
+  "edgeCount": 15,
+  "dbSizeBytes": 167936,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "enum_member": 1,
+    "file": 2,
+    "function": 2,
+    "import": 1,
+    "interface": 1,
+    "method": 2,
+    "module": 3,
+    "struct": 1
+  },
+  "languages": [
+    "haskell"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "0.9.9",
+    "builtWithExtractionVersion": 14,
+    "currentExtractionVersion": 14,
+    "reindexRecommended": false
+  }
+}

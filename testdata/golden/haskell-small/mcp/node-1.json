@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "**2 definitions named \"area\"**\nReturning 2 in full \u2014 pick the one you need (no Read required).\n\n## area (method)\n\n**Location:** Shape.hs:5\n**Signature:** `area :: a -> Double`\n\n```haskell\n5\t  area :: a -> Double\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Called by \u2190** run (App.hs:6)\n\n---\n\n## area (method)\n\n**Location:** Shape.hs:13\n**Signature:** `area (Circle r)`\n\n```haskell\n13\t  area (Circle r) = r * r * 3\n```"
+      }
+    ]
+  }
+}

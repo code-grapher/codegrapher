@@ -1,0 +1,111 @@
+[
+  {
+    "node": {
+      "id": "struct:5649b734b7a23b9f1535ef90ade902c3",
+      "kind": "struct",
+      "name": "Circle",
+      "qualifiedName": "Geometry::Circle",
+      "filePath": "Shape.hs",
+      "language": "haskell",
+      "startLine": 7,
+      "endLine": 7,
+      "startColumn": 0,
+      "endColumn": 27,
+      "signature": "data Circle = Circle Double",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781433037616
+    },
+    "score": 86.91623234461858
+  },
+  {
+    "node": {
+      "id": "enum_member:1c31707957bb35080bd89eafb93a0a18",
+      "kind": "enum_member",
+      "name": "Circle",
+      "qualifiedName": "Geometry::Circle::Circle",
+      "filePath": "Shape.hs",
+      "language": "haskell",
+      "startLine": 7,
+      "endLine": 7,
+      "startColumn": 14,
+      "endColumn": 27,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781433037616
+    },
+    "score": 83.9241975939853
+  },
+  {
+    "node": {
+      "id": "module:d81bb0b58cc387f425774b15435742fc",
+      "kind": "module",
+      "name": "Shape.Circle",
+      "qualifiedName": "Geometry::Shape.Circle",
+      "filePath": "Shape.hs",
+      "language": "haskell",
+      "startLine": 12,
+      "endLine": 13,
+      "startColumn": 0,
+      "endColumn": 29,
+      "signature": "instance Shape Circle",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781433037616
+    },
+    "score": 14.909688423314549
+  },
+  {
+    "node": {
+      "id": "method:08f8c219ebf4e1da307e381bda560973",
+      "kind": "method",
+      "name": "area",
+      "qualifiedName": "Geometry::Shape.Circle::area",
+      "filePath": "Shape.hs",
+      "language": "haskell",
+      "startLine": 13,
+      "endLine": 13,
+      "startColumn": 2,
+      "endColumn": 29,
+      "signature": "area (Circle r)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781433037616
+    },
+    "score": 10.795714931438674
+  },
+  {
+    "node": {
+      "id": "function:a127758982a25307204ad555f74f52b9",
+      "kind": "function",
+      "name": "label",
+      "qualifiedName": "Geometry::label",
+      "filePath": "Shape.hs",
+      "language": "haskell",
+      "startLine": 9,
+      "endLine": 9,
+      "startColumn": 0,
+      "endColumn": 25,
+      "signature": "label :: Circle -\u003e String",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781433037616
+    },
+    "score": 10.598562347979538
+  }
+]

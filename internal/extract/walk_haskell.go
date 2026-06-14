@@ -124,15 +124,35 @@ func (e *extractor) extractHaskellSignature(node *tsparse.Node, fnNodes map[stri
 // `bind`). Multiple equations of the same name attribute their RHS calls to the
 // single function node (created on first occurrence, or reused from a prior
 // signature).
+//
+// tree-sitter-haskell sometimes collapses a same-name `f :: T` + `f … = …` into
+// a single `bind` node with a `pattern` (a nested `signature` or a bare
+// `variable`) and a `match`. We extract the name from whichever shape appears.
 func (e *extractor) extractHaskellFunction(node *tsparse.Node, fnNodes map[string]string) {
-	name := haskellSigName(node) // name field is a `variable`, same accessor
+	name := haskellSigName(node) // `name` field is a `variable`
+	sig := ""
+	if name == "" {
+		// `bind` form: name lives under the `pattern` field (a signature or
+		// variable); the signature text becomes the node Signature.
+		if pat := node.ChildByFieldName("pattern"); pat != nil {
+			if pat.Kind() == "signature" {
+				name = haskellPatternName(pat)
+				sig = strings.TrimSpace(pat.Text())
+			} else {
+				name = haskellPatternName(pat)
+			}
+		}
+	}
 	if name == "" {
 		return
+	}
+	if sig == "" {
+		sig = strings.TrimSpace(haskellFunctionHeadText(node))
 	}
 	id, ok := fnNodes[name]
 	if !ok {
 		fn := e.createNode(model.KindFunction, name, node, nodeExtra{
-			signature:  strings.TrimSpace(haskellFunctionHeadText(node)),
+			signature:  sig,
 			isExported: true,
 		})
 		if fn == nil {
@@ -520,6 +540,24 @@ func haskellSigName(node *tsparse.Node) string {
 	return strings.TrimSpace(n.Text())
 }
 
+// haskellPatternName returns the bound variable name from a bind `pattern`
+// (either a bare `variable` or a `signature` whose own `pattern`/`name` is the
+// variable).
+func haskellPatternName(pat *tsparse.Node) string {
+	switch pat.Kind() {
+	case "variable":
+		return strings.TrimSpace(pat.Text())
+	case "signature":
+		if v := pat.ChildByFieldName("pattern"); v != nil {
+			return strings.TrimSpace(v.Text())
+		}
+		if v := pat.ChildByFieldName("name"); v != nil {
+			return strings.TrimSpace(v.Text())
+		}
+	}
+	return ""
+}
+
 // haskellFunctionHeadText returns the head text of a function equation up to and
 // including its patterns (drops the RHS), as a compact signature.
 func haskellFunctionHeadText(node *tsparse.Node) string {
@@ -532,13 +570,22 @@ func haskellFunctionHeadText(node *tsparse.Node) string {
 
 // haskellCalleeName returns the callee name for an `apply` function child. A
 // qualified callee (`Map.insert`) keeps its `Module.func` form; a bare variable
-// returns its text.
+// returns its text. Data constructors (`Circle x`) are NOT calls — Haskell has
+// no OO constructor-as-call — so `constructor` heads return "" (documented
+// divergence: construction surfaces as a type reference, not a calls edge).
 func haskellCalleeName(node *tsparse.Node) string {
 	switch node.Kind() {
-	case "variable", "constructor":
+	case "variable":
 		return strings.TrimSpace(node.Text())
 	case "qualified":
-		return strings.TrimSpace(node.Text())
+		// A qualified value `B.f` is a call; a qualified constructor `B.C` is
+		// construction. Heuristic: lowercase final segment → value/call.
+		t := strings.TrimSpace(node.Text())
+		last := haskellLastSegment(t)
+		if last != "" && last[0] >= 'a' && last[0] <= 'z' {
+			return t
+		}
+		return ""
 	case "apply":
 		// Curried application: head is the leftmost function.
 		if f := node.ChildByFieldName("function"); f != nil {

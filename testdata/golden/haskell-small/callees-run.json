@@ -1,0 +1,11 @@
+{
+  "symbol": "run",
+  "callees": [
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "Shape.hs",
+      "startLine": 5
+    }
+  ]
+}

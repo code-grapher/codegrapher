@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Exploration: how does the circle work\n\nFound 9 symbols across 2 files.\n\n### Blast radius \u2014 what depends on these (update/verify before editing)\n\n- `Circle` (Shape.hs:7) \u2014 1 caller in `Shape.hs`; \u26a0\ufe0f no covering tests found\n\n### Source Code\n\n> The code below is the **verbatim, current on-disk source** of these files \u2014 re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.\n\n#### Shape.hs \u2014 Circle(struct), Shape.Circle(module), area(method), label(function), Shape(interface), +1 more\n\n```haskell\n1\t-- Domain type class + a concrete shape for the haskell-small fixture.\n2\tmodule Geometry where\n3\t\n4\tclass Shape a where\n5\t  area :: a -> Double\n6\t\n7\tdata Circle = Circle Double\n8\t\n9\tlabel :: Circle -> String\n10\tlabel (Circle _) = \"circle\"\n11\t\n12\tinstance Shape Circle where\n13\t  area (Circle r) = r * r * 3\n```\n"
+      }
+    ]
+  }
+}

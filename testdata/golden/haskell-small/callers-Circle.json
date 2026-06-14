@@ -1,0 +1,11 @@
+{
+  "symbol": "Circle",
+  "callers": [
+    {
+      "name": "label",
+      "kind": "function",
+      "filePath": "Shape.hs",
+      "startLine": 9
+    }
+  ]
+}

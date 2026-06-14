@@ -1,0 +1,4 @@
+[{"source":"function:2f0ee8b53871f0d4003c6eaa276ce16f","target":"method:6562056dc790321d8c9fae86db6abce1","kind":"calls","provenance":null,"line":7,"col":13},
+{"source":"function:a127758982a25307204ad555f74f52b9","target":"struct:5649b734b7a23b9f1535ef90ade902c3","kind":"references","provenance":null,"line":9,"col":9},
+{"source":"module:e74554a2f67ab51dc3d4707d52ac14f0","target":"module:cdedf43d6efcd02a8485b0fcfe6eda4b","kind":"imports","provenance":null,"line":4,"col":null},
+{"source":"struct:5649b734b7a23b9f1535ef90ade902c3","target":"interface:a5e24f6255558219f7d539ab73b2a1df","kind":"implements","provenance":null,"line":12,"col":null}]

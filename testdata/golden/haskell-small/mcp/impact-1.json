@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 8,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Impact: \"area\" affects 3 symbols\n\n**Shape.hs:**\narea:5, area:13\n\n**App.hs:**\nrun:6\n\n\n> **Note:** Aggregated results across 2 symbols named \"area\": method at Shape.hs:5, method at Shape.hs:13"
+      }
+    ]
+  }
+}

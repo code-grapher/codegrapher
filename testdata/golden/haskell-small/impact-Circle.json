@@ -1,0 +1,38 @@
+{
+  "symbol": "Circle",
+  "depth": 2,
+  "nodeCount": 5,
+  "edgeCount": 3,
+  "affected": [
+    {
+      "name": "Circle",
+      "kind": "enum_member",
+      "filePath": "Shape.hs",
+      "startLine": 7
+    },
+    {
+      "name": "Circle",
+      "kind": "struct",
+      "filePath": "Shape.hs",
+      "startLine": 7
+    },
+    {
+      "name": "Shape.Circle",
+      "kind": "module",
+      "filePath": "Shape.hs",
+      "startLine": 12
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "Shape.hs",
+      "startLine": 13
+    },
+    {
+      "name": "label",
+      "kind": "function",
+      "filePath": "Shape.hs",
+      "startLine": 9
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+[{"source":"file:App.hs","target":"module:e74554a2f67ab51dc3d4707d52ac14f0","kind":"contains"},
+{"source":"file:Shape.hs","target":"module:cdedf43d6efcd02a8485b0fcfe6eda4b","kind":"contains"},
+{"source":"interface:a5e24f6255558219f7d539ab73b2a1df","target":"method:6562056dc790321d8c9fae86db6abce1","kind":"contains"},
+{"source":"module:cdedf43d6efcd02a8485b0fcfe6eda4b","target":"function:a127758982a25307204ad555f74f52b9","kind":"contains"},
+{"source":"module:cdedf43d6efcd02a8485b0fcfe6eda4b","target":"interface:a5e24f6255558219f7d539ab73b2a1df","kind":"contains"},
+{"source":"module:cdedf43d6efcd02a8485b0fcfe6eda4b","target":"module:d81bb0b58cc387f425774b15435742fc","kind":"contains"},
+{"source":"module:cdedf43d6efcd02a8485b0fcfe6eda4b","target":"struct:5649b734b7a23b9f1535ef90ade902c3","kind":"contains"},
+{"source":"module:d81bb0b58cc387f425774b15435742fc","target":"method:08f8c219ebf4e1da307e381bda560973","kind":"contains"},
+{"source":"module:e74554a2f67ab51dc3d4707d52ac14f0","target":"function:2f0ee8b53871f0d4003c6eaa276ce16f","kind":"contains"},
+{"source":"module:e74554a2f67ab51dc3d4707d52ac14f0","target":"import:e05c68083513d750ea7d2b801db88e16","kind":"contains"},
+{"source":"struct:5649b734b7a23b9f1535ef90ade902c3","target":"enum_member:1c31707957bb35080bd89eafb93a0a18","kind":"contains"}]

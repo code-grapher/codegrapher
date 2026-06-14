@@ -1,0 +1,11 @@
+{
+  "symbol": "label",
+  "callees": [
+    {
+      "name": "Circle",
+      "kind": "struct",
+      "filePath": "Shape.hs",
+      "startLine": 7
+    }
+  ]
+}

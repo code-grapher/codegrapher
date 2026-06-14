@@ -141,6 +141,12 @@ func TestParityElixirSmall(t *testing.T) {
 	testParity(t, "elixir-small")
 }
 
+// TestParityHaskellSmall runs our extractor over all files in testdata/fixtures/haskell-small
+// and compares against the golden.
+func TestParityHaskellSmall(t *testing.T) {
+	testParity(t, "haskell-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 
