@@ -16,6 +16,9 @@
 coverage.*
 *.coverprofile
 profile.cov
+# …but coverage Go source files are tracked (the coverage library package).
+!coverage.go
+!*coverage*.go
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
