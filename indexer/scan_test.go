@@ -146,7 +146,8 @@ func TestIsSourceFile(t *testing.T) {
 		want bool
 	}{
 		{"a.go", true}, {"a.ts", true}, {"a.tsx", true}, {"a.js", true}, {"a.jsx", true},
-		{"a.md", false}, {"a.py", false}, {"Makefile", false},
+		{"a.py", true},
+		{"a.md", false}, {"Makefile", false},
 	}
 	for _, tc := range cases {
 		if got := IsSourceFile(tc.path); got != tc.want {

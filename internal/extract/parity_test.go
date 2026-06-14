@@ -265,7 +265,7 @@ func TestExtractFileDetectLanguage(t *testing.T) {
 		{"foo.tsx", model.LangTSX},
 		{"foo.js", model.LangJavaScript},
 		{"foo.jsx", model.LangJSX},
-		{"foo.py", model.LangUnknown},
+		{"foo.py", model.LangPython},
 		{"foo.rb", model.LangUnknown},
 		{"README.md", model.LangUnknown},
 	}
