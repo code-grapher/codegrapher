@@ -1,0 +1,44 @@
+{
+  "symbol": "Drawable",
+  "depth": 2,
+  "nodeCount": 6,
+  "edgeCount": 5,
+  "affected": [
+    {
+      "name": "Circle",
+      "kind": "class",
+      "filePath": "shapes.h",
+      "startLine": 19
+    },
+    {
+      "name": "Drawable",
+      "kind": "interface",
+      "filePath": "shapes.h",
+      "startLine": 6
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.h",
+      "startLine": 21
+    },
+    {
+      "name": "circleWithRadius:",
+      "kind": "method",
+      "filePath": "shapes.h",
+      "startLine": 20
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "shapes.h",
+      "startLine": 7
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "shapes.h",
+      "startLine": 22
+    }
+  ]
+}

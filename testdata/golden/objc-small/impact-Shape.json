@@ -1,0 +1,80 @@
+{
+  "symbol": "Shape",
+  "depth": 2,
+  "nodeCount": 12,
+  "edgeCount": 10,
+  "affected": [
+    {
+      "name": "Circle",
+      "kind": "class",
+      "filePath": "shapes.h",
+      "startLine": 19
+    },
+    {
+      "name": "Shape",
+      "kind": "class",
+      "filePath": "shapes.h",
+      "startLine": 11
+    },
+    {
+      "name": "Shape",
+      "kind": "class",
+      "filePath": "shapes.m",
+      "startLine": 5
+    },
+    {
+      "name": "_name",
+      "kind": "field",
+      "filePath": "shapes.h",
+      "startLine": 12
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.h",
+      "startLine": 15
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.h",
+      "startLine": 21
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.m",
+      "startLine": 6
+    },
+    {
+      "name": "circleWithRadius:",
+      "kind": "method",
+      "filePath": "shapes.h",
+      "startLine": 20
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "shapes.h",
+      "startLine": 22
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "shapes.m",
+      "startLine": 18
+    },
+    {
+      "name": "name",
+      "kind": "property",
+      "filePath": "shapes.h",
+      "startLine": 14
+    },
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "shapes.m",
+      "startLine": 24
+    }
+  ]
+}

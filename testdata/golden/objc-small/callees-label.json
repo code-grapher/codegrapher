@@ -1,0 +1,11 @@
+{
+  "symbol": "label",
+  "callees": [
+    {
+      "name": "name",
+      "kind": "property",
+      "filePath": "shapes.h",
+      "startLine": 14
+    }
+  ]
+}

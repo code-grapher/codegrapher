@@ -1,0 +1,8 @@
+[{"source":"class:b360c4e1afd0b294a39c0d8e03eed1b8","target":"class:3ee5c2643f8dab3dc53af765f34dac41","kind":"extends","provenance":null,"line":19,"col":null},
+{"source":"class:b360c4e1afd0b294a39c0d8e03eed1b8","target":"interface:90ed82d939c0aa2731029b0bab26b478","kind":"implements","provenance":null,"line":19,"col":null},
+{"source":"file:shapes.h","target":"import:a69768c21c679429041ad39c88aa2bb2","kind":"imports","provenance":null,"line":3,"col":null},
+{"source":"file:shapes.m","target":"file:shapes.h","kind":"imports","provenance":null,"line":3,"col":null},
+{"source":"function:e18dedd397e340dda06daab79581c7c3","target":"class:68dde85a465487227d4b8f9f4045d420","kind":"instantiates","provenance":null,"line":25,"col":17},
+{"source":"function:e18dedd397e340dda06daab79581c7c3","target":"method:e4b5bc123462e9c18dc4a977c7a869a6","kind":"calls","provenance":null,"line":26,"col":15},
+{"source":"method:1c55b0c52da324b6199647ec2934d5fc","target":"property:a53bf6f919cb525224f85c2a8a1c982f","kind":"calls","provenance":null,"line":19,"col":11},
+{"source":"method:692a3887fcf74ad62f78ed16299fe975","target":"class:68dde85a465487227d4b8f9f4045d420","kind":"instantiates","provenance":null,"line":13,"col":12}]

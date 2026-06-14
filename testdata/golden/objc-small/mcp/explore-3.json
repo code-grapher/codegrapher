@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 12,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Exploration: run\n\nFound 7 symbols across 1 files.\n\n### Source Code\n\n> The code below is the **verbatim, current on-disk source** of these files \u2014 re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.\n\n#### shapes.m \u2014 run(function), area(method), Circle(class), Shape(class), circleWithRadius:(method), +1 more\n\n```objc\n1\t// shapes.m implements Shape and Circle and a driver that constructs a Circle\n2\t// and exercises a message-send.\n3\t#import \"shapes.h\"\n4\t\n5\t@implementation Shape\n6\t- (double)area {\n7\t    return 0.0;\n8\t}\n9\t@end\n10\t\n11\t@implementation Circle\n12\t+ (instancetype)circleWithRadius:(double)radius {\n13\t    return [[Circle alloc] init];\n14\t}\n15\t- (double)area {\n16\t    return 3.14;\n17\t}\n18\t- (NSString *)label {\n19\t    return [self name];\n20\t}\n21\t@end\n22\t\n23\t// run constructs a Circle and exercises the virtual call.\n24\tdouble run(void) {\n25\t    Circle *c = [[Circle alloc] init];\n26\t    double a = [c area];\n27\t    return a;\n28\t}\n```\n"
+      }
+    ]
+  }
+}
