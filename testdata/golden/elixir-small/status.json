@@ -1,0 +1,39 @@
+{
+  "initialized": true,
+  "version": "0.9.9",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/elixir/testdata/fixtures/elixir-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/elixir/testdata/fixtures/elixir-small/.codegraph",
+  "lastIndexed": "",
+  "fileCount": 2,
+  "nodeCount": 17,
+  "edgeCount": 20,
+  "dbSizeBytes": 147456,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "constant": 1,
+    "field": 2,
+    "file": 2,
+    "function": 5,
+    "import": 1,
+    "interface": 1,
+    "method": 1,
+    "module": 3,
+    "struct": 1
+  },
+  "languages": [
+    "elixir"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "0.9.9",
+    "builtWithExtractionVersion": 14,
+    "currentExtractionVersion": 14,
+    "reindexRecommended": false
+  }
+}

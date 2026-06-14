@@ -1,0 +1,11 @@
+{
+  "symbol": "area",
+  "callees": [
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shapes.ex",
+      "startLine": 13
+    }
+  ]
+}

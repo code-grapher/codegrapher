@@ -80,6 +80,12 @@
       "url": "https://github.com/rrousselGit/state_notifier.git",
       "sha": "0d692f96fd39c9629e57ec1cfcc540befda3a847",
       "lang": "dart"
+    },
+    {
+      "name": "norm",
+      "url": "https://github.com/keathley/norm.git",
+      "sha": "b91a154339f995cdee8437a58c0cf9e4935644af",
+      "lang": "elixir"
     }
   ]
 }

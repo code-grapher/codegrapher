@@ -1,0 +1,80 @@
+{
+  "symbol": "Circle",
+  "depth": 2,
+  "nodeCount": 12,
+  "edgeCount": 11,
+  "affected": [
+    {
+      "name": "App",
+      "kind": "module",
+      "filePath": "app.ex",
+      "startLine": 3
+    },
+    {
+      "name": "C",
+      "kind": "import",
+      "filePath": "app.ex",
+      "startLine": 4
+    },
+    {
+      "name": "Circle",
+      "kind": "module",
+      "filePath": "shapes.ex",
+      "startLine": 10
+    },
+    {
+      "name": "Circle",
+      "kind": "struct",
+      "filePath": "shapes.ex",
+      "startLine": 11
+    },
+    {
+      "name": "Shape.Circle",
+      "kind": "module",
+      "filePath": "shapes.ex",
+      "startLine": 24
+    },
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shapes.ex",
+      "startLine": 13
+    },
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shapes.ex",
+      "startLine": 25
+    },
+    {
+      "name": "label",
+      "kind": "function",
+      "filePath": "shapes.ex",
+      "startLine": 17
+    },
+    {
+      "name": "name",
+      "kind": "field",
+      "filePath": "shapes.ex",
+      "startLine": 11
+    },
+    {
+      "name": "radius",
+      "kind": "field",
+      "filePath": "shapes.ex",
+      "startLine": 11
+    },
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "app.ex",
+      "startLine": 6
+    },
+    {
+      "name": "scale",
+      "kind": "function",
+      "filePath": "shapes.ex",
+      "startLine": 21
+    }
+  ]
+}

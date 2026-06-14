@@ -1,0 +1,20 @@
+{
+  "symbol": "label",
+  "depth": 2,
+  "nodeCount": 2,
+  "edgeCount": 1,
+  "affected": [
+    {
+      "name": "label",
+      "kind": "function",
+      "filePath": "shapes.ex",
+      "startLine": 17
+    },
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "app.ex",
+      "startLine": 6
+    }
+  ]
+}

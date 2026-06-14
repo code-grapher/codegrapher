@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Callees of area (1 found)\n\n- area (function) - shapes.ex:13\n\n> **Note:** Aggregated results across 3 symbols named \"area\": method at shapes.ex:7, function at shapes.ex:25, function at shapes.ex:13"
+      }
+    ]
+  }
+}
