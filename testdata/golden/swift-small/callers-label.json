@@ -1,0 +1,11 @@
+{
+  "symbol": "label",
+  "callers": [
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "app.swift",
+      "startLine": 4
+    }
+  ]
+}

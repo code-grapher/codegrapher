@@ -1,0 +1,41 @@
+{
+  "initialized": true,
+  "version": "0.9.9",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/swift/testdata/fixtures/swift-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/swift/testdata/fixtures/swift-small/.codegraph",
+  "lastIndexed": "",
+  "fileCount": 2,
+  "nodeCount": 24,
+  "edgeCount": 34,
+  "dbSizeBytes": 147456,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "class": 2,
+    "constant": 1,
+    "enum": 1,
+    "enum_member": 3,
+    "field": 4,
+    "file": 2,
+    "function": 1,
+    "import": 1,
+    "interface": 1,
+    "method": 7,
+    "struct": 1
+  },
+  "languages": [
+    "swift"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "0.9.9",
+    "builtWithExtractionVersion": 14,
+    "currentExtractionVersion": 14,
+    "reindexRecommended": false
+  }
+}

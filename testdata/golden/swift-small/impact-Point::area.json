@@ -1,0 +1,14 @@
+{
+  "symbol": "Point::area",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.swift",
+      "startLine": 51
+    }
+  ]
+}

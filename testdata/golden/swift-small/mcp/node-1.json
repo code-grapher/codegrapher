@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "**3 definitions named \"area\"**\nReturning 3 in full \u2014 pick the one you need (no Read required).\n\n## area (method)\n\n**Location:** shapes.swift:8\n**Signature:** `func area() -> Double`\n\n```swift\n8\t    func area() -> Double\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Called by \u2190** run (app.swift:4)\n\n---\n\n## area (method)\n\n**Location:** shapes.swift:34\n**Signature:** `func area() -> Double`\n\n```swift\n34\t    func area() -> Double {\n35\t        return PI * radius * radius\n36\t    }\n```\n\n---\n\n## area (method)\n\n**Location:** shapes.swift:51\n**Signature:** `func area() -> Double`\n\n```swift\n51\t    func area() -> Double {\n52\t        return x * y\n53\t    }\n```"
+      }
+    ]
+  }
+}

@@ -46,6 +46,8 @@ func (r externalRepo) repoLang() model.Language {
 		return model.LangC
 	case "scala":
 		return model.LangScala
+	case "swift":
+		return model.LangSwift
 	default:
 		return model.LangPython
 	}
@@ -70,6 +72,8 @@ func (r externalRepo) sourceExts() []string {
 		return []string{".c", ".h"}
 	case model.LangScala:
 		return []string{".scala", ".sc"}
+	case model.LangSwift:
+		return []string{".swift"}
 	default:
 		return []string{".py", ".pyi"}
 	}

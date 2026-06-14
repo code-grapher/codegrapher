@@ -1,0 +1,91 @@
+[
+  {
+    "node": {
+      "id": "class:4a75982b0b1ffd9f3f20c2a633705007",
+      "kind": "class",
+      "name": "Circle",
+      "qualifiedName": "Circle",
+      "filePath": "shapes.swift",
+      "language": "swift",
+      "startLine": 26,
+      "endLine": 41,
+      "startColumn": 0,
+      "endColumn": 1,
+      "visibility": "internal",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781428927445
+    },
+    "score": 91.22793879807544
+  },
+  {
+    "node": {
+      "id": "method:7bc24f6838e669ecf50fb1687ad1eeee",
+      "kind": "method",
+      "name": "area",
+      "qualifiedName": "Circle::area",
+      "filePath": "shapes.swift",
+      "language": "swift",
+      "startLine": 34,
+      "endLine": 36,
+      "startColumn": 4,
+      "endColumn": 5,
+      "signature": "func area() -\u003e Double",
+      "visibility": "internal",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "Double",
+      "updatedAt": 1781428927445
+    },
+    "score": 12.617143946662981
+  },
+  {
+    "node": {
+      "id": "method:12c3a1bc0c43c9d2d531c371456b82a1",
+      "kind": "method",
+      "name": "label",
+      "qualifiedName": "Circle::label",
+      "filePath": "shapes.swift",
+      "language": "swift",
+      "startLine": 38,
+      "endLine": 40,
+      "startColumn": 4,
+      "endColumn": 5,
+      "signature": "func label() -\u003e String",
+      "visibility": "internal",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "String",
+      "updatedAt": 1781428927445
+    },
+    "score": 12.617143946662981
+  },
+  {
+    "node": {
+      "id": "field:e84de1a4af8b4195a3ec6dd161701c7b",
+      "kind": "field",
+      "name": "radius",
+      "qualifiedName": "Circle::radius",
+      "filePath": "shapes.swift",
+      "language": "swift",
+      "startLine": 27,
+      "endLine": 27,
+      "startColumn": 4,
+      "endColumn": 22,
+      "signature": "let radius: Double",
+      "visibility": "internal",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781428927445
+    },
+    "score": 5.617143946662981
+  }
+]

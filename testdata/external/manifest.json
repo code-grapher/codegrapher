@@ -62,6 +62,12 @@
       "url": "https://github.com/scopt/scopt.git",
       "sha": "2fa057d35517219a465d0181b83bc60f46e92646",
       "lang": "scala"
+    },
+    {
+      "name": "swift-tagged",
+      "url": "https://github.com/pointfreeco/swift-tagged.git",
+      "sha": "3907a9438f5b57d317001dc99f3f11b46882272b",
+      "lang": "swift"
     }
   ]
 }

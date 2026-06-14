@@ -1,0 +1,86 @@
+{
+  "symbol": "Shape",
+  "depth": 2,
+  "nodeCount": 13,
+  "edgeCount": 12,
+  "affected": [
+    {
+      "name": "Circle",
+      "kind": "class",
+      "filePath": "shapes.swift",
+      "startLine": 26
+    },
+    {
+      "name": "Point",
+      "kind": "struct",
+      "filePath": "shapes.swift",
+      "startLine": 44
+    },
+    {
+      "name": "Shape",
+      "kind": "interface",
+      "filePath": "shapes.swift",
+      "startLine": 7
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.swift",
+      "startLine": 8
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.swift",
+      "startLine": 34
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.swift",
+      "startLine": 51
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "shapes.swift",
+      "startLine": 9
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "shapes.swift",
+      "startLine": 38
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "shapes.swift",
+      "startLine": 55
+    },
+    {
+      "name": "radius",
+      "kind": "field",
+      "filePath": "shapes.swift",
+      "startLine": 27
+    },
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "app.swift",
+      "startLine": 4
+    },
+    {
+      "name": "x",
+      "kind": "field",
+      "filePath": "shapes.swift",
+      "startLine": 45
+    },
+    {
+      "name": "y",
+      "kind": "field",
+      "filePath": "shapes.swift",
+      "startLine": 46
+    }
+  ]
+}

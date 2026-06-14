@@ -1,0 +1,17 @@
+{
+  "symbol": "run",
+  "callees": [
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.swift",
+      "startLine": 8
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "shapes.swift",
+      "startLine": 9
+    }
+  ]
+}

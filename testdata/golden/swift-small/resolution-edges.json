@@ -1,0 +1,10 @@
+[{"source":"class:4a75982b0b1ffd9f3f20c2a633705007","target":"class:f728abb617a4478e4ea10df04b0b8948","kind":"extends","provenance":null,"line":26,"col":14},
+{"source":"class:4a75982b0b1ffd9f3f20c2a633705007","target":"interface:36187e40ccd46d48c9f6c296780c6e73","kind":"implements","provenance":null,"line":26,"col":20},
+{"source":"file:shapes.swift","target":"import:e1e41a576b26e2d0d11344dcaf29cb9f","kind":"imports","provenance":null,"line":4,"col":null},
+{"source":"function:8bfbaa160e3a0b6a12f0f049462ca97e","target":"class:4a75982b0b1ffd9f3f20c2a633705007","kind":"instantiates","provenance":null,"line":5,"col":12},
+{"source":"function:8bfbaa160e3a0b6a12f0f049462ca97e","target":"method:37e8e28e72549110b767eae026cf33a8","kind":"calls","provenance":null,"line":6,"col":12},
+{"source":"function:8bfbaa160e3a0b6a12f0f049462ca97e","target":"method:37e8e28e72549110b767eae026cf33a8","kind":"calls","provenance":null,"line":9,"col":12},
+{"source":"function:8bfbaa160e3a0b6a12f0f049462ca97e","target":"method:7fec9370bed530ffbcd6b6c9cf62d803","kind":"calls","provenance":null,"line":7,"col":12},
+{"source":"function:8bfbaa160e3a0b6a12f0f049462ca97e","target":"struct:9c8097a9885d2972a9545e3e5b90e9e3","kind":"instantiates","provenance":null,"line":8,"col":12},
+{"source":"method:12c3a1bc0c43c9d2d531c371456b82a1","target":"method:7fec9370bed530ffbcd6b6c9cf62d803","kind":"overrides","provenance":null,"line":38,"col":4},
+{"source":"struct:9c8097a9885d2972a9545e3e5b90e9e3","target":"interface:36187e40ccd46d48c9f6c296780c6e73","kind":"implements","provenance":null,"line":50,"col":17}]

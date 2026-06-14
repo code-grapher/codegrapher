@@ -111,6 +111,12 @@ func TestParityScalaSmall(t *testing.T) {
 	testParity(t, "scala-small")
 }
 
+// TestParitySwiftSmall runs our extractor over all files in testdata/fixtures/swift-small
+// and compares against the golden.
+func TestParitySwiftSmall(t *testing.T) {
+	testParity(t, "swift-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 

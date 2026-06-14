@@ -1,0 +1,38 @@
+{
+  "symbol": "Circle",
+  "depth": 2,
+  "nodeCount": 5,
+  "edgeCount": 4,
+  "affected": [
+    {
+      "name": "Circle",
+      "kind": "class",
+      "filePath": "shapes.swift",
+      "startLine": 26
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.swift",
+      "startLine": 34
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "shapes.swift",
+      "startLine": 38
+    },
+    {
+      "name": "radius",
+      "kind": "field",
+      "filePath": "shapes.swift",
+      "startLine": 27
+    },
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "app.swift",
+      "startLine": 4
+    }
+  ]
+}

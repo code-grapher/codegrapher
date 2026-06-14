@@ -1,0 +1,32 @@
+{
+  "symbol": "area",
+  "depth": 2,
+  "nodeCount": 4,
+  "edgeCount": 1,
+  "affected": [
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.swift",
+      "startLine": 8
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.swift",
+      "startLine": 34
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.swift",
+      "startLine": 51
+    },
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "app.swift",
+      "startLine": 4
+    }
+  ]
+}
