@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 6,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Callers of area (1 found)\n\n- run (function) - shapes.cpp:25\n\n> **Note:** Aggregated results across 2 symbols named \"area\": method at shapes.hpp:27, method at shapes.hpp:35"
+      }
+    ]
+  }
+}

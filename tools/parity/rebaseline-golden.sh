@@ -109,6 +109,7 @@ capture rb-small "dog" "speak" "describe" "make_dog" "Dog" "breed" "Dog::speak"
 capture rs-small "circle" "area" "label" "run" "Circle" "Shape" "Circle::area"
 capture php-small "dog" "speak" "describe" "make_dog" "Dog" "walk" "Dog::speak"
 capture c-small "shape" "area" "label" "run" "Shape" "Kind" "PI"
+capture cpp-small "shape" "area" "distanceTo" "run" "Circle" "Shape" "Point"
 
 echo ""
 echo "=== MCP goldens ==="
@@ -244,6 +245,11 @@ elif fixture == "c-small":
     explore2 = "area label run"
     explore3 = "run"
     q_explore1 = "how does the shape work"
+elif fixture == "cpp-small":
+    sym1 = "area"
+    explore2 = "area distanceTo run"
+    explore3 = "run"
+    q_explore1 = "how does the shape work"
 else:
     sym1 = "get"
     explore2 = "get set lookup"
@@ -282,6 +288,7 @@ rebaseline_mcp rb-small
 rebaseline_mcp rs-small
 rebaseline_mcp php-small
 rebaseline_mcp c-small
+rebaseline_mcp cpp-small
 
 echo ""
 echo "=== Rebaseline complete ==="

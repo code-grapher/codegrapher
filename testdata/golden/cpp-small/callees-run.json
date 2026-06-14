@@ -1,0 +1,17 @@
+{
+  "symbol": "run",
+  "callees": [
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.hpp",
+      "startLine": 27
+    },
+    {
+      "name": "distanceTo",
+      "kind": "method",
+      "filePath": "shapes.hpp",
+      "startLine": 16
+    }
+  ]
+}

@@ -111,6 +111,11 @@ var fixtures = []fixture{
 		query:   "shape",
 		symbols: []string{"area", "label", "run", "Shape", "Kind", "PI"},
 	},
+	{
+		name:    "cpp-small",
+		query:   "shape",
+		symbols: []string{"area", "distanceTo", "run", "Circle", "Shape", "Point"},
+	},
 }
 
 // TestParityGoldens runs the binary against all goldens and asserts full-value parity.

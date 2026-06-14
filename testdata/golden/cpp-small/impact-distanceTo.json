@@ -1,0 +1,20 @@
+{
+  "symbol": "distanceTo",
+  "depth": 2,
+  "nodeCount": 2,
+  "edgeCount": 1,
+  "affected": [
+    {
+      "name": "distanceTo",
+      "kind": "method",
+      "filePath": "shapes.hpp",
+      "startLine": 16
+    },
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "shapes.cpp",
+      "startLine": 25
+    }
+  ]
+}

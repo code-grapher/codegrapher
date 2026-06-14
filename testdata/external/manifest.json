@@ -56,6 +56,12 @@
       "url": "https://github.com/antirez/sds.git",
       "sha": "568d691c80cd997bf8c15c47d10c3ebc0a879737",
       "lang": "c"
+    },
+    {
+      "name": "GSL",
+      "url": "https://github.com/microsoft/GSL.git",
+      "sha": "b2f6bec48e27381b2e11d650ce7e4b899b446289",
+      "lang": "cpp"
     }
   ]
 }
