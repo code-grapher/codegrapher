@@ -1,0 +1,14 @@
+{
+  "symbol": "PI",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "PI",
+      "kind": "constant",
+      "filePath": "shape.h",
+      "startLine": 5
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Project Structure (3 files)\n\n\u251c\u2500\u2500 main.c (c, 4 symbols)\n\u251c\u2500\u2500 shape.c (c, 4 symbols)\n\u2514\u2500\u2500 shape.h (c, 11 symbols)"
+      }
+    ]
+  }
+}

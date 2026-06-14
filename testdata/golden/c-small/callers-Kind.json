@@ -1,0 +1,11 @@
+{
+  "symbol": "Kind",
+  "callers": [
+    {
+      "name": "kind",
+      "kind": "field",
+      "filePath": "shape.h",
+      "startLine": 13
+    }
+  ]
+}

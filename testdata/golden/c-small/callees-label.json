@@ -1,0 +1,11 @@
+{
+  "symbol": "label",
+  "callees": [
+    {
+      "name": "Shape",
+      "kind": "struct",
+      "filePath": "shape.h",
+      "startLine": 11
+    }
+  ]
+}

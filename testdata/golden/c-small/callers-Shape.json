@@ -1,0 +1,29 @@
+{
+  "symbol": "Shape",
+  "callers": [
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shape.c",
+      "startLine": 5
+    },
+    {
+      "name": "label",
+      "kind": "function",
+      "filePath": "shape.c",
+      "startLine": 10
+    },
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shape.h",
+      "startLine": 17
+    },
+    {
+      "name": "label",
+      "kind": "function",
+      "filePath": "shape.h",
+      "startLine": 20
+    }
+  ]
+}

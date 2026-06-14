@@ -1,0 +1,11 @@
+{
+  "symbol": "area",
+  "callers": [
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "main.c",
+      "startLine": 6
+    }
+  ]
+}

@@ -99,6 +99,12 @@ func TestParityPhpSmall(t *testing.T) {
 	testParity(t, "php-small")
 }
 
+// TestParityCSmall runs our extractor over all files in testdata/fixtures/c-small
+// and compares against the golden.
+func TestParityCSmall(t *testing.T) {
+	testParity(t, "c-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 
@@ -160,7 +166,7 @@ func testParity(t *testing.T, fixture string) {
 			t.Fatalf("read %s: %v", absPath, err)
 		}
 
-		lang := extract.DetectLanguage(absPath)
+		lang := extract.DetectLanguageContent(absPath, content)
 		result, err := extract.ExtractFile(relPath, content, lang)
 		if err != nil {
 			t.Fatalf("extract %s: %v", relPath, err)
@@ -313,12 +319,39 @@ func TestExtractFileDetectLanguage(t *testing.T) {
 		{"Foo.kt", model.LangKotlin},
 		{"build.gradle.kts", model.LangKotlin},
 		{"foo.rb", model.LangRuby},
+		{"foo.c", model.LangC},
+		{"foo.h", model.LangC},     // path-only: .h defaults to C for back-compat
+		{"foo.hpp", model.LangCPP}, // C++ header extensions
 		{"README.md", model.LangUnknown},
 	}
 	for _, c := range cases {
 		got := extract.DetectLanguage(c.path)
 		if got != c.want {
 			t.Errorf("DetectLanguage(%q) = %q, want %q", c.path, got, c.want)
+		}
+	}
+}
+
+// TestDetectLanguageContent verifies content-aware disambiguation of .h headers.
+func TestDetectLanguageContent(t *testing.T) {
+	cases := []struct {
+		path    string
+		content string
+		want    model.Language
+	}{
+		{"foo.c", "int main(void){return 0;}", model.LangC},
+		{"foo.h", "struct S { int x; };\nvoid f(struct S *s);", model.LangC},
+		{"foo.h", "class Widget {\npublic:\n  int x;\n};", model.LangCPP},
+		{"foo.h", "namespace ns { int x; }", model.LangCPP},
+		{"foo.h", "template <typename T> T id(T v);", model.LangCPP},
+		{"foo.h", "int n = std::max(1, 2);", model.LangCPP},
+		{"foo.hpp", "int x;", model.LangCPP}, // extension wins, no sniff needed
+		{"foo.go", "package main", model.LangGo},
+	}
+	for _, c := range cases {
+		got := extract.DetectLanguageContent(c.path, []byte(c.content))
+		if got != c.want {
+			t.Errorf("DetectLanguageContent(%q, %q) = %q, want %q", c.path, c.content, got, c.want)
 		}
 	}
 }

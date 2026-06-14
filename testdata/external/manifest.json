@@ -50,6 +50,12 @@
       "url": "https://github.com/php-fig/log.git",
       "sha": "f16e1d5863e37f8d8c2a01719f5b34baa2b714d3",
       "lang": "php"
+    },
+    {
+      "name": "sds",
+      "url": "https://github.com/antirez/sds.git",
+      "sha": "568d691c80cd997bf8c15c47d10c3ebc0a879737",
+      "lang": "c"
     }
   ]
 }

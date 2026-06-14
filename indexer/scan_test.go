@@ -151,6 +151,7 @@ func TestIsSourceFile(t *testing.T) {
 		{"A.java", true},
 		{"A.kt", true}, {"build.gradle.kts", true},
 		{"a.rb", true}, {"a.php", true},
+		{"a.c", true}, {"a.h", true}, {"a.hpp", true},
 		{"a.md", false}, {"Makefile", false},
 	}
 	for _, tc := range cases {

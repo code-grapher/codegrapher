@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 11,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Exploration: area label run\n\nFound 6 symbols across 3 files.\n\n### Blast radius \u2014 what depends on these (update/verify before editing)\n\n- `area` (shape.c:5) \u2014 1 caller in `main.c`; \u26a0\ufe0f no covering tests found\n- `label` (shape.c:10) \u2014 1 caller in `main.c`; \u26a0\ufe0f no covering tests found\n\n### Source Code\n\n> The code below is the **verbatim, current on-disk source** of these files \u2014 re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.\n\n#### shape.h \u2014 area(function), label(function), Shape(struct)\n\n```c\n1\t/* shape.h declares the Shape struct and its operations. */\n2\t#ifndef SHAPE_H\n3\t#define SHAPE_H\n4\t\n5\t#define PI 3.14159\n6\t\n7\t/* Kind enumerates the supported shape families. */\n8\tenum Kind { ROUND = 0, POLYGON = 1 };\n9\t\n10\t/* Shape is a circle described by its radius. */\n11\tstruct Shape {\n12\t    double radius;\n13\t    enum Kind kind;\n14\t};\n15\t\n16\t/* area returns the area of a Shape. */\n17\tdouble area(struct Shape *s);\n18\t\n19\t/* label returns a human-readable name for a Shape. */\n20\tconst char *label(struct Shape *s);\n21\t\n22\t#endif /* SHAPE_H */\n```\n\n#### shape.c \u2014 area(function), label(function)\n\n```c\n1\t/* shape.c defines the Shape operations declared in shape.h. */\n2\t#include \"shape.h\"\n3\t\n4\t/* area returns the area of a Shape. */\n5\tdouble area(struct Shape *s) {\n6\t    return PI * s->radius * s->radius;\n7\t}\n8\t\n9\t/* label returns a human-readable name for a Shape. */\n10\tconst char *label(struct Shape *s) {\n11\t    return \"circle\";\n12\t}\n```\n\n#### main.c \u2014 run(function)\n\n```c\n1\t/* main.c builds a Shape and reports its area via the shape.h API. */\n2\t#include \"shape.h\"\n3\t#include <stdio.h>\n4\t\n5\t/* run builds a circle and prints its area and label. */\n6\tdouble run(void) {\n7\t    struct Shape c;\n8\t    c.radius = 2.0;\n9\t    c.kind = ROUND;\n10\t    double a = area(&c);\n11\t    const char *name = label(&c);\n12\t    printf(\"%s %f\\n\", name, a);\n13\t    return a;\n14\t}\n```\n"
+      }
+    ]
+  }
+}

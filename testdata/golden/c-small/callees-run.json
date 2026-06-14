@@ -1,0 +1,17 @@
+{
+  "symbol": "run",
+  "callees": [
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shape.c",
+      "startLine": 5
+    },
+    {
+      "name": "label",
+      "kind": "function",
+      "filePath": "shape.c",
+      "startLine": 10
+    }
+  ]
+}

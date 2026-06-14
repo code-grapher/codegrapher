@@ -1,0 +1,56 @@
+{
+  "symbol": "Shape",
+  "depth": 2,
+  "nodeCount": 8,
+  "edgeCount": 7,
+  "affected": [
+    {
+      "name": "Shape",
+      "kind": "struct",
+      "filePath": "shape.h",
+      "startLine": 11
+    },
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shape.c",
+      "startLine": 5
+    },
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shape.h",
+      "startLine": 17
+    },
+    {
+      "name": "kind",
+      "kind": "field",
+      "filePath": "shape.h",
+      "startLine": 13
+    },
+    {
+      "name": "label",
+      "kind": "function",
+      "filePath": "shape.c",
+      "startLine": 10
+    },
+    {
+      "name": "label",
+      "kind": "function",
+      "filePath": "shape.h",
+      "startLine": 20
+    },
+    {
+      "name": "radius",
+      "kind": "field",
+      "filePath": "shape.h",
+      "startLine": 12
+    },
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "main.c",
+      "startLine": 6
+    }
+  ]
+}

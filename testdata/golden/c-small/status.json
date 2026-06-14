@@ -1,0 +1,38 @@
+{
+  "initialized": true,
+  "version": "0.9.9",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/c/testdata/fixtures/c-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/c/testdata/fixtures/c-small/.codegraph",
+  "lastIndexed": "",
+  "fileCount": 3,
+  "nodeCount": 19,
+  "edgeCount": 26,
+  "dbSizeBytes": 147456,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "constant": 2,
+    "enum": 1,
+    "enum_member": 2,
+    "field": 2,
+    "file": 3,
+    "function": 5,
+    "import": 3,
+    "struct": 1
+  },
+  "languages": [
+    "c"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "0.9.9",
+    "builtWithExtractionVersion": 14,
+    "currentExtractionVersion": 14,
+    "reindexRecommended": false
+  }
+}

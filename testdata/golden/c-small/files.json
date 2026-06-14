@@ -1,0 +1,20 @@
+[
+  {
+    "path": "main.c",
+    "language": "c",
+    "nodeCount": 4,
+    "size": 352
+  },
+  {
+    "path": "shape.c",
+    "language": "c",
+    "nodeCount": 4,
+    "size": 312
+  },
+  {
+    "path": "shape.h",
+    "language": "c",
+    "nodeCount": 11,
+    "size": 495
+  }
+]

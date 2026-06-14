@@ -1,0 +1,10 @@
+[{"source":"field:d941ef71edbb4f2b4834d878557286b3","target":"enum:b74f7c5e95fe1a7fb8c0c5387f71cdf0","kind":"references","provenance":null,"line":13,"col":4},
+{"source":"file:main.c","target":"file:shape.h","kind":"imports","provenance":null,"line":2,"col":null},
+{"source":"file:main.c","target":"import:78fa9d8d525bd77323b2e7659e600ce8","kind":"imports","provenance":null,"line":3,"col":null},
+{"source":"file:shape.c","target":"file:shape.h","kind":"imports","provenance":null,"line":2,"col":null},
+{"source":"function:2b5863c9906fd9b54df23cecbb6315c3","target":"struct:704532b1d7dfd6fa43f21bef54b86733","kind":"references","provenance":null,"line":5,"col":null},
+{"source":"function:4c71f90f3f152200cd637eb9dc61c4d0","target":"struct:704532b1d7dfd6fa43f21bef54b86733","kind":"references","provenance":null,"line":17,"col":null},
+{"source":"function:b026e9a7ef01402910dbec1dafd21df0","target":"struct:704532b1d7dfd6fa43f21bef54b86733","kind":"references","provenance":null,"line":10,"col":null},
+{"source":"function:ccaee8c3268eb455fee2a5599cd1dd75","target":"struct:704532b1d7dfd6fa43f21bef54b86733","kind":"references","provenance":null,"line":20,"col":null},
+{"source":"function:ef92cc2ed7928cd51c9865adff498e59","target":"function:2b5863c9906fd9b54df23cecbb6315c3","kind":"calls","provenance":null,"line":10,"col":15},
+{"source":"function:ef92cc2ed7928cd51c9865adff498e59","target":"function:b026e9a7ef01402910dbec1dafd21df0","kind":"calls","provenance":null,"line":11,"col":23}]

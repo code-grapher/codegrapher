@@ -1,0 +1,26 @@
+{
+  "symbol": "label",
+  "depth": 2,
+  "nodeCount": 3,
+  "edgeCount": 1,
+  "affected": [
+    {
+      "name": "label",
+      "kind": "function",
+      "filePath": "shape.c",
+      "startLine": 10
+    },
+    {
+      "name": "label",
+      "kind": "function",
+      "filePath": "shape.h",
+      "startLine": 20
+    },
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "main.c",
+      "startLine": 6
+    }
+  ]
+}
