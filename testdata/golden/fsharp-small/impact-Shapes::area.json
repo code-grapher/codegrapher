@@ -1,0 +1,26 @@
+{
+  "symbol": "Shapes::area",
+  "depth": 2,
+  "nodeCount": 3,
+  "edgeCount": 2,
+  "affected": [
+    {
+      "name": "Area",
+      "kind": "method",
+      "filePath": "shapes.fs",
+      "startLine": 7
+    },
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shapes.fs",
+      "startLine": 3
+    },
+    {
+      "name": "c",
+      "kind": "variable",
+      "filePath": "app.fs",
+      "startLine": 6
+    }
+  ]
+}

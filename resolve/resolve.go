@@ -151,6 +151,8 @@ func resolveRef(
 		return resolveErlangRef(ref, s)
 	case model.LangJulia:
 		return resolveJuliaRef(ref, s)
+	case model.LangFSharp:
+		return resolveFSharpRef(ref, s)
 	default:
 		return resolveGenericRef(ref, s)
 	}

@@ -171,6 +171,12 @@ func TestParityJuliaSmall(t *testing.T) {
 	testParity(t, "julia-small")
 }
 
+// TestParityFsharpSmall runs our extractor over all files in testdata/fixtures/fsharp-small
+// and compares against the golden.
+func TestParityFsharpSmall(t *testing.T) {
+	testParity(t, "fsharp-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 

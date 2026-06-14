@@ -1,0 +1,4 @@
+[{"source":"method:550613c4b9f7bba1bdd1f0e0fd935596","target":"function:0a358df7dc274dfa5c11d839fe6616cf","kind":"calls","provenance":null,"line":7,"col":25},
+{"source":"module:dc8a9f8d57e7ccea523aab3e730c8735","target":"module:1ae91097dd5e5dfd5e1c16a7b3e9da97","kind":"imports","provenance":null,"line":3,"col":null},
+{"source":"variable:55e406214c7950f5164dbd0a509f4eda","target":"class:c55278cb98cfa1fba08f3b3e01a50c61","kind":"instantiates","provenance":null,"line":6,"col":12},
+{"source":"variable:55e406214c7950f5164dbd0a509f4eda","target":"method:550613c4b9f7bba1bdd1f0e0fd935596","kind":"calls","provenance":null,"line":7,"col":4}]

@@ -166,6 +166,11 @@ var fixtures = []fixture{
 		query:   "circle",
 		symbols: []string{"area", "describe", "Circle", "Rectangle", "Shape", "Shapes::area"},
 	},
+	{
+		name:    "fsharp-small",
+		query:   "circle",
+		symbols: []string{"Radius", "run", "Shapes", "App", "Circle", "Shapes::area"},
+	},
 }
 
 // TestParityGoldens runs the binary against all goldens and asserts full-value parity.

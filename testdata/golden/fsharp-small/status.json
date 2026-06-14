@@ -1,0 +1,39 @@
+{
+  "initialized": true,
+  "version": "0.9.9",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/fsharp/testdata/fixtures/fsharp-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/fsharp/testdata/fixtures/fsharp-small/.codegraph",
+  "lastIndexed": "",
+  "fileCount": 2,
+  "nodeCount": 12,
+  "edgeCount": 14,
+  "dbSizeBytes": 167936,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "class": 1,
+    "field": 1,
+    "file": 2,
+    "function": 2,
+    "import": 1,
+    "method": 1,
+    "module": 2,
+    "property": 1,
+    "variable": 1
+  },
+  "languages": [
+    "fsharp"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "0.9.9",
+    "builtWithExtractionVersion": 14,
+    "currentExtractionVersion": 14,
+    "reindexRecommended": false
+  }
+}
