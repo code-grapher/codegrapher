@@ -70,6 +70,8 @@ func DetectLanguage(filePath string) model.Language {
 		return model.LangHaskell
 	case ".m", ".mm":
 		return model.LangObjC
+	case ".pl", ".pm", ".t":
+		return model.LangPerl
 	// File-level-only languages: tracked in the files table with zero
 	// symbol nodes, matching isFileLevelOnlyLanguage() in grammars.ts.
 	case ".yml", ".yaml":

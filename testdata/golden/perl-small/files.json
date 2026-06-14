@@ -1,0 +1,20 @@
+[
+  {
+    "path": "Animal.pm",
+    "language": "perl",
+    "nodeCount": 6,
+    "size": 231
+  },
+  {
+    "path": "Dog.pm",
+    "language": "perl",
+    "nodeCount": 4,
+    "size": 121
+  },
+  {
+    "path": "main.pl",
+    "language": "perl",
+    "nodeCount": 3,
+    "size": 86
+  }
+]

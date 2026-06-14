@@ -1,0 +1,35 @@
+{
+  "initialized": true,
+  "version": "0.9.9",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/perl/testdata/fixtures/perl-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/perl/testdata/fixtures/perl-small/.codegraph",
+  "lastIndexed": "",
+  "fileCount": 3,
+  "nodeCount": 13,
+  "edgeCount": 14,
+  "dbSizeBytes": 167936,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "file": 3,
+    "import": 1,
+    "method": 3,
+    "module": 2,
+    "variable": 4
+  },
+  "languages": [
+    "perl"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "0.9.9",
+    "builtWithExtractionVersion": 14,
+    "currentExtractionVersion": 14,
+    "reindexRecommended": false
+  }
+}

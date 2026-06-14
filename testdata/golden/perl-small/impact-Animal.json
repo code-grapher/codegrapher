@@ -1,0 +1,44 @@
+{
+  "symbol": "Animal",
+  "depth": 2,
+  "nodeCount": 6,
+  "edgeCount": 5,
+  "affected": [
+    {
+      "name": "Animal",
+      "kind": "module",
+      "filePath": "Animal.pm",
+      "startLine": 1
+    },
+    {
+      "name": "Dog",
+      "kind": "module",
+      "filePath": "Dog.pm",
+      "startLine": 1
+    },
+    {
+      "name": "main.pl",
+      "kind": "file",
+      "filePath": "main.pl",
+      "startLine": 1
+    },
+    {
+      "name": "new",
+      "kind": "method",
+      "filePath": "Animal.pm",
+      "startLine": 6
+    },
+    {
+      "name": "speak",
+      "kind": "method",
+      "filePath": "Animal.pm",
+      "startLine": 12
+    },
+    {
+      "name": "speak",
+      "kind": "method",
+      "filePath": "Dog.pm",
+      "startLine": 7
+    }
+  ]
+}

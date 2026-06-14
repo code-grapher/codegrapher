@@ -1,0 +1,10 @@
+[{"source":"file:Animal.pm","target":"module:e8c1ab7fc2bb2ffd33da661871b22a17","kind":"contains"},
+{"source":"file:Dog.pm","target":"module:24d6fa68e7364033cc4a9cfddefbbc8a","kind":"contains"},
+{"source":"file:main.pl","target":"import:4b422f4a3f1defa7f9b4b37b7dfd2182","kind":"contains"},
+{"source":"file:main.pl","target":"variable:16e5f76d50da2e9fc2a864599ccff8b6","kind":"contains"},
+{"source":"method:2225583c89e028c10bb278523e7f03ce","target":"variable:14d64342a1ec3b4a6796af645bd65a71","kind":"contains"},
+{"source":"method:7e86ed9d2e3f7a276135fa7fc18ac211","target":"variable:aa253002b62cec5a4656811ce33dd7c3","kind":"contains"},
+{"source":"method:fb7172c1bf0855f2462348a8ebedf4fc","target":"variable:bdac5717ddb80b0c00b036a41f607a81","kind":"contains"},
+{"source":"module:24d6fa68e7364033cc4a9cfddefbbc8a","target":"method:2225583c89e028c10bb278523e7f03ce","kind":"contains"},
+{"source":"module:e8c1ab7fc2bb2ffd33da661871b22a17","target":"method:7e86ed9d2e3f7a276135fa7fc18ac211","kind":"contains"},
+{"source":"module:e8c1ab7fc2bb2ffd33da661871b22a17","target":"method:fb7172c1bf0855f2462348a8ebedf4fc","kind":"contains"}]

@@ -1,0 +1,4 @@
+[{"source":"file:main.pl","target":"method:2225583c89e028c10bb278523e7f03ce","kind":"calls","provenance":null,"line":6,"col":6},
+{"source":"file:main.pl","target":"module:24d6fa68e7364033cc4a9cfddefbbc8a","kind":"imports","provenance":null,"line":3,"col":null},
+{"source":"file:main.pl","target":"module:24d6fa68e7364033cc4a9cfddefbbc8a","kind":"instantiates","provenance":null,"line":5,"col":8},
+{"source":"module:24d6fa68e7364033cc4a9cfddefbbc8a","target":"module:e8c1ab7fc2bb2ffd33da661871b22a17","kind":"extends","provenance":null,"line":5,"col":null}]

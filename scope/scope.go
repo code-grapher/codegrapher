@@ -106,6 +106,10 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 		// Objective-C scope uses the fallback version this pass: no build-system
 		// (Xcode/CocoaPods/SwiftPM) parsing. majorVersion("") → "v0".
 		ver = ""
+	case model.LangPerl:
+		// Perl scope uses the fallback version this pass: no cpanfile/
+		// Makefile.PL parsing yet. majorVersion("") → fallbackVersion ("v0").
+		ver = ""
 	}
 	return majorVersion(ver)
 }

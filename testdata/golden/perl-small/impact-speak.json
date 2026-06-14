@@ -1,0 +1,26 @@
+{
+  "symbol": "speak",
+  "depth": 2,
+  "nodeCount": 3,
+  "edgeCount": 1,
+  "affected": [
+    {
+      "name": "main.pl",
+      "kind": "file",
+      "filePath": "main.pl",
+      "startLine": 1
+    },
+    {
+      "name": "speak",
+      "kind": "method",
+      "filePath": "Animal.pm",
+      "startLine": 12
+    },
+    {
+      "name": "speak",
+      "kind": "method",
+      "filePath": "Dog.pm",
+      "startLine": 7
+    }
+  ]
+}
