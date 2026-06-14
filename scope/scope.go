@@ -118,6 +118,10 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 		// Julia scope uses the fallback version this pass: no Project.toml
 		// parsing yet. majorVersion("") → fallbackVersion ("v0").
 		ver = ""
+	case model.LangR:
+		// R scope uses the fallback version this pass: no DESCRIPTION/renv
+		// parsing yet. majorVersion("") → fallbackVersion ("v0").
+		ver = ""
 	}
 	return majorVersion(ver)
 }

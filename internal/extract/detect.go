@@ -76,6 +76,9 @@ func DetectLanguage(filePath string) model.Language {
 		return model.LangErlang
 	case ".jl":
 		return model.LangJulia
+	// R sources use .R or .r (lowercase).
+	case ".r":
+		return model.LangR
 	// File-level-only languages: tracked in the files table with zero
 	// symbol nodes, matching isFileLevelOnlyLanguage() in grammars.ts.
 	case ".yml", ".yaml":

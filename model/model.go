@@ -100,6 +100,7 @@ const (
 	LangPerl        Language = "perl"
 	LangErlang      Language = "erlang"
 	LangJulia       Language = "julia"
+	LangR           Language = "r"
 	LangGoMod       Language = "go.mod"
 	LangPackageJSON Language = "package.json"
 	LangNode        Language = "node"

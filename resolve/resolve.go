@@ -151,6 +151,8 @@ func resolveRef(
 		return resolveErlangRef(ref, s)
 	case model.LangJulia:
 		return resolveJuliaRef(ref, s)
+	case model.LangR:
+		return resolveRRef(ref, s)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -2582,6 +2584,124 @@ func resolveLuaDottedFallback(ref model.UnresolvedReference, s *store.Store, mem
 		Line:   ref.Line,
 		Column: ref.Column,
 	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// R resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolveRRef resolves an R unresolved reference into an edge. R is dynamically
+// typed with no native classes, so resolution mirrors the simplest dynamic path
+// (Lua's): by-name lookup + through-source, with no type inference (values are
+// too dynamic to infer deterministically — documented).
+//
+//   - imports: source("x.R") targets the in-repo R file whose basename minus .R
+//     is the import name; library/require usually have no in-repo target and
+//     fall through to the local import node.
+//   - bare names (calls/references): resolve same-file → through a local source
+//     import to the real cross-file definition → any unambiguous definition.
+//   - pkg::f calls: namespace kept; usually external → generic fallback (the
+//     local import node) rather than an in-repo def.
+//   - anything else: generic name resolution.
+func resolveRRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	name := ref.ReferenceName
+
+	if ref.ReferenceKind == model.EdgeImports {
+		if edge := resolveRImportsRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveGenericRef(ref, s)
+	}
+
+	if ref.ReferenceKind == model.EdgeCalls || ref.ReferenceKind == model.EdgeReferences {
+		// pkg::f keeps its namespace and is almost always external; let the
+		// generic resolver point it at the local import node if present.
+		if !strings.Contains(name, ":") {
+			if edge := resolveRBareThroughSource(ref, s); edge != nil {
+				return edge
+			}
+		}
+	}
+
+	return resolveGenericRef(ref, s)
+}
+
+// resolveRDefinitionByName returns the best real (non-import, non-file) R
+// definition node named name, preferring same-file/same-dir.
+func resolveRDefinitionByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangR {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolveRBareThroughSource resolves a bare-name call/reference to the best R
+// definition: same-file first, otherwise — when the file source()s another R
+// file — through to the cross-file definition.
+func resolveRBareThroughSource(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	target := resolveRDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   ref.ReferenceKind,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolveRImportsRef resolves an `imports` ref. source("x.R") first targets the
+// in-repo R file whose basename minus .R is the import name; failing that, a
+// cross-file definition named like the import. Returns nil otherwise (fall back
+// to the local import node — the case for external library/require packages).
+func resolveRImportsRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	if file := resolveRSourceFile(ref.ReferenceName, ref.FilePath, s); file != nil {
+		return &model.Edge{
+			Source: ref.FromNodeID,
+			Target: file.ID,
+			Kind:   model.EdgeImports,
+			Line:   ref.Line,
+			Column: ref.Column,
+		}
+	}
+	return nil
+}
+
+// resolveRSourceFile returns the in-repo R file node whose basename minus the
+// .R/.r extension equals name (preferring same-dir), or nil.
+func resolveRSourceFile(name, refFilePath string, s *store.Store) *model.Node {
+	var files []model.Node
+	for _, ext := range []string{".R", ".r"} {
+		candidates, err := s.GetNodesByName(name + ext)
+		if err != nil {
+			continue
+		}
+		for _, n := range candidates {
+			if n.Kind == model.KindFile && n.Language == model.LangR {
+				files = append(files, n)
+			}
+		}
+	}
+	if len(files) == 0 {
+		return nil
+	}
+	return pickBestNode(files, refFilePath)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
