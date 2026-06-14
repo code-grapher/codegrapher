@@ -1,0 +1,14 @@
+{
+  "symbol": "MakeDog",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "MakeDog",
+      "kind": "method",
+      "filePath": "Service.cs",
+      "startLine": 8
+    }
+  ]
+}

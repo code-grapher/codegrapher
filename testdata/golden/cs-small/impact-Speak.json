@@ -1,0 +1,32 @@
+{
+  "symbol": "Speak",
+  "depth": 2,
+  "nodeCount": 4,
+  "edgeCount": 2,
+  "affected": [
+    {
+      "name": "Boast",
+      "kind": "method",
+      "filePath": "Util.cs",
+      "startLine": 7
+    },
+    {
+      "name": "Describe",
+      "kind": "method",
+      "filePath": "Service.cs",
+      "startLine": 13
+    },
+    {
+      "name": "Speak",
+      "kind": "method",
+      "filePath": "Models.cs",
+      "startLine": 22
+    },
+    {
+      "name": "Speak",
+      "kind": "method",
+      "filePath": "Models.cs",
+      "startLine": 33
+    }
+  ]
+}

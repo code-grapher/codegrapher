@@ -1,0 +1,40 @@
+{
+  "initialized": true,
+  "version": "0.9.9",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/csharp/testdata/fixtures/cs-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/csharp/testdata/fixtures/cs-small/.codegraph",
+  "lastIndexed": "",
+  "fileCount": 3,
+  "nodeCount": 31,
+  "edgeCount": 40,
+  "dbSizeBytes": 155648,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "class": 4,
+    "constant": 1,
+    "enum": 1,
+    "enum_member": 3,
+    "file": 3,
+    "import": 4,
+    "interface": 1,
+    "method": 8,
+    "namespace": 3,
+    "property": 3
+  },
+  "languages": [
+    "csharp"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "0.9.9",
+    "builtWithExtractionVersion": 14,
+    "currentExtractionVersion": 14,
+    "reindexRecommended": false
+  }
+}

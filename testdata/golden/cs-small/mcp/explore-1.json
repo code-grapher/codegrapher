@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Exploration: how does the dog work\n\nFound 17 symbols across 3 files.\n\n### Source Code\n\n> The code below is the **verbatim, current on-disk source** of these files \u2014 re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.\n\n#### Models.cs \u2014 Dog(class), Speak(method), Greet(method), GreetAsync(method), Legs(constant), +4 more\n\n```csharp\n1\tusing System;\n2\t\n3\tnamespace CsSmall.Models\n4\t{\n5\t    public enum Color\n6\t    {\n7\t        Red,\n8\t        Green,\n9\t        Blue\n10\t    }\n11\t\n12\t    public interface IGreeter\n13\t    {\n14\t        string Greet();\n15\t    }\n16\t\n17\t    [Serializable]\n18\t    public abstract class Animal\n19\t    {\n20\t        public string Name { get; set; }\n21\t\n22\t        public abstract string Speak();\n23\t    }\n24\t\n25\t    public class Dog : Animal, IGreeter\n26\t    {\n27\t        private const int Legs = 4;\n28\t\n29\t        public Color Coat { get; set; }\n30\t\n31\t        public string Label => Name;\n32\t\n33\t        public override string Speak()\n34\t        {\n35\t            return \"woof\";\n36\t        }\n37\t\n38\t        public async Task<string> GreetAsync()\n39\t        {\n40\t            return Greet();\n41\t        }\n42\t\n43\t        public string Greet()\n44\t        {\n45\t            return \"hello\";\n46\t        }\n47\t    }\n48\t}\n```\n\n#### Service.cs \u2014 MakeDog(method), Describe(method), Service(class), CsSmall.App(namespace)\n\n```csharp\n1\tusing System;\n2\tusing CsSmall.Models;\n3\t\n4\tnamespace CsSmall.App\n5\t{\n6\t    public class Service\n7\t    {\n8\t        public Dog MakeDog()\n9\t        {\n10\t            return new Dog();\n11\t        }\n12\t\n13\t        public string Describe()\n14\t        {\n15\t            var d = new Dog();\n16\t            return d.Speak();\n17\t        }\n18\t    }\n19\t}\n```\n"
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 8,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Impact: \"Speak\" affects 4 symbols\n\n**Models.cs:**\nSpeak:22, Speak:33\n\n**Service.cs:**\nDescribe:13\n\n**Util.cs:**\nBoast:7\n\n\n> **Note:** Aggregated results across 2 symbols named \"Speak\": method at Models.cs:22, method at Models.cs:33"
+      }
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "symbol": "Describe",
+  "depth": 2,
+  "nodeCount": 2,
+  "edgeCount": 1,
+  "affected": [
+    {
+      "name": "Boast",
+      "kind": "method",
+      "filePath": "Util.cs",
+      "startLine": 7
+    },
+    {
+      "name": "Describe",
+      "kind": "method",
+      "filePath": "Service.cs",
+      "startLine": 13
+    }
+  ]
+}

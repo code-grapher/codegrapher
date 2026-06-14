@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Project Structure (3 files)\n\n\u251c\u2500\u2500 Models.cs (csharp, 19 symbols)\n\u251c\u2500\u2500 Service.cs (csharp, 7 symbols)\n\u2514\u2500\u2500 Util.cs (csharp, 5 symbols)"
+      }
+    ]
+  }
+}

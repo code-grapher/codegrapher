@@ -1,0 +1,11 @@
+{
+  "symbol": "Describe",
+  "callees": [
+    {
+      "name": "Speak",
+      "kind": "method",
+      "filePath": "Models.cs",
+      "startLine": 22
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "symbol": "Dog::Speak",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "Speak",
+      "kind": "method",
+      "filePath": "Models.cs",
+      "startLine": 33
+    }
+  ]
+}

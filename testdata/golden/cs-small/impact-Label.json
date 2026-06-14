@@ -1,0 +1,14 @@
+{
+  "symbol": "Label",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "Label",
+      "kind": "property",
+      "filePath": "Models.cs",
+      "startLine": 31
+    }
+  ]
+}

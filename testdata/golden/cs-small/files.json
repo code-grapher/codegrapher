@@ -1,0 +1,20 @@
+[
+  {
+    "path": "Models.cs",
+    "language": "csharp",
+    "nodeCount": 19,
+    "size": 763
+  },
+  {
+    "path": "Service.cs",
+    "language": "csharp",
+    "nodeCount": 7,
+    "size": 294
+  },
+  {
+    "path": "Util.cs",
+    "language": "csharp",
+    "nodeCount": 5,
+    "size": 177
+  }
+]

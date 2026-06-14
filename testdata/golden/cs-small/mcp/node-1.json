@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "**2 definitions named \"Speak\"**\nReturning 2 in full \u2014 pick the one you need (no Read required).\n\n## Speak (method)\n\n**Location:** Models.cs:22\n**Signature:** `string Speak()`\n\n```csharp\n22\t        public abstract string Speak();\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Called by \u2190** Describe (Service.cs:13)\n\n---\n\n## Speak (method)\n\n**Location:** Models.cs:33\n**Signature:** `string Speak()`\n\n```csharp\n33\t        public override string Speak()\n34\t        {\n35\t            return \"woof\";\n36\t        }\n```"
+      }
+    ]
+  }
+}

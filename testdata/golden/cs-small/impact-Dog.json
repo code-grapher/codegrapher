@@ -1,0 +1,68 @@
+{
+  "symbol": "Dog",
+  "depth": 2,
+  "nodeCount": 10,
+  "edgeCount": 9,
+  "affected": [
+    {
+      "name": "Boast",
+      "kind": "method",
+      "filePath": "Util.cs",
+      "startLine": 7
+    },
+    {
+      "name": "Coat",
+      "kind": "property",
+      "filePath": "Models.cs",
+      "startLine": 29
+    },
+    {
+      "name": "Describe",
+      "kind": "method",
+      "filePath": "Service.cs",
+      "startLine": 13
+    },
+    {
+      "name": "Dog",
+      "kind": "class",
+      "filePath": "Models.cs",
+      "startLine": 25
+    },
+    {
+      "name": "Greet",
+      "kind": "method",
+      "filePath": "Models.cs",
+      "startLine": 43
+    },
+    {
+      "name": "GreetAsync",
+      "kind": "method",
+      "filePath": "Models.cs",
+      "startLine": 38
+    },
+    {
+      "name": "Label",
+      "kind": "property",
+      "filePath": "Models.cs",
+      "startLine": 31
+    },
+    {
+      "name": "Legs",
+      "kind": "constant",
+      "filePath": "Models.cs",
+      "startLine": 27
+    },
+    {
+      "name": "MakeDog",
+      "kind": "method",
+      "filePath": "Service.cs",
+      "startLine": 8
+    },
+    {
+      "name": "Speak",
+      "kind": "method",
+      "filePath": "Models.cs",
+      "startLine": 33
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+[{"source":"class:35627ea8905fe9f2ac6465899ee4c411","target":"class:f7dd525256505fcf19e7e16bb6070b24","kind":"extends","provenance":null,"line":25,"col":23},
+{"source":"class:35627ea8905fe9f2ac6465899ee4c411","target":"interface:0192ae3aa5a57632fe62dd811f870a2c","kind":"implements","provenance":null,"line":25,"col":31},
+{"source":"file:Models.cs","target":"import:e8915437897c4f1d19b5ae9638947478","kind":"imports","provenance":null,"line":1,"col":null},
+{"source":"file:Service.cs","target":"import:28075a0649b40973f45889b3efa88937","kind":"imports","provenance":null,"line":1,"col":null},
+{"source":"file:Service.cs","target":"import:6733f527d344ebad2a38c79faebb3003","kind":"imports","provenance":null,"line":2,"col":null},
+{"source":"file:Util.cs","target":"import:61f6073edd82578f435b9d37fc07481f","kind":"imports","provenance":null,"line":1,"col":null},
+{"source":"method:2becc0fa10aadff2756c6c06d4208620","target":"class:35627ea8905fe9f2ac6465899ee4c411","kind":"instantiates","provenance":null,"line":10,"col":19},
+{"source":"method:5ff12c6f6a5b6a9b60b5175ec902b29c","target":"class:35627ea8905fe9f2ac6465899ee4c411","kind":"instantiates","provenance":null,"line":15,"col":20},
+{"source":"method:5ff12c6f6a5b6a9b60b5175ec902b29c","target":"method:1c4ae3ea53af6fb3e6a43020b3d4ab6f","kind":"calls","provenance":null,"line":16,"col":19},
+{"source":"method:69f62f02f79f8dae498b8e06f9e4e814","target":"class:8a562f73c005f42f36300fd7c1db56ac","kind":"instantiates","provenance":null,"line":9,"col":16},
+{"source":"method:69f62f02f79f8dae498b8e06f9e4e814","target":"method:5ff12c6f6a5b6a9b60b5175ec902b29c","kind":"calls","provenance":null,"line":10,"col":15},
+{"source":"method:e139c60b80aa6ef1622859317a3ad9e7","target":"method:87a8a391a2c8423298404c76760fba01","kind":"calls","provenance":null,"line":40,"col":19}]
