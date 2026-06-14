@@ -147,6 +147,12 @@ func TestParityHaskellSmall(t *testing.T) {
 	testParity(t, "haskell-small")
 }
 
+// TestParityPerlSmall runs our extractor over all files in testdata/fixtures/perl-small
+// and compares against the golden.
+func TestParityPerlSmall(t *testing.T) {
+	testParity(t, "perl-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 

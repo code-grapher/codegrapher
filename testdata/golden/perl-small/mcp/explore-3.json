@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 12,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Exploration: new\n\nFound 8 symbols across 3 files.\n\n### Source Code\n\n> The code below is the **verbatim, current on-disk source** of these files \u2014 re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.\n\n#### Animal.pm \u2014 new(method), self(variable), Animal(module), speak(method)\n\n```perl\n1\tpackage Animal;\n2\t\n3\tuse strict;\n4\tuse warnings;\n5\t\n6\tsub new {\n7\t    my ($class, %args) = @_;\n8\t    my $self = { name => $args{name} };\n9\t    return bless $self, $class;\n10\t}\n11\t\n12\tsub speak {\n13\t    my $self = shift;\n14\t    return \"Some generic sound\";\n15\t}\n16\t\n17\t1;\n```\n\n#### main.pl \u2014 d(variable)\n\n```perl\n1\tuse strict;\n2\tuse warnings;\n3\tuse Dog;\n4\t\n5\tmy $d = Dog->new(name => 'Rex');\n6\tprint $d->speak;\n```\n"
+      }
+    ]
+  }
+}

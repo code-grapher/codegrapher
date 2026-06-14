@@ -98,6 +98,12 @@
       "url": "https://github.com/hspec/hspec-expectations.git",
       "sha": "a9dd329c2f65fbd5aa18cf9f3d5b2e0785a730be",
       "lang": "haskell"
+    },
+    {
+      "name": "Try-Tiny",
+      "url": "https://github.com/p5sagit/Try-Tiny.git",
+      "sha": "839716b7892c76ebccafd43f6ba44a7adb039398",
+      "lang": "perl"
     }
   ]
 }

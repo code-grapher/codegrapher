@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "**2 definitions named \"speak\"**\nReturning 2 in full \u2014 pick the one you need (no Read required).\n\n## speak (method)\n\n**Location:** Animal.pm:12\n**Signature:** `sub speak`\n\n```perl\n12\tsub speak {\n13\t    my $self = shift;\n14\t    return \"Some generic sound\";\n15\t}\n```\n\n---\n\n## speak (method)\n\n**Location:** Dog.pm:7\n**Signature:** `sub speak`\n\n```perl\n7\tsub speak {\n8\t    my $self = shift;\n9\t    return \"Woof\";\n10\t}\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Called by \u2190** main.pl (main.pl:1)"
+      }
+    ]
+  }
+}

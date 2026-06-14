@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 8,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Impact: \"speak\" affects 3 symbols\n\n**Animal.pm:**\nspeak:12\n\n**Dog.pm:**\nspeak:7\n\n**main.pl:**\nmain.pl:1\n\n\n> **Note:** Aggregated results across 2 symbols named \"speak\": method at Animal.pm:12, method at Dog.pm:7"
+      }
+    ]
+  }
+}

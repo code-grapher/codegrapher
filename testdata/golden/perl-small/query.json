@@ -1,0 +1,132 @@
+[
+  {
+    "node": {
+      "id": "module:24d6fa68e7364033cc4a9cfddefbbc8a",
+      "kind": "module",
+      "name": "Dog",
+      "qualifiedName": "Dog",
+      "filePath": "Dog.pm",
+      "language": "perl",
+      "startLine": 1,
+      "endLine": 1,
+      "startColumn": 0,
+      "endColumn": 12,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781433980397
+    },
+    "score": 97.30461209876802
+  },
+  {
+    "node": {
+      "id": "import:4b422f4a3f1defa7f9b4b37b7dfd2182",
+      "kind": "import",
+      "name": "Dog",
+      "qualifiedName": "Dog",
+      "filePath": "main.pl",
+      "language": "perl",
+      "startLine": 3,
+      "endLine": 3,
+      "startColumn": 0,
+      "endColumn": 8,
+      "signature": "use Dog;",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781433980397
+    },
+    "score": 81.30242364526491
+  },
+  {
+    "node": {
+      "id": "file:Dog.pm",
+      "kind": "file",
+      "name": "Dog.pm",
+      "qualifiedName": "Dog.pm",
+      "filePath": "Dog.pm",
+      "language": "perl",
+      "startLine": 1,
+      "endLine": 13,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781433980397
+    },
+    "score": 38.299928837853976
+  },
+  {
+    "node": {
+      "id": "method:2225583c89e028c10bb278523e7f03ce",
+      "kind": "method",
+      "name": "speak",
+      "qualifiedName": "Dog::speak",
+      "filePath": "Dog.pm",
+      "language": "perl",
+      "startLine": 7,
+      "endLine": 10,
+      "startColumn": 0,
+      "endColumn": 1,
+      "signature": "sub speak",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781433980397
+    },
+    "score": 23.25220535426174
+  },
+  {
+    "node": {
+      "id": "variable:14d64342a1ec3b4a6796af645bd65a71",
+      "kind": "variable",
+      "name": "self",
+      "qualifiedName": "Dog::speak::self",
+      "filePath": "Dog.pm",
+      "language": "perl",
+      "startLine": 8,
+      "endLine": 8,
+      "startColumn": 4,
+      "endColumn": 20,
+      "signature": "= shift",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781433980397
+    },
+    "score": 15.25220535426174
+  },
+  {
+    "node": {
+      "id": "variable:16e5f76d50da2e9fc2a864599ccff8b6",
+      "kind": "variable",
+      "name": "d",
+      "qualifiedName": "d",
+      "filePath": "main.pl",
+      "language": "perl",
+      "startLine": 5,
+      "endLine": 5,
+      "startColumn": 0,
+      "endColumn": 31,
+      "signature": "= Dog-\u003enew(name =\u003e 'Rex')",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781433980397
+    },
+    "score": 2.1865134591271698
+  }
+]

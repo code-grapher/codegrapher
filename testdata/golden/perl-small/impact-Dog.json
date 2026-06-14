@@ -1,0 +1,32 @@
+{
+  "symbol": "Dog",
+  "depth": 2,
+  "nodeCount": 4,
+  "edgeCount": 2,
+  "affected": [
+    {
+      "name": "Dog",
+      "kind": "module",
+      "filePath": "Dog.pm",
+      "startLine": 1
+    },
+    {
+      "name": "Dog",
+      "kind": "import",
+      "filePath": "main.pl",
+      "startLine": 3
+    },
+    {
+      "name": "main.pl",
+      "kind": "file",
+      "filePath": "main.pl",
+      "startLine": 1
+    },
+    {
+      "name": "speak",
+      "kind": "method",
+      "filePath": "Dog.pm",
+      "startLine": 7
+    }
+  ]
+}

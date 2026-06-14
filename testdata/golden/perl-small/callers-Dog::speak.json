@@ -1,0 +1,11 @@
+{
+  "symbol": "Dog::speak",
+  "callers": [
+    {
+      "name": "main.pl",
+      "kind": "file",
+      "filePath": "main.pl",
+      "startLine": 1
+    }
+  ]
+}
