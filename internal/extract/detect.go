@@ -68,6 +68,8 @@ func DetectLanguage(filePath string) model.Language {
 		return model.LangElixir
 	case ".hs":
 		return model.LangHaskell
+	case ".pl", ".pm", ".t":
+		return model.LangPerl
 	// File-level-only languages: tracked in the files table with zero
 	// symbol nodes, matching isFileLevelOnlyLanguage() in grammars.ts.
 	case ".yml", ".yaml":

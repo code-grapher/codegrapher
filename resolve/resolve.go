@@ -143,6 +143,8 @@ func resolveRef(
 		return resolveElixirRef(ref, s)
 	case model.LangHaskell:
 		return resolveHaskellRef(ref, s)
+	case model.LangPerl:
+		return resolvePerlRef(ref, s, pyVarTypeCache)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -695,6 +697,308 @@ func rubyConstructorClass(sig string) string {
 // rubyIsConstant reports whether name looks like a Ruby constant (starts with
 // an uppercase letter).
 func rubyIsConstant(name string) bool {
+	if name == "" {
+		return false
+	}
+	r := name[0]
+	return r >= 'A' && r <= 'Z'
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Perl resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolvePerlRef resolves a Perl unresolved reference into an edge. Perl is
+// dynamically typed and package-based, so resolution mirrors the Ruby heuristic
+// (a package = the "class"): use/require deps + name lookup + conservative
+// constructor-assignment type inference. The shared varTypeCache is reused (Perl
+// never indexes the same file as Python/Ruby/PHP).
+//
+//   - dotted calls "recv.method": `Foo->new` (constant receiver + new) →
+//     instantiate the package. `$x->method` infers $x's package from same-file
+//     `my $x = Foo->new` bindings; resolves method as a member of that package,
+//     else strict (unambiguous-only) method-name fallback. `Foo::bar` (qualified
+//     sub) → resolve bar as a member of package Foo.
+//   - bare subs (calls/references): resolve through a local use/require import to
+//     the real cross-file definition, promoting package targets to instantiates.
+//   - imports: target the real cross-file definition when one exists.
+//   - extends and anything else: generic name resolution to the base package.
+func resolvePerlRef(
+	ref model.UnresolvedReference,
+	s *store.Store,
+	varTypeCache map[string]map[string]string,
+) *model.Edge {
+	name := ref.ReferenceName
+
+	if ref.ReferenceKind == model.EdgeCalls {
+		// Qualified sub call "Foo::bar" (function text keeps the package prefix).
+		if sep := strings.Index(name, "::"); sep > 0 {
+			pkg := name[:sep]
+			sub := name[sep+2:]
+			if sub != "" && !strings.Contains(sub, "::") {
+				if edge := resolvePerlMemberOnPackage(ref, s, pkg, sub); edge != nil {
+					return edge
+				}
+			}
+		}
+
+		if dotIdx := strings.Index(name, "."); dotIdx > 0 {
+			recv := name[:dotIdx]
+			attr := name[dotIdx+1:]
+			if attr == "" || strings.ContainsAny(attr, "./") {
+				return nil
+			}
+
+			// Constant receiver calling `new` → instantiate the package.
+			if attr == "new" && perlIsPackageName(recv) {
+				if target := resolvePerlDefinitionByName(recv, ref.FilePath, s); target != nil &&
+					target.Kind == model.KindModule {
+					return &model.Edge{
+						Source: ref.FromNodeID,
+						Target: target.ID,
+						Kind:   model.EdgeInstantiates,
+						Line:   ref.Line,
+						Column: ref.Column,
+					}
+				}
+			}
+
+			// Constant-package method call "Foo->method" (not new).
+			if perlIsPackageName(recv) {
+				if edge := resolvePerlMemberOnPackage(ref, s, recv, attr); edge != nil {
+					return edge
+				}
+			}
+
+			// Type inference: recv's package from same-file `= Foo->new` binds.
+			if pkg := perlInferType(ref.FilePath, recv, s, varTypeCache); pkg != "" {
+				if edge := resolvePerlMemberOnPackage(ref, s, pkg, attr); edge != nil {
+					return edge
+				}
+				return nil
+			}
+
+			// Unknown receiver: strict method-name lookup (unambiguous only).
+			return resolvePerlDottedFallback(ref, s, attr)
+		}
+	}
+
+	if ref.ReferenceKind == model.EdgeImports {
+		if edge := resolvePerlImportsRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveGenericRef(ref, s)
+	}
+
+	if ref.ReferenceKind == model.EdgeCalls || ref.ReferenceKind == model.EdgeReferences {
+		if !strings.Contains(name, ".") && !strings.Contains(name, "::") {
+			if edge := resolvePerlBareThroughImport(ref, s); edge != nil {
+				return edge
+			}
+		}
+	}
+
+	return resolveGenericRef(ref, s)
+}
+
+// resolvePerlDefinitionByName returns the best real (non-import, non-file) Perl
+// definition node named name, preferring same-file/same-dir.
+func resolvePerlDefinitionByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangPerl {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolvePerlBareThroughImport resolves a bare-name call/reference whose best
+// same-file candidate is a local use/require import: it resolves THROUGH the
+// import to the real cross-file definition, promoting package targets to
+// instantiates for calls.
+func resolvePerlBareThroughImport(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	target := resolvePerlDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	kind := ref.ReferenceKind
+	if kind == model.EdgeCalls && target.Kind == model.KindModule {
+		kind = model.EdgeInstantiates
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   kind,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolvePerlImportsRef resolves a use/require imports ref to the real cross-file
+// definition (package/sub) named like the module, when one exists. Returns nil
+// otherwise (fall back to the local import node).
+func resolvePerlImportsRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	target := resolvePerlDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   model.EdgeImports,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolvePerlMemberOnPackage resolves attr as a sub/field contained by the
+// package named pkg. A member's qualified name is "[...::]pkg::attr", so match
+// the trailing "::"-segment of the member's parent against pkg.
+func resolvePerlMemberOnPackage(ref model.UnresolvedReference, s *store.Store, pkg, attr string) *model.Edge {
+	candidates, err := s.GetNodesByName(attr)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	pkgSeg := pkg
+	if j := strings.LastIndex(pkg, "::"); j >= 0 {
+		pkgSeg = pkg[j+2:]
+	}
+	for i := range candidates {
+		n := &candidates[i]
+		if n.Language != model.LangPerl {
+			continue
+		}
+		idx := strings.LastIndex(n.QualifiedName, "::")
+		if idx < 0 {
+			continue
+		}
+		parent := n.QualifiedName[:idx] // strip "::attr"
+		seg := parent
+		if j := strings.LastIndex(parent, "::"); j >= 0 {
+			seg = parent[j+2:]
+		}
+		if seg == pkgSeg {
+			return &model.Edge{
+				Source: ref.FromNodeID,
+				Target: n.ID,
+				Kind:   ref.ReferenceKind,
+				Line:   ref.Line,
+				Column: ref.Column,
+			}
+		}
+	}
+	return nil
+}
+
+// resolvePerlDottedFallback resolves a dotted/method call whose receiver package
+// is unknown: emits an edge only when exactly one Perl method/function named attr
+// exists.
+func resolvePerlDottedFallback(ref model.UnresolvedReference, s *store.Store, attr string) *model.Edge {
+	candidates, err := s.GetNodesByName(attr)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var matches []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangPerl && (n.Kind == model.KindMethod || n.Kind == model.KindFunction) {
+			matches = append(matches, n)
+		}
+	}
+	if len(matches) != 1 {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: matches[0].ID,
+		Kind:   ref.ReferenceKind,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// perlInferType returns the package name bound to local variable varName in the
+// file at filePath, or "" if unknown. Built once per file from constructor
+// signatures of the form "= Foo->new(...)".
+func perlInferType(
+	filePath, varName string,
+	s *store.Store,
+	cache map[string]map[string]string,
+) string {
+	m, ok := cache[filePath]
+	if !ok {
+		m = buildPerlVarTypeMap(filePath, s)
+		cache[filePath] = m
+	}
+	return m[varName]
+}
+
+// buildPerlVarTypeMap derives a varName→packageName map from the file's variable
+// nodes whose signature is "= Foo->new(...)". Building the whole map up front
+// makes resolution order-independent.
+func buildPerlVarTypeMap(filePath string, s *store.Store) map[string]string {
+	m := make(map[string]string)
+	nodes, err := s.GetNodesByFile(filePath)
+	if err != nil {
+		return m
+	}
+	for i := range nodes {
+		n := &nodes[i]
+		if n.Language != model.LangPerl {
+			continue
+		}
+		if n.Kind != model.KindVariable && n.Kind != model.KindConstant {
+			continue
+		}
+		if pkg := perlConstructorPackage(n.Signature); pkg != "" {
+			m[n.Name] = pkg
+		}
+	}
+	return m
+}
+
+// perlConstructorPackage parses a signature of the form "= Foo->new(...)" (or
+// "= Foo::->new") and returns Foo (last "::" segment), or "" when the signature
+// is not a direct constructor assignment.
+func perlConstructorPackage(sig string) string {
+	s := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(sig), "="))
+	arrow := strings.Index(s, "->new")
+	if arrow <= 0 {
+		return ""
+	}
+	head := strings.TrimSpace(s[:arrow])
+	head = strings.TrimSuffix(head, "::") // Foo:: -> Foo
+	if head == "" {
+		return ""
+	}
+	for _, r := range head {
+		if !(r == ':' || r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+			return ""
+		}
+	}
+	if idx := strings.LastIndex(head, "::"); idx >= 0 {
+		head = head[idx+2:]
+	}
+	if head == "" {
+		return ""
+	}
+	return head
+}
+
+// perlIsPackageName reports whether name looks like a Perl package name (starts
+// with an uppercase letter), distinguishing class receivers from variables.
+func perlIsPackageName(name string) bool {
 	if name == "" {
 		return false
 	}
