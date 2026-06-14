@@ -33,6 +33,8 @@ const (
 	LangJava
 	// LangKotlin selects the tree-sitter `kotlin` grammar.
 	LangKotlin
+	// LangRuby selects the tree-sitter `ruby` grammar.
+	LangRuby
 )
 
 // Point is a (row, column) position in source text (0-indexed).
@@ -151,6 +153,8 @@ func NewParser(lang Language) (*Parser, error) {
 		return &Parser{lang: grammars.JavaLanguage()}, nil
 	case LangKotlin:
 		return &Parser{lang: grammars.KotlinLanguage()}, nil
+	case LangRuby:
+		return &Parser{lang: grammars.RubyLanguage()}, nil
 	default:
 		return nil, fmt.Errorf("tsparse: unknown language %d", lang)
 	}

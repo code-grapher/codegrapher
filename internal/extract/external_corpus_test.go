@@ -36,6 +36,8 @@ func (r externalRepo) repoLang() model.Language {
 		return model.LangKotlin
 	case "csharp":
 		return model.LangCSharp
+	case "ruby":
+		return model.LangRuby
 	default:
 		return model.LangPython
 	}
@@ -50,6 +52,8 @@ func (r externalRepo) sourceExts() []string {
 		return []string{".kt", ".kts"}
 	case model.LangCSharp:
 		return []string{".cs"}
+	case model.LangRuby:
+		return []string{".rb"}
 	default:
 		return []string{".py", ".pyi"}
 	}

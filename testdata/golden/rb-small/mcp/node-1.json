@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "**2 definitions named \"speak\"**\nReturning 2 in full \u2014 pick the one you need (no Read required).\n\n## speak (method)\n\n**Location:** models.rb:19\n**Signature:** `def speak`\n\n```ruby\n19\t    def speak\n20\t      DEFAULT_SOUND\n21\t    end\n```\n\n---\n\n## speak (method)\n\n**Location:** models.rb:35\n**Signature:** `def speak`\n\n```ruby\n35\t    def speak\n36\t      \"woof\"\n37\t    end\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Called by \u2190** describe (service.rb:11)"
+      }
+    ]
+  }
+}

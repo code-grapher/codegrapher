@@ -1,0 +1,8 @@
+[{"source":"class:30b8970b557c24cf8c72aba26be69a92","target":"class:e1b324eaf8006b4d82bf7c91393b0dde","kind":"extends","provenance":null,"line":24,"col":12},
+{"source":"class:30b8970b557c24cf8c72aba26be69a92","target":"module:70ab223e50aa736277939de2e0dab424","kind":"implements","provenance":null,"line":25,"col":12},
+{"source":"file:service.rb","target":"import:e300dd4f6e366b794b36921d2c4c17af","kind":"imports","provenance":null,"line":3,"col":17},
+{"source":"function:41765c711501dc6ab4d005ab06fcc9f9","target":"class:30b8970b557c24cf8c72aba26be69a92","kind":"instantiates","provenance":null,"line":12,"col":6},
+{"source":"function:41765c711501dc6ab4d005ab06fcc9f9","target":"method:c9cca4f95ad091f30d454a917bb31ec9","kind":"calls","provenance":null,"line":13,"col":10},
+{"source":"function:41765c711501dc6ab4d005ab06fcc9f9","target":"property:e43e32eae8314d3784433548b6cb797c","kind":"calls","provenance":null,"line":14,"col":2},
+{"source":"function:6a2d0c6ec36bda5f3fb8a04c6e8dd0e3","target":"class:30b8970b557c24cf8c72aba26be69a92","kind":"instantiates","provenance":null,"line":8,"col":2},
+{"source":"method:e7b8458be4dae6bf4d32523bf34a13ec","target":"class:30b8970b557c24cf8c72aba26be69a92","kind":"instantiates","provenance":null,"line":40,"col":6}]

@@ -81,6 +81,12 @@ func TestParityKtSmall(t *testing.T) {
 	testParity(t, "kt-small")
 }
 
+// TestParityRbSmall runs our extractor over all files in testdata/fixtures/rb-small
+// and compares against the golden.
+func TestParityRbSmall(t *testing.T) {
+	testParity(t, "rb-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 
@@ -294,7 +300,7 @@ func TestExtractFileDetectLanguage(t *testing.T) {
 		{"Foo.java", model.LangJava},
 		{"Foo.kt", model.LangKotlin},
 		{"build.gradle.kts", model.LangKotlin},
-		{"foo.rb", model.LangUnknown},
+		{"foo.rb", model.LangRuby},
 		{"README.md", model.LangUnknown},
 	}
 	for _, c := range cases {

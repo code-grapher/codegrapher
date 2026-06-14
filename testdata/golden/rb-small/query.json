@@ -1,0 +1,218 @@
+[
+  {
+    "node": {
+      "id": "class:30b8970b557c24cf8c72aba26be69a92",
+      "kind": "class",
+      "name": "Dog",
+      "qualifiedName": "Animals::Dog",
+      "filePath": "models.rb",
+      "language": "ruby",
+      "startLine": 24,
+      "endLine": 42,
+      "startColumn": 2,
+      "endColumn": 5,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781424498372
+    },
+    "score": 88.68419228910852
+  },
+  {
+    "node": {
+      "id": "function:6a2d0c6ec36bda5f3fb8a04c6e8dd0e3",
+      "kind": "function",
+      "name": "make_dog",
+      "qualifiedName": "make_dog",
+      "filePath": "service.rb",
+      "language": "ruby",
+      "startLine": 7,
+      "endLine": 9,
+      "startColumn": 0,
+      "endColumn": 3,
+      "signature": "def make_dog(name)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781424498372
+    },
+    "score": 20.670529935827734
+  },
+  {
+    "node": {
+      "id": "constant:5e4b878632a7255643e679cad5cab553",
+      "kind": "constant",
+      "name": "MAX_DOGS",
+      "qualifiedName": "MAX_DOGS",
+      "filePath": "service.rb",
+      "language": "ruby",
+      "startLine": 5,
+      "endLine": 5,
+      "startColumn": 0,
+      "endColumn": 13,
+      "signature": "= 10",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781424498372
+    },
+    "score": 13.677438385836465
+  },
+  {
+    "node": {
+      "id": "method:c9cca4f95ad091f30d454a917bb31ec9",
+      "kind": "method",
+      "name": "speak",
+      "qualifiedName": "Animals::Dog::speak",
+      "filePath": "models.rb",
+      "language": "ruby",
+      "startLine": 35,
+      "endLine": 37,
+      "startColumn": 4,
+      "endColumn": 7,
+      "signature": "def speak",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781424498372
+    },
+    "score": 10.560482769247779
+  },
+  {
+    "node": {
+      "id": "method:d23f324e1b5c0448ae6f5f3bde54ee78",
+      "kind": "method",
+      "name": "initialize",
+      "qualifiedName": "Animals::Dog::initialize",
+      "filePath": "models.rb",
+      "language": "ruby",
+      "startLine": 29,
+      "endLine": 33,
+      "startColumn": 4,
+      "endColumn": 7,
+      "signature": "def initialize(name, breed)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781424498372
+    },
+    "score": 10.538493072007288
+  },
+  {
+    "node": {
+      "id": "method:e7b8458be4dae6bf4d32523bf34a13ec",
+      "kind": "method",
+      "name": "create",
+      "qualifiedName": "Animals::Dog::create",
+      "filePath": "models.rb",
+      "language": "ruby",
+      "startLine": 39,
+      "endLine": 41,
+      "startColumn": 4,
+      "endColumn": 7,
+      "signature": "def self.create(name)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": true,
+      "isAbstract": false,
+      "updatedAt": 1781424498372
+    },
+    "score": 10.538493072007288
+  },
+  {
+    "node": {
+      "id": "property:e43e32eae8314d3784433548b6cb797c",
+      "kind": "property",
+      "name": "breed",
+      "qualifiedName": "Animals::Dog::breed",
+      "filePath": "models.rb",
+      "language": "ruby",
+      "startLine": 27,
+      "endLine": 27,
+      "startColumn": 18,
+      "endColumn": 24,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781424498372
+    },
+    "score": 3.5843448522590173
+  },
+  {
+    "node": {
+      "id": "field:6abd94dd34013d3b2ff7ff1240060ca7",
+      "kind": "field",
+      "name": "@breed",
+      "qualifiedName": "Animals::Dog::@breed",
+      "filePath": "models.rb",
+      "language": "ruby",
+      "startLine": 31,
+      "endLine": 31,
+      "startColumn": 6,
+      "endColumn": 20,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781424498372
+    },
+    "score": 3.5843448522590173
+  },
+  {
+    "node": {
+      "id": "field:fc90c67ce67159598ac1b55b1b0a1863",
+      "kind": "field",
+      "name": "@legs",
+      "qualifiedName": "Animals::Dog::@legs",
+      "filePath": "models.rb",
+      "language": "ruby",
+      "startLine": 32,
+      "endLine": 32,
+      "startColumn": 6,
+      "endColumn": 15,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781424498372
+    },
+    "score": 3.5843448522590173
+  },
+  {
+    "node": {
+      "id": "variable:def63c5e9151b0b70f987f5865ab88d2",
+      "kind": "variable",
+      "name": "d",
+      "qualifiedName": "describe::d",
+      "filePath": "service.rb",
+      "language": "ruby",
+      "startLine": 12,
+      "endLine": 12,
+      "startColumn": 2,
+      "endColumn": 26,
+      "signature": "= Dog.new(name, \"lab\")",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781424498372
+    },
+    "score": 2.4099807928001553
+  }
+]

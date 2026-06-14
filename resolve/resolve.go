@@ -121,6 +121,8 @@ func resolveRef(
 		return resolveJVMRef(ref, model.LangJava, s, jvmCtxCache)
 	case model.LangKotlin:
 		return resolveKotlinRef(ref, s, jvmCtxCache)
+	case model.LangRuby:
+		return resolveRubyRef(ref, s, pyVarTypeCache)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -394,6 +396,290 @@ func pyConstructorClass(sig string) string {
 		return ""
 	}
 	return head
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Ruby resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolveRubyRef resolves a Ruby unresolved reference into an edge. Ruby is
+// dynamically typed, so resolution mirrors the Python heuristic: require deps +
+// name lookup + conservative constructor-assignment type inference. The shared
+// varTypeCache is reused (Ruby and Python never index the same file).
+//
+//   - dotted calls "recv.method": infer recv's class from `x = ClassName.new(...)`
+//     assignments in the same file. When the class is known, resolve method as a
+//     member of that class; otherwise fall back to a strict (unambiguous-only)
+//     method-name lookup.
+//   - bare names (calls/references): resolve through a local require import to the
+//     real cross-file definition, promoting class targets to instantiates.
+//   - imports: target the real cross-file definition when one exists.
+//   - extends/implements and anything else: generic name resolution.
+func resolveRubyRef(
+	ref model.UnresolvedReference,
+	s *store.Store,
+	varTypeCache map[string]map[string]string,
+) *model.Edge {
+	name := ref.ReferenceName
+
+	if ref.ReferenceKind == model.EdgeCalls {
+		if dotIdx := strings.Index(name, "."); dotIdx > 0 {
+			recv := name[:dotIdx]
+			attr := name[dotIdx+1:]
+			if attr == "" || strings.ContainsAny(attr, "./") {
+				return nil
+			}
+
+			// Constant receiver calling `new` → instantiate the class.
+			if attr == "new" && rubyIsConstant(recv) {
+				if target := resolveRubyDefinitionByName(recv, ref.FilePath, s); target != nil &&
+					(target.Kind == model.KindClass) {
+					return &model.Edge{
+						Source: ref.FromNodeID,
+						Target: target.ID,
+						Kind:   model.EdgeInstantiates,
+						Line:   ref.Line,
+						Column: ref.Column,
+					}
+				}
+			}
+
+			// (a) Type inference: recv's class from same-file constructor assigns.
+			if className := rubyInferType(ref.FilePath, recv, s, varTypeCache); className != "" {
+				if edge := resolveRubyMemberOnClass(ref, s, className, attr); edge != nil {
+					return edge
+				}
+				return nil
+			}
+
+			// (b) Unknown receiver: strict method-name lookup (unambiguous only).
+			return resolveRubyDottedFallback(ref, s, attr)
+		}
+	}
+
+	if ref.ReferenceKind == model.EdgeImports {
+		if edge := resolveRubyImportsRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveGenericRef(ref, s)
+	}
+
+	if ref.ReferenceKind == model.EdgeCalls || ref.ReferenceKind == model.EdgeReferences {
+		if !strings.Contains(name, ".") {
+			if edge := resolveRubyBareThroughImport(ref, s); edge != nil {
+				return edge
+			}
+		}
+	}
+
+	return resolveGenericRef(ref, s)
+}
+
+// resolveRubyDefinitionByName returns the best real (non-import, non-file) Ruby
+// definition node named name, preferring same-file/same-dir.
+func resolveRubyDefinitionByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangRuby {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolveRubyBareThroughImport resolves a bare-name call/reference whose best
+// same-file candidate is a local require import: it resolves THROUGH the import
+// to the real cross-file definition.
+func resolveRubyBareThroughImport(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	target := resolveRubyDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	kind := ref.ReferenceKind
+	if kind == model.EdgeCalls && target.Kind == model.KindClass {
+		kind = model.EdgeInstantiates
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   kind,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolveRubyImportsRef resolves an `imports` ref to the real cross-file
+// definition (class/module/method) named like the required file, when one
+// exists. Returns nil otherwise (fall back to the local import node).
+func resolveRubyImportsRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	target := resolveRubyDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   model.EdgeImports,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolveRubyMemberOnClass resolves attr as a method/field/property contained
+// by the class named className. A member's qualified name is
+// "[Module::...]ClassName::attr"; className may be the last segment of a
+// module-nested class (e.g. Animals::Dog), so match the parent of the member's
+// qualified name on its trailing "::"-segment rather than a flat prefix.
+func resolveRubyMemberOnClass(ref model.UnresolvedReference, s *store.Store, className, attr string) *model.Edge {
+	candidates, err := s.GetNodesByName(attr)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	for i := range candidates {
+		n := &candidates[i]
+		if n.Language != model.LangRuby {
+			continue
+		}
+		idx := strings.LastIndex(n.QualifiedName, "::")
+		if idx < 0 {
+			continue
+		}
+		parent := n.QualifiedName[:idx] // strip "::attr"
+		// parent's last "::"-segment must equal className.
+		seg := parent
+		if j := strings.LastIndex(parent, "::"); j >= 0 {
+			seg = parent[j+2:]
+		}
+		if seg == className {
+			return &model.Edge{
+				Source: ref.FromNodeID,
+				Target: n.ID,
+				Kind:   ref.ReferenceKind,
+				Line:   ref.Line,
+				Column: ref.Column,
+			}
+		}
+	}
+	return nil
+}
+
+// resolveRubyDottedFallback resolves a dotted call whose receiver type is
+// unknown: emits an edge only when exactly one Ruby method/function named attr
+// exists.
+func resolveRubyDottedFallback(ref model.UnresolvedReference, s *store.Store, attr string) *model.Edge {
+	candidates, err := s.GetNodesByName(attr)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var matches []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangRuby && (n.Kind == model.KindMethod || n.Kind == model.KindFunction) {
+			matches = append(matches, n)
+		}
+	}
+	if len(matches) != 1 {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: matches[0].ID,
+		Kind:   ref.ReferenceKind,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// rubyInferType returns the class name bound to local variable varName in the
+// file at filePath, or "" if unknown. Built once per file from constructor
+// signatures of the form "= ClassName.new(...)".
+func rubyInferType(
+	filePath, varName string,
+	s *store.Store,
+	cache map[string]map[string]string,
+) string {
+	m, ok := cache[filePath]
+	if !ok {
+		m = buildRubyVarTypeMap(filePath, s)
+		cache[filePath] = m
+	}
+	return m[varName]
+}
+
+// buildRubyVarTypeMap derives a varName→className map from the file's variable
+// nodes whose signature is "= ClassName.new(...)". Building the whole map up
+// front makes resolution order-independent.
+func buildRubyVarTypeMap(filePath string, s *store.Store) map[string]string {
+	m := make(map[string]string)
+	nodes, err := s.GetNodesByFile(filePath)
+	if err != nil {
+		return m
+	}
+	for i := range nodes {
+		n := &nodes[i]
+		if n.Language != model.LangRuby {
+			continue
+		}
+		if n.Kind != model.KindVariable && n.Kind != model.KindConstant {
+			continue
+		}
+		if className := rubyConstructorClass(n.Signature); className != "" {
+			m[n.Name] = className
+		}
+	}
+	return m
+}
+
+// rubyConstructorClass parses a signature of the form "= ClassName.new(...)"
+// and returns ClassName (scope-resolution paths A::B reduced to the last
+// segment), or "" when the signature is not a direct constructor assignment.
+func rubyConstructorClass(sig string) string {
+	s := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(sig), "="))
+	// Must be of the form HEAD.new(...) or HEAD.new
+	dotNew := strings.Index(s, ".new")
+	if dotNew <= 0 {
+		return ""
+	}
+	after := s[dotNew+len(".new"):]
+	if after != "" && after[0] != '(' && after[0] != ' ' {
+		return ""
+	}
+	head := strings.TrimSpace(s[:dotNew])
+	if head == "" {
+		return ""
+	}
+	for _, r := range head {
+		if !(r == ':' || r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+			return ""
+		}
+	}
+	if idx := strings.LastIndex(head, "::"); idx >= 0 {
+		head = head[idx+2:]
+	}
+	if head == "" {
+		return ""
+	}
+	return head
+}
+
+// rubyIsConstant reports whether name looks like a Ruby constant (starts with
+// an uppercase letter).
+func rubyIsConstant(name string) bool {
+	if name == "" {
+		return false
+	}
+	r := name[0]
+	return r >= 'A' && r <= 'Z'
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
