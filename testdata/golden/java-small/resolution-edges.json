@@ -1,0 +1,5 @@
+[{"source":"class:381df502866495a032325391135d990a","target":"class:8215bb7feedead65b9692070baf38ea9","kind":"extends","provenance":null,"line":4,"col":20},
+{"source":"class:8215bb7feedead65b9692070baf38ea9","target":"interface:4f9b90f18f59e78ed92ce3ed61b55766","kind":"implements","provenance":null,"line":4,"col":27},
+{"source":"file:com/example/app/App.java","target":"class:381df502866495a032325391135d990a","kind":"imports","provenance":null,"line":3,"col":null},
+{"source":"method:26e0cabf0d992de1657058a1e81016a5","target":"class:381df502866495a032325391135d990a","kind":"instantiates","provenance":null,"line":8,"col":19},
+{"source":"method:26e0cabf0d992de1657058a1e81016a5","target":"method:153ee14162cd02077ed8f2b6748a638a","kind":"calls","provenance":null,"line":9,"col":19}]

@@ -1,0 +1,32 @@
+[
+  {
+    "path": "com/example/app/App.java",
+    "language": "java",
+    "nodeCount": 7,
+    "size": 277
+  },
+  {
+    "path": "com/example/shapes/Base.java",
+    "language": "java",
+    "nodeCount": 6,
+    "size": 272
+  },
+  {
+    "path": "com/example/shapes/Circle.java",
+    "language": "java",
+    "nodeCount": 7,
+    "size": 353
+  },
+  {
+    "path": "com/example/shapes/Shape.java",
+    "language": "java",
+    "nodeCount": 5,
+    "size": 121
+  },
+  {
+    "path": "com/example/shapes/Size.java",
+    "language": "java",
+    "nodeCount": 6,
+    "size": 112
+  }
+]

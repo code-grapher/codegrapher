@@ -1,0 +1,183 @@
+[
+  {
+    "node": {
+      "id": "method:de55029b5abd36cb688613833e68b570",
+      "kind": "method",
+      "name": "Circle",
+      "qualifiedName": "Circle::Circle",
+      "filePath": "com/example/shapes/Circle.java",
+      "language": "java",
+      "startLine": 9,
+      "endLine": 12,
+      "startColumn": 4,
+      "endColumn": 5,
+      "signature": "Circle(String name, double radius)",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781423428302
+    },
+    "score": 90.14801086558496
+  },
+  {
+    "node": {
+      "id": "class:381df502866495a032325391135d990a",
+      "kind": "class",
+      "name": "Circle",
+      "qualifiedName": "Circle",
+      "filePath": "com/example/shapes/Circle.java",
+      "language": "java",
+      "startLine": 4,
+      "endLine": 18,
+      "startColumn": 0,
+      "endColumn": 1,
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781423428302
+    },
+    "score": 88.1753189785058
+  },
+  {
+    "node": {
+      "id": "import:f2b78b48f1f5ef89ed2a59ceb6e7108d",
+      "kind": "import",
+      "name": "Circle",
+      "qualifiedName": "Circle",
+      "filePath": "com/example/app/App.java",
+      "language": "java",
+      "startLine": 3,
+      "endLine": 3,
+      "startColumn": 0,
+      "endColumn": 33,
+      "signature": "import com.example.shapes.Circle;",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781423428303
+    },
+    "score": 68.1400368027763
+  },
+  {
+    "node": {
+      "id": "file:com/example/shapes/Circle.java",
+      "kind": "file",
+      "name": "Circle.java",
+      "qualifiedName": "com/example/shapes/Circle.java",
+      "filePath": "com/example/shapes/Circle.java",
+      "language": "java",
+      "startLine": 1,
+      "endLine": 19,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781423428302
+    },
+    "score": 26.099654399547102
+  },
+  {
+    "node": {
+      "id": "method:153ee14162cd02077ed8f2b6748a638a",
+      "kind": "method",
+      "name": "area",
+      "qualifiedName": "Circle::area",
+      "filePath": "com/example/shapes/Circle.java",
+      "language": "java",
+      "startLine": 14,
+      "endLine": 17,
+      "startColumn": 4,
+      "endColumn": 5,
+      "signature": "double area()",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "decorators": [
+        "Override"
+      ],
+      "returnType": "double",
+      "updatedAt": 1781423428302
+    },
+    "score": 9.857980523453117
+  },
+  {
+    "node": {
+      "id": "field:ee9303cef6c95d73dcd9ffd99bdd8340",
+      "kind": "field",
+      "name": "radius",
+      "qualifiedName": "Circle::radius",
+      "filePath": "com/example/shapes/Circle.java",
+      "language": "java",
+      "startLine": 7,
+      "endLine": 7,
+      "startColumn": 25,
+      "endColumn": 31,
+      "signature": "double radius",
+      "visibility": "private",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "double",
+      "updatedAt": 1781423428302
+    },
+    "score": 2.857980523453117
+  },
+  {
+    "node": {
+      "id": "constant:3a96f761296c2dad42363e9169b413c0",
+      "kind": "constant",
+      "name": "PI",
+      "qualifiedName": "Circle::PI",
+      "filePath": "com/example/shapes/Circle.java",
+      "language": "java",
+      "startLine": 5,
+      "endLine": 5,
+      "startColumn": 31,
+      "endColumn": 43,
+      "signature": "double PI = 3.14159",
+      "visibility": "public",
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": true,
+      "isAbstract": false,
+      "returnType": "double",
+      "updatedAt": 1781423428302
+    },
+    "score": 2.796539659870869
+  },
+  {
+    "node": {
+      "id": "variable:cdb463731242860ca871fce14721a594",
+      "kind": "variable",
+      "name": "c",
+      "qualifiedName": "App::run::c",
+      "filePath": "com/example/app/App.java",
+      "language": "java",
+      "startLine": 8,
+      "endLine": 8,
+      "startColumn": 15,
+      "endColumn": 42,
+      "signature": "Circle c = new Circle(\"unit\", 1.0)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "Circle",
+      "updatedAt": 1781423428303
+    },
+    "score": -11.412837161221935
+  }
+]

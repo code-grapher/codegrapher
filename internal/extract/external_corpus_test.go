@@ -22,7 +22,27 @@ type externalRepo struct {
 	Name   string `json:"name"`
 	URL    string `json:"url"`
 	SHA    string `json:"sha"`
+	Lang   string `json:"lang"`
 	Python int    `json:"python"`
+}
+
+// repoLang returns the extractor language this repo exercises, defaulting to
+// Python for legacy manifest entries without a `lang` field.
+func (r externalRepo) repoLang() model.Language {
+	switch r.Lang {
+	case "java":
+		return model.LangJava
+	default:
+		return model.LangPython
+	}
+}
+
+// sourceExts returns the file extensions to collect for a repo's language.
+func (r externalRepo) sourceExts() []string {
+	if r.repoLang() == model.LangJava {
+		return []string{".java"}
+	}
+	return []string{".py", ".pyi"}
 }
 
 type externalManifest struct {
@@ -32,8 +52,9 @@ type externalManifest struct {
 // TestExternalCorpus is an OPT-IN, informational parse/robustness corpus. It is
 // NOT a golden and requires network access, so it is skipped unless
 // CODEGRAPH_EXTERNAL_CORPUS=1. It shallow-clones each manifest repo at a pinned
-// commit sha and runs every .py/.pyi file through the extractor, asserting no
-// panics and (for the Python 3 repo) a low parse-error rate.
+// commit sha and runs every source file (per the repo's language) through the
+// extractor, asserting no panics and (for the Python 3 repo) a low parse-error
+// rate. Java repos are informational (no-panic) only.
 func TestExternalCorpus(t *testing.T) {
 	if os.Getenv("CODEGRAPH_EXTERNAL_CORPUS") != "1" {
 		t.Skip("external corpus is opt-in and needs network; set CODEGRAPH_EXTERNAL_CORPUS=1 to run")
@@ -63,7 +84,8 @@ func TestExternalCorpus(t *testing.T) {
 				t.Skipf("skipping %s: could not obtain repo at %s", repo.Name, repo.SHA)
 			}
 
-			files, err := collectPythonFiles(dest)
+			wantLang := repo.repoLang()
+			files, err := collectSourceFiles(dest, repo.sourceExts())
 			if err != nil {
 				t.Fatalf("walk clone %s: %v", dest, err)
 			}
@@ -76,7 +98,7 @@ func TestExternalCorpus(t *testing.T) {
 					t.Fatalf("read %s: %v", absPath, err)
 				}
 				lang := extract.DetectLanguage(absPath)
-				if lang != model.LangPython {
+				if lang != wantLang {
 					continue
 				}
 				relPath, err := filepath.Rel(dest, absPath)
@@ -104,10 +126,10 @@ func TestExternalCorpus(t *testing.T) {
 			if fileCount > 0 {
 				rate = float64(errorFiles) / float64(fileCount)
 			}
-			t.Logf("%s (python%d): files=%d nodes=%d parse-error-files=%d parse-error-rate=%.4f",
-				repo.Name, repo.Python, fileCount, totalNodes, errorFiles, rate)
+			t.Logf("%s (%s): files=%d nodes=%d parse-error-files=%d parse-error-rate=%.4f",
+				repo.Name, wantLang, fileCount, totalNodes, errorFiles, rate)
 
-			if repo.Python == 3 {
+			if wantLang == model.LangPython && repo.Python == 3 {
 				t.Logf("%s: enforcing parse-error-rate <= %.2f (threshold)", repo.Name, py3MaxParseErrorRate)
 				if rate > py3MaxParseErrorRate {
 					t.Errorf("%s: parse-error rate %.4f exceeds threshold %.2f", repo.Name, rate, py3MaxParseErrorRate)
@@ -156,8 +178,13 @@ func (e *cmdError) Error() string {
 	return e.cmd + ": " + e.err.Error() + "\n" + e.out
 }
 
-// collectPythonFiles returns absolute paths of all .py/.pyi files under root.
-func collectPythonFiles(root string) ([]string, error) {
+// collectSourceFiles returns absolute paths of all files under root whose
+// extension is in exts (lower-cased comparison).
+func collectSourceFiles(root string, exts []string) ([]string, error) {
+	want := make(map[string]struct{}, len(exts))
+	for _, e := range exts {
+		want[e] = struct{}{}
+	}
 	var files []string
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -169,8 +196,7 @@ func collectPythonFiles(root string) ([]string, error) {
 			}
 			return nil
 		}
-		ext := strings.ToLower(filepath.Ext(path))
-		if ext == ".py" || ext == ".pyi" {
+		if _, ok := want[strings.ToLower(filepath.Ext(path))]; ok {
 			files = append(files, path)
 		}
 		return nil

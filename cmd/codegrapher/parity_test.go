@@ -76,6 +76,11 @@ var fixtures = []fixture{
 		query:   "dog",
 		symbols: []string{"speak", "describe", "make_dog", "Dog", "label", "Dog::speak"},
 	},
+	{
+		name:    "java-small",
+		query:   "circle",
+		symbols: []string{"area", "label", "run", "Circle", "Shape", "Circle::area"},
+	},
 }
 
 // TestParityGoldens runs the binary against all goldens and asserts full-value parity.

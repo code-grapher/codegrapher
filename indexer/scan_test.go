@@ -147,6 +147,7 @@ func TestIsSourceFile(t *testing.T) {
 	}{
 		{"a.go", true}, {"a.ts", true}, {"a.tsx", true}, {"a.js", true}, {"a.jsx", true},
 		{"a.py", true},
+		{"A.java", true},
 		{"a.md", false}, {"Makefile", false},
 	}
 	for _, tc := range cases {

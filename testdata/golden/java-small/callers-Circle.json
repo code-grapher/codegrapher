@@ -1,0 +1,11 @@
+{
+  "symbol": "Circle",
+  "callers": [
+    {
+      "name": "App.java",
+      "kind": "file",
+      "filePath": "com/example/app/App.java",
+      "startLine": 1
+    }
+  ]
+}

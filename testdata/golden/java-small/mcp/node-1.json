@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "**2 definitions named \"area\"**\nReturning 2 in full \u2014 pick the one you need (no Read required).\n\n## area (method)\n\n**Location:** com/example/shapes/Circle.java:14\n**Signature:** `double area()`\n\n```java\n14\t    @Override\n15\t    public double area() {\n16\t        return PI * radius * radius;\n17\t    }\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Called by \u2190** run (com/example/app/App.java:7)\n\n---\n\n## area (method)\n\n**Location:** com/example/shapes/Shape.java:5\n**Signature:** `double area()`\n\n```java\n5\t    double area();\n```"
+      }
+    ]
+  }
+}

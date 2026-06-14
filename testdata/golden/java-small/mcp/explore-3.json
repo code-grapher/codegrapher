@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 12,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Exploration: run\n\nFound 12 symbols across 4 files.\n\n### Source Code\n\n> The code below is the **verbatim, current on-disk source** of these files \u2014 re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.\n\n#### com/example/app/App.java \u2014 run(method), c(variable), a(variable), App(class)\n\n```java\n1\tpackage com.example.app;\n2\t\n3\timport com.example.shapes.Circle;\n4\t\n5\t/** Entry point exercising cross-package import + new + method call. */\n6\tpublic class App {\n7\t    public double run() {\n8\t        Circle c = new Circle(\"unit\", 1.0);\n9\t        double a = c.area();\n10\t        return a;\n11\t    }\n12\t}\n```\n\n#### com/example/shapes/Circle.java \u2014 area(method), Circle(class), PI(constant), Circle(method)\n\n```java\n1\tpackage com.example.shapes;\n2\t\n3\t/** A circle. */\n4\tpublic class Circle extends Base {\n5\t    public static final double PI = 3.14159;\n6\t\n7\t    private final double radius;\n8\t\n9\t    public Circle(String name, double radius) {\n10\t        super(name);\n11\t        this.radius = radius;\n12\t    }\n13\t\n14\t    @Override\n15\t    public double area() {\n16\t        return PI * radius * radius;\n17\t    }\n18\t}\n```\n\n#### com/example/shapes/Base.java \u2014 Base(class), Base(method), label(method)\n\n```java\n1\tpackage com.example.shapes;\n2\t\n3\t/** Base shape holding a name. */\n4\tpublic abstract class Base implements Shape {\n5\t    protected String name;\n6\t\n7\t    public Base(String name) {\n8\t        this.name = name;\n9\t    }\n10\t\n11\t    @Override\n12\t    public String label() {\n13\t        return name;\n14\t    }\n15\t}\n```\n"
+      }
+    ]
+  }
+}

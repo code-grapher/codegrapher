@@ -102,6 +102,7 @@ capture() {
 capture go-small "store" "Get" "Set" "Lookup" "normalize" "handleGreet" "Store::Get"
 capture ts-small "store" "get" "set" "lookup" "normalize" "describe" "Cache::lookup"
 capture py-small "dog" "speak" "describe" "make_dog" "Dog" "label" "Dog::speak"
+capture java-small "circle" "area" "label" "run" "Circle" "Shape" "Circle::area"
 
 echo ""
 echo "=== MCP goldens ==="
@@ -202,6 +203,11 @@ elif fixture == "py-small":
     explore2 = "speak describe make_dog"
     explore3 = "describe"
     q_explore1 = "how does the dog work"
+elif fixture == "java-small":
+    sym1 = "area"
+    explore2 = "area label run"
+    explore3 = "run"
+    q_explore1 = "how does the circle work"
 else:
     sym1 = "get"
     explore2 = "get set lookup"
@@ -233,6 +239,7 @@ PYEOF
 rebaseline_mcp go-small
 rebaseline_mcp ts-small
 rebaseline_mcp py-small
+rebaseline_mcp java-small
 
 echo ""
 echo "=== Rebaseline complete ==="
