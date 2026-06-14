@@ -50,6 +50,10 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 		// Python graphs are grouped under a single major; no manifest parsing
 		// in this pass (PEP 621 pyproject support is a later enhancement).
 		ver = "3"
+	case model.LangCSharp:
+		// C# graphs use fallback version this pass (no .csproj LangVersion
+		// parsing yet — see the C# extraction design, Out of scope).
+		ver = ""
 	}
 	return majorVersion(ver)
 }

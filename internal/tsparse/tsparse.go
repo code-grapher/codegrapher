@@ -27,6 +27,8 @@ const (
 	LangTSX
 	// LangPython selects the tree-sitter `python` grammar (Python 3).
 	LangPython
+	// LangCSharp selects the tree-sitter `c-sharp` grammar.
+	LangCSharp
 )
 
 // Point is a (row, column) position in source text (0-indexed).
@@ -139,6 +141,8 @@ func NewParser(lang Language) (*Parser, error) {
 		return &Parser{lang: grammars.TsxLanguage()}, nil
 	case LangPython:
 		return &Parser{lang: grammars.PythonLanguage()}, nil
+	case LangCSharp:
+		return &Parser{lang: grammars.CSharpLanguage()}, nil
 	default:
 		return nil, fmt.Errorf("tsparse: unknown language %d", lang)
 	}

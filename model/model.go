@@ -82,6 +82,7 @@ const (
 	LangJSX         Language = "jsx"
 	LangGo          Language = "go"
 	LangPython      Language = "python"
+	LangCSharp      Language = "csharp"
 	LangGoMod       Language = "go.mod"
 	LangPackageJSON Language = "package.json"
 	LangNode        Language = "node"
