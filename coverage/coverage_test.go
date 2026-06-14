@@ -2,7 +2,6 @@ package coverage
 
 import (
 	"bytes"
-	"context"
 	"strings"
 	"testing"
 )
@@ -107,15 +106,5 @@ func TestValidateRejectsBadRangeKind(t *testing.T) {
 	}
 	if err := Validate(RecordsetCoverage, buf.Bytes()); err == nil || !strings.Contains(err.Error(), "range kind") {
 		t.Fatalf("expected bad range kind error, got %v", err)
-	}
-}
-
-func TestStubIngestorNoOp(t *testing.T) {
-	s, err := NewIngestor().Ingest(context.Background(), nil, strings.NewReader("mode: set\n"), Options{})
-	if err != nil {
-		t.Fatalf("stub ingest: %v", err)
-	}
-	if s != (Summary{}) {
-		t.Errorf("stub should return zero Summary, got %+v", s)
 	}
 }

@@ -94,16 +94,12 @@ type Summary struct {
 
 // Ingestor parses a Go coverage profile and writes coverage + node_coverage
 // records into st, attributing lines to the innermost enclosing node.
-//
-// The real implementation lands in Track A; NewIngestor currently returns a
-// stub so the CLI and server can be built against this seam in parallel.
 type Ingestor interface {
 	Ingest(ctx context.Context, st *store.Store, profile io.Reader, opts Options) (Summary, error)
 }
 
-// NewIngestor returns the default Ingestor. Track A replaces the stub returned
-// here with the real attribution implementation.
-func NewIngestor() Ingestor { return stubIngestor{} }
+// NewIngestor returns the default Ingestor (the real attribution implementation).
+func NewIngestor() Ingestor { return ingestor{} }
 
 // Pct returns the covered percentage for the given line counts, or 0 when there
 // are no measured lines.
