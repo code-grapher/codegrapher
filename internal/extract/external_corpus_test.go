@@ -38,6 +38,8 @@ func (r externalRepo) repoLang() model.Language {
 		return model.LangCSharp
 	case "ruby":
 		return model.LangRuby
+	case "rust":
+		return model.LangRust
 	default:
 		return model.LangPython
 	}
@@ -54,6 +56,8 @@ func (r externalRepo) sourceExts() []string {
 		return []string{".cs"}
 	case model.LangRuby:
 		return []string{".rb"}
+	case model.LangRust:
+		return []string{".rs"}
 	default:
 		return []string{".py", ".pyi"}
 	}
