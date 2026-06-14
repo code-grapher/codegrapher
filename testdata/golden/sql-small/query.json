@@ -1,0 +1,68 @@
+[
+  {
+    "node": {
+      "id": "struct:102d7fcd38893cf1524c1176750e6da8",
+      "kind": "struct",
+      "name": "users",
+      "qualifiedName": "users",
+      "filePath": "schema.sql",
+      "language": "sql",
+      "startLine": 1,
+      "endLine": 4,
+      "startColumn": 0,
+      "endColumn": 1,
+      "signature": "CREATE TABLE users",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781438235474
+    },
+    "score": 87.30458420903437
+  },
+  {
+    "node": {
+      "id": "field:57a4c2dee183abca59b563c028b60960",
+      "kind": "field",
+      "name": "id",
+      "qualifiedName": "users::id",
+      "filePath": "schema.sql",
+      "language": "sql",
+      "startLine": 2,
+      "endLine": 2,
+      "startColumn": 4,
+      "endColumn": 10,
+      "signature": "INT",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781438235474
+    },
+    "score": 4.12378443197004
+  },
+  {
+    "node": {
+      "id": "field:a90c37691e5a0a9a7a919b1e6e19ee61",
+      "kind": "field",
+      "name": "name",
+      "qualifiedName": "users::name",
+      "filePath": "schema.sql",
+      "language": "sql",
+      "startLine": 3,
+      "endLine": 3,
+      "startColumn": 4,
+      "endColumn": 13,
+      "signature": "TEXT",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781438235474
+    },
+    "score": 4.12378443197004
+  }
+]

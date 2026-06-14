@@ -1,0 +1,33 @@
+{
+  "initialized": true,
+  "version": "0.9.9",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/sql/testdata/fixtures/sql-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/sql/testdata/fixtures/sql-small/.codegraph",
+  "lastIndexed": "",
+  "fileCount": 2,
+  "nodeCount": 9,
+  "edgeCount": 12,
+  "dbSizeBytes": 167936,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "field": 4,
+    "file": 2,
+    "struct": 3
+  },
+  "languages": [
+    "sql"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "0.9.9",
+    "builtWithExtractionVersion": 14,
+    "currentExtractionVersion": 14,
+    "reindexRecommended": false
+  }
+}

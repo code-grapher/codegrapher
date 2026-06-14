@@ -1,0 +1,5 @@
+[{"source":"file:queries.sql","target":"struct:102d7fcd38893cf1524c1176750e6da8","kind":"references","provenance":null,"line":2,"col":21},
+{"source":"file:queries.sql","target":"struct:102d7fcd38893cf1524c1176750e6da8","kind":"references","provenance":null,"line":6,"col":5},
+{"source":"file:queries.sql","target":"struct:f11133f73716c6f3f639ca72dc1c0bea","kind":"references","provenance":null,"line":7,"col":5},
+{"source":"struct:5c41884b475f6eda657c2cda303bd8f4","target":"struct:102d7fcd38893cf1524c1176750e6da8","kind":"references","provenance":null,"line":13,"col":5},
+{"source":"struct:5c41884b475f6eda657c2cda303bd8f4","target":"struct:f11133f73716c6f3f639ca72dc1c0bea","kind":"references","provenance":null,"line":14,"col":5}]

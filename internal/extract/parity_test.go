@@ -195,6 +195,12 @@ func TestParityPowershellSmall(t *testing.T) {
 	testParity(t, "powershell-small")
 }
 
+// TestParitySqlSmall runs our extractor over all files in
+// testdata/fixtures/sql-small and compares against the golden.
+func TestParitySqlSmall(t *testing.T) {
+	testParity(t, "sql-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 

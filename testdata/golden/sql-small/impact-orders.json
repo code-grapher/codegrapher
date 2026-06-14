@@ -1,0 +1,38 @@
+{
+  "symbol": "orders",
+  "depth": 2,
+  "nodeCount": 5,
+  "edgeCount": 4,
+  "affected": [
+    {
+      "name": "id",
+      "kind": "field",
+      "filePath": "schema.sql",
+      "startLine": 7
+    },
+    {
+      "name": "orders",
+      "kind": "struct",
+      "filePath": "schema.sql",
+      "startLine": 6
+    },
+    {
+      "name": "queries.sql",
+      "kind": "file",
+      "filePath": "queries.sql",
+      "startLine": 1
+    },
+    {
+      "name": "user_id",
+      "kind": "field",
+      "filePath": "schema.sql",
+      "startLine": 8
+    },
+    {
+      "name": "user_orders",
+      "kind": "struct",
+      "filePath": "schema.sql",
+      "startLine": 11
+    }
+  ]
+}

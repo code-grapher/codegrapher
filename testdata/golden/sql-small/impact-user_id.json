@@ -1,0 +1,14 @@
+{
+  "symbol": "user_id",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "user_id",
+      "kind": "field",
+      "filePath": "schema.sql",
+      "startLine": 8
+    }
+  ]
+}

@@ -146,6 +146,12 @@
       "url": "https://github.com/dahlbyk/posh-git.git",
       "sha": "d8b126decc29193a78e71cca6f59598017703a85",
       "lang": "powershell"
+    },
+    {
+      "name": "chinook-database",
+      "url": "https://github.com/lerocha/chinook-database.git",
+      "sha": "7f67772503d71ba90f19283c38e93923addb43fa",
+      "lang": "sql"
     }
   ]
 }

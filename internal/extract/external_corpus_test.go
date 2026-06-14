@@ -74,6 +74,8 @@ func (r externalRepo) repoLang() model.Language {
 		return model.LangBash
 	case "powershell":
 		return model.LangPowerShell
+	case "sql":
+		return model.LangSql
 	default:
 		return model.LangPython
 	}
@@ -126,6 +128,8 @@ func (r externalRepo) sourceExts() []string {
 		return []string{".sh", ".bash"}
 	case model.LangPowerShell:
 		return []string{".ps1", ".psm1"}
+	case model.LangSql:
+		return []string{".sql"}
 	default:
 		return []string{".py", ".pyi"}
 	}

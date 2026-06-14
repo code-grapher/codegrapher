@@ -1,0 +1,20 @@
+{
+  "symbol": "id",
+  "depth": 2,
+  "nodeCount": 2,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "id",
+      "kind": "field",
+      "filePath": "schema.sql",
+      "startLine": 2
+    },
+    {
+      "name": "id",
+      "kind": "field",
+      "filePath": "schema.sql",
+      "startLine": 7
+    }
+  ]
+}

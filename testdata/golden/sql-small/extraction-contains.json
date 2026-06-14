@@ -1,0 +1,7 @@
+[{"source":"file:schema.sql","target":"struct:102d7fcd38893cf1524c1176750e6da8","kind":"contains"},
+{"source":"file:schema.sql","target":"struct:5c41884b475f6eda657c2cda303bd8f4","kind":"contains"},
+{"source":"file:schema.sql","target":"struct:f11133f73716c6f3f639ca72dc1c0bea","kind":"contains"},
+{"source":"struct:102d7fcd38893cf1524c1176750e6da8","target":"field:57a4c2dee183abca59b563c028b60960","kind":"contains"},
+{"source":"struct:102d7fcd38893cf1524c1176750e6da8","target":"field:a90c37691e5a0a9a7a919b1e6e19ee61","kind":"contains"},
+{"source":"struct:f11133f73716c6f3f639ca72dc1c0bea","target":"field:6545f61c27aa4d4575fc71d130ed1da5","kind":"contains"},
+{"source":"struct:f11133f73716c6f3f639ca72dc1c0bea","target":"field:f27aee8d1674d273200eed884d656381","kind":"contains"}]

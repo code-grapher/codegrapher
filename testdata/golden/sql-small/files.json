@@ -1,0 +1,14 @@
+[
+  {
+    "path": "queries.sql",
+    "language": "sql",
+    "nodeCount": 1,
+    "size": 260
+  },
+  {
+    "path": "schema.sql",
+    "language": "sql",
+    "nodeCount": 8,
+    "size": 200
+  }
+]

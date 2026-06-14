@@ -1,0 +1,14 @@
+{
+  "symbol": "user_orders",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "user_orders",
+      "kind": "struct",
+      "filePath": "schema.sql",
+      "startLine": 11
+    }
+  ]
+}

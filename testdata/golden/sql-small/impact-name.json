@@ -1,0 +1,14 @@
+{
+  "symbol": "name",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "name",
+      "kind": "field",
+      "filePath": "schema.sql",
+      "startLine": 3
+    }
+  ]
+}

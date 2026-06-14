@@ -186,6 +186,11 @@ var fixtures = []fixture{
 		query:   "speak",
 		symbols: []string{"Get-Area", "Animal", "Dog", "Invoke-Main", "Speak", "Name"},
 	},
+	{
+		name:    "sql-small",
+		query:   "users",
+		symbols: []string{"users", "orders", "user_orders", "id", "name", "user_id"},
+	},
 }
 
 // TestParityGoldens runs the binary against all goldens and asserts full-value parity.

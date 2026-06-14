@@ -1,0 +1,17 @@
+{
+  "symbol": "orders",
+  "callers": [
+    {
+      "name": "queries.sql",
+      "kind": "file",
+      "filePath": "queries.sql",
+      "startLine": 1
+    },
+    {
+      "name": "user_orders",
+      "kind": "struct",
+      "filePath": "schema.sql",
+      "startLine": 11
+    }
+  ]
+}
