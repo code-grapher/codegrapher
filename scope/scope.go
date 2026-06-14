@@ -82,6 +82,10 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 		// Scala scope uses the fallback version this pass: no build.sbt
 		// parsing yet. majorVersion("") → fallbackVersion ("v0").
 		ver = ""
+	case model.LangSwift:
+		// Swift scope uses the fallback version this pass: no SwiftPM/
+		// Package.swift parsing yet. majorVersion("") → fallbackVersion ("v0").
+		ver = ""
 	}
 	return majorVersion(ver)
 }

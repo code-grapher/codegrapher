@@ -131,6 +131,8 @@ func resolveRef(
 		return resolveCRef(ref, s)
 	case model.LangScala:
 		return resolveScalaRef(ref, s, jvmCtxCache)
+	case model.LangSwift:
+		return resolveSwiftRef(ref, s, pyVarTypeCache)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -1472,6 +1474,232 @@ func resolveCSMethodCall(ref model.UnresolvedReference, s *store.Store, method s
 		return nil
 	}
 	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Swift resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolveSwiftRef resolves a Swift unresolved reference into an edge. Swift is
+// statically typed with NO source-level namespaces, so resolution is by-name
+// against the global symbol table with same-file/same-dir preference (flat,
+// C#-like minus the namespace/alias layer):
+//
+//   - extends: resolve the supertype by name; if the target is a protocol
+//     (KindInterface) reclassify the edge as implements (Swift's inheritance
+//     clause mixes the superclass and protocol conformances; only the first
+//     entry is tagged extends by the walker). When the first entry does not
+//     resolve to a class, the edge drops (we don't guess a superclass).
+//   - implements: resolve the protocol by name to the interface node.
+//   - overrides: resolve the same-named method on a supertype (method/property).
+//   - calls "method" (from x.method()): resolve method by name (unambiguous or
+//     proximity-best). A bare call resolves to a free function, or — when the
+//     name is a type — promotes to instantiates (Swift `Type(...)`).
+//   - instantiates / references: resolve the type by name.
+//   - imports: target the real cross-file definition when one exists (rare for
+//     Swift, whose imports name external modules), else the local import node.
+//
+// The shared varTypeCache is reused; Swift never indexes the same file as the
+// other languages that use it.
+func resolveSwiftRef(
+	ref model.UnresolvedReference,
+	s *store.Store,
+	varTypeCache map[string]map[string]string,
+) *model.Edge {
+	name := ref.ReferenceName
+
+	switch ref.ReferenceKind {
+	case model.EdgeExtends:
+		target := resolveSwiftTypeByName(name, ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		kind := model.EdgeExtends
+		if target.Kind == model.KindInterface {
+			kind = model.EdgeImplements
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: kind, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeImplements:
+		target := resolveSwiftTypeByName(name, ref.FilePath, s, model.KindInterface)
+		if target == nil {
+			// Fall back: still record against any resolving type (e.g. when the
+			// protocol is mis-modeled), but prefer interface above.
+			if t := resolveSwiftTypeByName(name, ref.FilePath, s); t != nil {
+				return &model.Edge{Source: ref.FromNodeID, Target: t.ID, Kind: model.EdgeImplements, Line: ref.Line, Column: ref.Column}
+			}
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeImplements, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeOverrides:
+		return resolveSwiftMethodEdge(ref, s, name)
+
+	case model.EdgeImports:
+		if edge := resolveSwiftImportsRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveGenericRef(ref, s)
+
+	case model.EdgeInstantiates:
+		target := resolveSwiftTypeByName(name, ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeInstantiates, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeReferences:
+		if target := resolveSwiftTypeByName(name, ref.FilePath, s); target != nil {
+			return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeReferences, Line: ref.Line, Column: ref.Column}
+		}
+		return resolveGenericRef(ref, s)
+
+	case model.EdgeCalls:
+		if dotIdx := strings.Index(name, "."); dotIdx > 0 {
+			method := name[dotIdx+1:]
+			if method == "" || strings.ContainsAny(method, "./") {
+				return nil
+			}
+			return resolveSwiftMethodEdgeKind(ref, s, method, model.EdgeCalls)
+		}
+		// Bare name: a free function, a constructor `Type(...)`, or a method
+		// name from x.method() (the walker strips the receiver).
+		if t := resolveSwiftTypeByName(name, ref.FilePath, s, model.KindClass, model.KindStruct, model.KindEnum); t != nil {
+			return &model.Edge{Source: ref.FromNodeID, Target: t.ID, Kind: model.EdgeInstantiates, Line: ref.Line, Column: ref.Column}
+		}
+		if edge := resolveSwiftBareCall(ref, s); edge != nil {
+			return edge
+		}
+		return resolveSwiftMethodEdgeKind(ref, s, name, model.EdgeCalls)
+	}
+
+	return resolveGenericRef(ref, s)
+}
+
+// resolveSwiftTypeByName returns the best Swift type named name. When kinds is
+// given, restricts to those kinds; otherwise matches class/struct/interface/
+// enum/typealias. Prefers same-file, then same-dir, then any.
+func resolveSwiftTypeByName(name, refFilePath string, s *store.Store, kinds ...model.NodeKind) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	allowed := map[model.NodeKind]bool{}
+	if len(kinds) == 0 {
+		allowed[model.KindClass] = true
+		allowed[model.KindStruct] = true
+		allowed[model.KindInterface] = true
+		allowed[model.KindEnum] = true
+		allowed[model.KindTypeAlias] = true
+	} else {
+		for _, k := range kinds {
+			allowed[k] = true
+		}
+	}
+	var types []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangSwift && allowed[n.Kind] {
+			types = append(types, n)
+		}
+	}
+	if len(types) == 0 {
+		return nil
+	}
+	return pickBestNode(types, refFilePath)
+}
+
+// resolveSwiftDefinitionByName returns the best real (non-import, non-file)
+// Swift definition named name, preferring same-file/same-dir.
+func resolveSwiftDefinitionByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangSwift {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolveSwiftBareCall resolves a bare call to a Swift free function. Returns
+// nil when the name is not a function (so the method-name fallback can run).
+func resolveSwiftBareCall(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	candidates, err := s.GetNodesByName(ref.ReferenceName)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var fns []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangSwift && n.Kind == model.KindFunction {
+			fns = append(fns, n)
+		}
+	}
+	if len(fns) == 0 {
+		return nil
+	}
+	target := pickBestNode(fns, ref.FilePath)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+}
+
+// resolveSwiftMethodEdge resolves a method/property by name, preserving the
+// reference's own kind (used for overrides).
+func resolveSwiftMethodEdge(ref model.UnresolvedReference, s *store.Store, method string) *model.Edge {
+	return resolveSwiftMethodEdgeKind(ref, s, method, ref.ReferenceKind)
+}
+
+// resolveSwiftMethodEdgeKind resolves method by name to a Swift method/property
+// (unambiguous or proximity-best). For overrides it skips the overriding method
+// itself (the from-node) so it links to the supertype declaration. Overloads
+// resolve deterministically via pickBestNode.
+func resolveSwiftMethodEdgeKind(ref model.UnresolvedReference, s *store.Store, method string, kind model.EdgeKind) *model.Edge {
+	candidates, err := s.GetNodesByName(method)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var matches []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangSwift {
+			continue
+		}
+		if n.Kind != model.KindMethod && n.Kind != model.KindProperty {
+			continue
+		}
+		if kind == model.EdgeOverrides && n.ID == ref.FromNodeID {
+			continue
+		}
+		matches = append(matches, n)
+	}
+	if len(matches) == 0 {
+		return nil
+	}
+	target := pickBestNode(matches, ref.FilePath)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: kind, Line: ref.Line, Column: ref.Column}
+}
+
+// resolveSwiftImportsRef resolves an `import` ref to the real cross-file
+// definition when one exists, else nil (caller falls back to the import node).
+func resolveSwiftImportsRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	target := resolveSwiftDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeImports, Line: ref.Line, Column: ref.Column}
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
