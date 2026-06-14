@@ -1,0 +1,11 @@
+{
+  "symbol": "distanceTo",
+  "callees": [
+    {
+      "name": "Point",
+      "kind": "class",
+      "filePath": "shapes.hpp",
+      "startLine": 13
+    }
+  ]
+}

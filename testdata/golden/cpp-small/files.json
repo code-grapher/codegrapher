@@ -1,0 +1,20 @@
+[
+  {
+    "path": "shapes.cpp",
+    "language": "cpp",
+    "nodeCount": 5,
+    "size": 730
+  },
+  {
+    "path": "shapes.hpp",
+    "language": "cpp",
+    "nodeCount": 20,
+    "size": 1113
+  },
+  {
+    "path": "widget.h",
+    "language": "cpp",
+    "nodeCount": 7,
+    "size": 358
+  }
+]

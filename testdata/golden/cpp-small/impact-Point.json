@@ -1,0 +1,50 @@
+{
+  "symbol": "Point",
+  "depth": 2,
+  "nodeCount": 7,
+  "edgeCount": 6,
+  "affected": [
+    {
+      "name": "Point",
+      "kind": "class",
+      "filePath": "shapes.hpp",
+      "startLine": 13
+    },
+    {
+      "name": "Point",
+      "kind": "method",
+      "filePath": "shapes.hpp",
+      "startLine": 15
+    },
+    {
+      "name": "dimensions",
+      "kind": "constant",
+      "filePath": "shapes.hpp",
+      "startLine": 17
+    },
+    {
+      "name": "distanceTo",
+      "kind": "method",
+      "filePath": "shapes.hpp",
+      "startLine": 16
+    },
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "shapes.cpp",
+      "startLine": 25
+    },
+    {
+      "name": "x_",
+      "kind": "field",
+      "filePath": "shapes.hpp",
+      "startLine": 20
+    },
+    {
+      "name": "y_",
+      "kind": "field",
+      "filePath": "shapes.hpp",
+      "startLine": 21
+    }
+  ]
+}

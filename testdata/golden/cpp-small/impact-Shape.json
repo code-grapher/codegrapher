@@ -1,0 +1,56 @@
+{
+  "symbol": "Shape",
+  "depth": 2,
+  "nodeCount": 8,
+  "edgeCount": 7,
+  "affected": [
+    {
+      "name": "Circle",
+      "kind": "class",
+      "filePath": "shapes.hpp",
+      "startLine": 32
+    },
+    {
+      "name": "Circle",
+      "kind": "method",
+      "filePath": "shapes.hpp",
+      "startLine": 34
+    },
+    {
+      "name": "Shape",
+      "kind": "class",
+      "filePath": "shapes.hpp",
+      "startLine": 25
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.hpp",
+      "startLine": 27
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.hpp",
+      "startLine": 35
+    },
+    {
+      "name": "radius_",
+      "kind": "field",
+      "filePath": "shapes.hpp",
+      "startLine": 38
+    },
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "shapes.cpp",
+      "startLine": 25
+    },
+    {
+      "name": "~Shape",
+      "kind": "method",
+      "filePath": "shapes.hpp",
+      "startLine": 28
+    }
+  ]
+}

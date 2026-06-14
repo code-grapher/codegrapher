@@ -1,0 +1,11 @@
+{
+  "symbol": "Point",
+  "callers": [
+    {
+      "name": "distanceTo",
+      "kind": "method",
+      "filePath": "shapes.hpp",
+      "startLine": 16
+    }
+  ]
+}

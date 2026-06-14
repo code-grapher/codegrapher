@@ -133,6 +133,8 @@ func resolveRef(
 		return resolveScalaRef(ref, s, jvmCtxCache)
 	case model.LangSwift:
 		return resolveSwiftRef(ref, s, pyVarTypeCache)
+	case model.LangCPP:
+		return resolveCPPRef(ref, s)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -2320,6 +2322,264 @@ func resolveCImportNodeRef(ref model.UnresolvedReference, s *store.Store) *model
 		}
 	}
 	return nil
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// C++ resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolveCPPRef resolves a C++ unresolved reference. C++ adds namespaces,
+// classes, overloads, templates and inheritance on top of C. Resolution is
+// name-based against the global symbol table (qualified names use "::"), with:
+//
+//   - imports (#include): reuse the C header-file resolution; using-directives /
+//     using-declarations resolve to the local KindImport node.
+//   - extends: resolve the base-class name to its class/struct node.
+//   - overrides "Base::method": resolve method as a member of the base class
+//     (through the base table); only emitted when the base actually declares it.
+//   - instantiates: resolve the constructed type by (possibly qualified) name.
+//   - calls "A::B::f": qualified — resolve the trailing name preferring a member
+//     of the named scope, else by-name globally.
+//   - calls "method" (from obj.method()/ptr->method()): resolve by method name,
+//     unambiguous-or-best, walking base classes by name for inherited methods.
+//   - bare calls/references: resolve by name (same-file/dir preference), with
+//     calls→instantiates promotion when the target is a class/struct.
+//
+// Overloads: multiple same-named members → deterministic pick (pickBestNode:
+// same-file/dir then lowest start line). No signature/argument-type matching.
+func resolveCPPRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	name := ref.ReferenceName
+
+	switch ref.ReferenceKind {
+	case model.EdgeImports:
+		if edge := resolveCPPIncludeRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveCImportNodeRef(ref, s)
+
+	case model.EdgeExtends:
+		target := resolveCPPTypeByName(cppTail(name), ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeExtends, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeOverrides:
+		// "Base::method" → the base class's method node.
+		if sep := strings.LastIndex(name, "::"); sep > 0 {
+			base := cppTail(name[:sep])
+			method := name[sep+2:]
+			return resolveCPPMemberOnType(ref, s, base, method)
+		}
+		return nil
+
+	case model.EdgeInstantiates:
+		target := resolveCPPTypeByName(cppTail(name), ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeInstantiates, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeReferences:
+		if target := resolveCPPTypeByName(cppTail(name), ref.FilePath, s); target != nil {
+			return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeReferences, Line: ref.Line, Column: ref.Column}
+		}
+		return nil
+
+	case model.EdgeCalls:
+		if cppBuiltins[name] {
+			return nil
+		}
+		// Qualified call "A::B::f": resolve the trailing name, preferring a
+		// member of the named scope, then by-name globally.
+		if sep := strings.LastIndex(name, "::"); sep > 0 {
+			scope := cppTail(name[:sep])
+			fn := name[sep+2:]
+			if edge := resolveCPPMemberOnType(ref, s, scope, fn); edge != nil {
+				return edge
+			}
+			return resolveCPPByName(ref, s, fn)
+		}
+		return resolveCPPByName(ref, s, name)
+	}
+
+	return resolveCPPByName(ref, s, name)
+}
+
+// resolveCPPByName resolves name to the best C++ definition (same-file/dir
+// preference), promoting a class/struct target of a `calls` ref to instantiates.
+func resolveCPPByName(ref model.UnresolvedReference, s *store.Store, name string) *model.Edge {
+	if cppBuiltins[name] {
+		return nil
+	}
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangCPP {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	target := pickBestNode(defs, ref.FilePath)
+	if target == nil {
+		return nil
+	}
+	kind := ref.ReferenceKind
+	if kind == model.EdgeCalls &&
+		(target.Kind == model.KindClass || target.Kind == model.KindStruct) {
+		kind = model.EdgeInstantiates
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: kind, Line: ref.Line, Column: ref.Column}
+}
+
+// resolveCPPTypeByName returns the best C++ class/struct/enum/alias named name.
+func resolveCPPTypeByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var types []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangCPP {
+			continue
+		}
+		switch n.Kind {
+		case model.KindClass, model.KindStruct, model.KindEnum, model.KindTypeAlias:
+			types = append(types, n)
+		}
+	}
+	if len(types) == 0 {
+		return nil
+	}
+	return pickBestNode(types, refFilePath)
+}
+
+// resolveCPPMemberOnType resolves member as a method/field/constant contained by
+// the class named typeName, walking base classes by name for inherited members.
+// A member's qualified name ends in "...typeName::member".
+func resolveCPPMemberOnType(ref model.UnresolvedReference, s *store.Store, typeName, member string) *model.Edge {
+	if n := cppFindMember(s, typeName, member, map[string]bool{}); n != nil {
+		return &model.Edge{Source: ref.FromNodeID, Target: n.ID, Kind: ref.ReferenceKind, Line: ref.Line, Column: ref.Column}
+	}
+	return nil
+}
+
+// cppFindMember finds member directly on the class named typeName, then walks
+// its base classes (via extends edges) recursively. seen guards inheritance
+// cycles.
+func cppFindMember(s *store.Store, typeName, member string, seen map[string]bool) *model.Node {
+	if seen[typeName] {
+		return nil
+	}
+	seen[typeName] = true
+
+	candidates, err := s.GetNodesByName(member)
+	if err == nil {
+		for i := range candidates {
+			n := &candidates[i]
+			if n.Language != model.LangCPP {
+				continue
+			}
+			if cppMemberParentName(n.QualifiedName) == typeName {
+				return n
+			}
+		}
+	}
+
+	// Walk base classes of typeName.
+	classNodes, err := s.GetNodesByName(typeName)
+	if err != nil {
+		return nil
+	}
+	for i := range classNodes {
+		c := &classNodes[i]
+		if c.Language != model.LangCPP ||
+			(c.Kind != model.KindClass && c.Kind != model.KindStruct) {
+			continue
+		}
+		edges, err := s.GetOutgoingEdges(c.ID, []model.EdgeKind{model.EdgeExtends}, "")
+		if err != nil {
+			continue
+		}
+		for _, e := range edges {
+			base, err := s.GetNodeByID(e.Target)
+			if err != nil || base == nil {
+				continue
+			}
+			if found := cppFindMember(s, base.Name, member, seen); found != nil {
+				return found
+			}
+		}
+	}
+	return nil
+}
+
+// cppMemberParentName returns the immediate parent name from a "::"-joined
+// qualified name ("geo::Circle::area" → "Circle").
+func cppMemberParentName(qn string) string {
+	idx := strings.LastIndex(qn, "::")
+	if idx < 0 {
+		return ""
+	}
+	parent := qn[:idx]
+	if j := strings.LastIndex(parent, "::"); j >= 0 {
+		return parent[j+2:]
+	}
+	return parent
+}
+
+// cppTail returns the trailing "::"-segment of a (possibly) qualified name.
+func cppTail(name string) string {
+	if idx := strings.LastIndex(name, "::"); idx >= 0 {
+		return name[idx+2:]
+	}
+	return name
+}
+
+// resolveCPPIncludeRef resolves a #include to an in-repo header file node (C++
+// or C, since C++ may include C headers), reusing the C path-matching logic.
+func resolveCPPIncludeRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	header := ref.ReferenceName
+	relDir := filepath.Dir(ref.FilePath)
+	candPath := filepath.ToSlash(filepath.Clean(filepath.Join(relDir, header)))
+	if n, err := s.GetNodeByID(model.FileNodeID(candPath)); err == nil && n != nil {
+		return cIncludeEdge(ref, n)
+	}
+	base := filepath.Base(header)
+	byName, err := s.GetNodesByName(base)
+	if err != nil {
+		return nil
+	}
+	var matches []model.Node
+	for _, n := range byName {
+		if n.Kind == model.KindFile &&
+			(n.Language == model.LangCPP || n.Language == model.LangC) {
+			matches = append(matches, n)
+		}
+	}
+	if len(matches) == 1 {
+		return cIncludeEdge(ref, &matches[0])
+	}
+	return nil
+}
+
+// cppBuiltins are C++/STL names that never resolve to a user node. Reuses the C
+// builtin set plus common std symbols.
+var cppBuiltins = map[string]bool{
+	"std": true, "cout": true, "cin": true, "cerr": true, "endl": true,
+	"string": true, "vector": true, "map": true, "set": true, "make_shared": true,
+	"make_unique": true, "move": true, "size": true, "push_back": true,
+	"printf": true, "malloc": true, "free": true, "memcpy": true, "memset": true,
+	"sizeof": true, "nullptr": true, "true": true, "false": true,
 }
 
 func resolveGenericRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {

@@ -215,6 +215,19 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 				})
 			}
 		}
+	case model.LangCPP:
+		p, err := tsparse.NewParser(tsparse.LangCPP)
+		if err == nil {
+			tree, err = p.Parse(content)
+			if err != nil {
+				e.errors = append(e.errors, model.ExtractionError{
+					Message:  err.Error(),
+					FilePath: path,
+					Severity: "error",
+					Code:     "parse_error",
+				})
+			}
+		}
 	}
 
 	// Build the comment index so docstring lookup works during TS/JS symbol walking.
@@ -277,7 +290,9 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 			e.walkC(tree.RootNode())
 		}
 	case model.LangCPP:
-		// C++ has no walker yet: a .h sniffed as C++ yields only a file node.
+		if tree != nil {
+			e.walkCPP(tree.RootNode())
+		}
 	case model.LangScala:
 		if tree != nil {
 			e.walkScala(tree.RootNode())

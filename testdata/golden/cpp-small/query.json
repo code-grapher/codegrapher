@@ -1,0 +1,202 @@
+[
+  {
+    "node": {
+      "id": "class:4349b2244448471ef53d9df774eb759b",
+      "kind": "class",
+      "name": "Shape",
+      "qualifiedName": "geo::Shape",
+      "filePath": "shapes.hpp",
+      "language": "cpp",
+      "startLine": 25,
+      "endLine": 29,
+      "startColumn": 0,
+      "endColumn": 1,
+      "docstring": "Shape is the abstract base of all shapes.",
+      "signature": "class Shape",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781429002134
+    },
+    "score": 102.88064486899319
+  },
+  {
+    "node": {
+      "id": "constant:e63c5f95b55caa4f51b92be06bada7bd",
+      "kind": "constant",
+      "name": "SHAPES_HPP",
+      "qualifiedName": "SHAPES_HPP",
+      "filePath": "shapes.hpp",
+      "language": "cpp",
+      "startLine": 4,
+      "endLine": 5,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781429002134
+    },
+    "score": 42.92552772713452
+  },
+  {
+    "node": {
+      "id": "import:59d6fc0c1438c139158b21d7e0f31d8a",
+      "kind": "import",
+      "name": "shapes.hpp",
+      "qualifiedName": "shapes.hpp",
+      "filePath": "shapes.cpp",
+      "language": "cpp",
+      "startLine": 3,
+      "endLine": 4,
+      "startColumn": 0,
+      "endColumn": 0,
+      "signature": "#include \"shapes.hpp\"",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781429002134
+    },
+    "score": 40.91078816685592
+  },
+  {
+    "node": {
+      "id": "file:shapes.cpp",
+      "kind": "file",
+      "name": "shapes.cpp",
+      "qualifiedName": "shapes.cpp",
+      "filePath": "shapes.cpp",
+      "language": "cpp",
+      "startLine": 1,
+      "endLine": 33,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781429002134
+    },
+    "score": 39.9184790841677
+  },
+  {
+    "node": {
+      "id": "file:shapes.hpp",
+      "kind": "file",
+      "name": "shapes.hpp",
+      "qualifiedName": "shapes.hpp",
+      "filePath": "shapes.hpp",
+      "language": "cpp",
+      "startLine": 1,
+      "endLine": 50,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781429002134
+    },
+    "score": 39.9184790841677
+  },
+  {
+    "node": {
+      "id": "method:18c2c563e8f2868a0f7b49757a6f94d8",
+      "kind": "method",
+      "name": "~Shape",
+      "qualifiedName": "geo::Shape::~Shape",
+      "filePath": "shapes.hpp",
+      "language": "cpp",
+      "startLine": 28,
+      "endLine": 28,
+      "startColumn": 4,
+      "endColumn": 21,
+      "signature": "~Shape()",
+      "visibility": "public",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781429002134
+    },
+    "score": 34.93420951786579
+  },
+  {
+    "node": {
+      "id": "method:e8d267d3d24af8f9f031d13187fa3418",
+      "kind": "method",
+      "name": "area",
+      "qualifiedName": "geo::Shape::area",
+      "filePath": "shapes.hpp",
+      "language": "cpp",
+      "startLine": 27,
+      "endLine": 27,
+      "startColumn": 4,
+      "endColumn": 36,
+      "signature": "double area() const",
+      "visibility": "public",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": true,
+      "returnType": "double",
+      "updatedAt": 1781429002134
+    },
+    "score": 24.618533504336433
+  },
+  {
+    "node": {
+      "id": "function:352667690022270ba20e13fca2dae85a",
+      "kind": "function",
+      "name": "run",
+      "qualifiedName": "run",
+      "filePath": "shapes.cpp",
+      "language": "cpp",
+      "startLine": 25,
+      "endLine": 32,
+      "startColumn": 0,
+      "endColumn": 1,
+      "docstring": "run constructs shapes and exercises the virtual call.",
+      "signature": "double run()",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "double",
+      "updatedAt": 1781429002134
+    },
+    "score": 23.757427384001474
+  },
+  {
+    "node": {
+      "id": "class:f5f8ede8243083b33435e0723fbfbddf",
+      "kind": "class",
+      "name": "Circle",
+      "qualifiedName": "geo::Circle",
+      "filePath": "shapes.hpp",
+      "language": "cpp",
+      "startLine": 32,
+      "endLine": 39,
+      "startColumn": 0,
+      "endColumn": 1,
+      "docstring": "Circle is a concrete Shape with a radius.",
+      "signature": "class Circle : public Shape",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781429002134
+    },
+    "score": 22.216002754859165
+  }
+]

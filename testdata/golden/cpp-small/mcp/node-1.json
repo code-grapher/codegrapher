@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "**2 definitions named \"area\"**\nReturning 2 in full \u2014 pick the one you need (no Read required).\n\n## area (method)\n\n**Location:** shapes.hpp:27\n**Signature:** `double area() const`\n\n```cpp\n27\t    virtual double area() const = 0;\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Called by \u2190** run (shapes.cpp:25)\n\n---\n\n## area (method)\n\n**Location:** shapes.hpp:35\n**Signature:** `double area() const override`\n\n```cpp\n35\t    double area() const override;\n```"
+      }
+    ]
+  }
+}

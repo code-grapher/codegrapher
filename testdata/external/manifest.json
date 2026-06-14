@@ -68,6 +68,12 @@
       "url": "https://github.com/pointfreeco/swift-tagged.git",
       "sha": "3907a9438f5b57d317001dc99f3f11b46882272b",
       "lang": "swift"
+    },
+    {
+      "name": "GSL",
+      "url": "https://github.com/microsoft/GSL.git",
+      "sha": "b2f6bec48e27381b2e11d650ce7e4b899b446289",
+      "lang": "cpp"
     }
   ]
 }

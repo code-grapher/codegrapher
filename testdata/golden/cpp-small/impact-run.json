@@ -1,0 +1,14 @@
+{
+  "symbol": "run",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "shapes.cpp",
+      "startLine": 25
+    }
+  ]
+}
