@@ -111,6 +111,8 @@ func resolveRef(
 		return resolveGoRef(ref, s, projectRoot, goModulePath, importCache)
 	case model.LangPython:
 		return resolvePythonRef(ref, s, pyVarTypeCache)
+	case model.LangCSharp:
+		return resolveCSharpRef(ref, s)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -384,6 +386,223 @@ func pyConstructorClass(sig string) string {
 		return ""
 	}
 	return head
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// C# resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolveCSharpRef resolves a C# unresolved reference into an edge. C# is
+// statically typed, so resolution is by-name against the global symbol table
+// with same-namespace/same-dir preference (Go-like):
+//
+//   - extends: resolve the base type by name; if the target is an interface,
+//     reclassify the edge as implements (C#'s base list mixes both).
+//   - calls "recv.Method": resolve Method by name to a method/function
+//     (unambiguous or proximity-best); bare calls resolve through a local using
+//     import to the real cross-file definition, promoting class/struct targets to
+//     instantiates.
+//   - instantiates / references: resolve the type by name (through-import aware).
+//   - imports: target the real cross-file definition when one exists, else the
+//     local using node.
+func resolveCSharpRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	name := ref.ReferenceName
+
+	switch ref.ReferenceKind {
+	case model.EdgeExtends:
+		target := resolveCSTypeByName(csResolveAlias(name, ref.FilePath, s), ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		kind := model.EdgeExtends
+		if target.Kind == model.KindInterface {
+			kind = model.EdgeImplements
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: kind, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeImports:
+		if edge := resolveCSImportsRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveGenericRef(ref, s)
+
+	case model.EdgeInstantiates:
+		lookup := csResolveAlias(name, ref.FilePath, s)
+		target := resolveCSTypeByName(lookup, ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeInstantiates, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeReferences:
+		target := resolveCSTypeByName(name, ref.FilePath, s)
+		if target == nil {
+			return resolveGenericRef(ref, s)
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeReferences, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeCalls:
+		if dotIdx := strings.Index(name, "."); dotIdx > 0 {
+			method := name[dotIdx+1:]
+			if method == "" || strings.ContainsAny(method, "./") {
+				return nil
+			}
+			return resolveCSMethodCall(ref, s, method)
+		}
+		// Bare call: resolve through a local using import to the real cross-file
+		// definition (promoting class/struct → instantiates), else generic.
+		if edge := resolveCSBareThroughImport(ref, s); edge != nil {
+			return edge
+		}
+		return resolveGenericRef(ref, s)
+	}
+
+	return resolveGenericRef(ref, s)
+}
+
+// csResolveAlias maps an alias name to the simple type name it aliases, by
+// reading the local using-alias import node's signature
+// (`using Alias = A.B.Type;` → "Type"). Returns name unchanged when no alias
+// import in the same file matches.
+func csResolveAlias(name, refFilePath string, s *store.Store) string {
+	nodes, err := s.GetNodesByFile(refFilePath)
+	if err != nil {
+		return name
+	}
+	for i := range nodes {
+		n := &nodes[i]
+		if n.Kind != model.KindImport || n.Name != name {
+			continue
+		}
+		// signature: "using Alias = Full.Path.Type;"
+		sig := n.Signature
+		eq := strings.IndexByte(sig, '=')
+		if eq < 0 {
+			continue
+		}
+		rhs := strings.TrimSpace(sig[eq+1:])
+		rhs = strings.TrimSuffix(rhs, ";")
+		rhs = strings.TrimSpace(rhs)
+		if rhs == "" {
+			continue
+		}
+		if idx := strings.LastIndex(rhs, "."); idx >= 0 {
+			rhs = rhs[idx+1:]
+		}
+		if rhs != "" {
+			return rhs
+		}
+	}
+	return name
+}
+
+// resolveCSDefinitionByName returns the best real (non-import, non-file) C#
+// definition node named name, preferring same-file/same-dir, then any other.
+func resolveCSDefinitionByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangCSharp {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolveCSTypeByName returns the best C# type (class/struct/interface/enum)
+// named name, preferring same-dir then any.
+func resolveCSTypeByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var types []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangCSharp {
+			continue
+		}
+		switch n.Kind {
+		case model.KindClass, model.KindStruct, model.KindInterface, model.KindEnum:
+			types = append(types, n)
+		}
+	}
+	if len(types) == 0 {
+		return nil
+	}
+	return pickBestNode(types, refFilePath)
+}
+
+// resolveCSBareThroughImport resolves a bare-name call whose name has a local
+// using import shadow to the real cross-file definition (mirrors Python's
+// through-import fix). Promotes class/struct targets to instantiates.
+func resolveCSBareThroughImport(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	sameFile, err := s.GetNodesByFile(ref.FilePath)
+	if err != nil {
+		return nil
+	}
+	hasLocalImport := false
+	for i := range sameFile {
+		if sameFile[i].Kind == model.KindImport && sameFile[i].Name == ref.ReferenceName {
+			hasLocalImport = true
+			break
+		}
+	}
+	if !hasLocalImport {
+		return nil
+	}
+	target := resolveCSDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	kind := model.EdgeCalls
+	if target.Kind == model.KindClass || target.Kind == model.KindStruct {
+		kind = model.EdgeInstantiates
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: kind, Line: ref.Line, Column: ref.Column}
+}
+
+// resolveCSImportsRef resolves a using `imports` ref to the real cross-file
+// definition when one exists, else nil (caller falls back to the using node).
+func resolveCSImportsRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	target := resolveCSDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeImports, Line: ref.Line, Column: ref.Column}
+}
+
+// resolveCSMethodCall resolves a dotted "recv.Method" call by method name: an
+// unambiguous same-language method wins; otherwise pick by proximity. Overloads
+// (multiple same-name members) resolve deterministically via pickBestNode.
+func resolveCSMethodCall(ref model.UnresolvedReference, s *store.Store, method string) *model.Edge {
+	candidates, err := s.GetNodesByName(method)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var matches []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangCSharp && (n.Kind == model.KindMethod || n.Kind == model.KindProperty) {
+			matches = append(matches, n)
+		}
+	}
+	if len(matches) == 0 {
+		return nil
+	}
+	target := pickBestNode(matches, ref.FilePath)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
