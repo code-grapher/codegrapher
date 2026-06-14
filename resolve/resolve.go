@@ -131,6 +131,8 @@ func resolveRef(
 		return resolveCRef(ref, s)
 	case model.LangScala:
 		return resolveScalaRef(ref, s, jvmCtxCache)
+	case model.LangDart:
+		return resolveDartRef(ref, s)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -1472,6 +1474,194 @@ func resolveCSMethodCall(ref model.UnresolvedReference, s *store.Store, method s
 		return nil
 	}
 	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Dart resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolveDartRef resolves a Dart unresolved reference into an edge. Dart is
+// statically typed and library-flat (no namespaces), so resolution is by-name
+// against the global symbol table with same-file/same-dir preference:
+//
+//   - extends / implements: resolve the type by name (mixins/interfaces were
+//     emitted as implements by the walker; superclass as extends).
+//   - instantiates / references: resolve the type by name.
+//   - calls "recv.method" / "Type.named": resolve the trailing method/constructor
+//     name; bare calls resolve by name, promoting class targets to instantiates.
+//   - imports: a relative `import 'x.dart'` resolves to the in-repo file node;
+//     package:/dart: imports stay at the local import node.
+func resolveDartRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	name := ref.ReferenceName
+
+	switch ref.ReferenceKind {
+	case model.EdgeExtends:
+		target := resolveDartTypeByName(name, ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeExtends, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeImplements:
+		target := resolveDartTypeByName(name, ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeImplements, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeInstantiates:
+		target := resolveDartTypeByName(name, ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeInstantiates, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeReferences, model.EdgeDecorates:
+		target := resolveDartDefinitionByName(name, ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: ref.ReferenceKind, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeImports:
+		if edge := resolveDartImportsRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveDartImportNodeRef(ref, s)
+
+	case model.EdgeCalls:
+		if dotIdx := strings.LastIndex(name, "."); dotIdx > 0 {
+			method := name[dotIdx+1:]
+			recv := name[:dotIdx]
+			if method == "" || strings.ContainsAny(method, "./") {
+				return nil
+			}
+			// `Type.named(...)` — if the receiver names a known type, this is a
+			// named-constructor instantiation.
+			if t := resolveDartTypeByName(recv, ref.FilePath, s); t != nil {
+				return &model.Edge{Source: ref.FromNodeID, Target: t.ID, Kind: model.EdgeInstantiates, Line: ref.Line, Column: ref.Column}
+			}
+			return resolveDartMethodCall(ref, s, method)
+		}
+		// Bare call: resolve by name; promote class targets to instantiates.
+		target := resolveDartDefinitionByName(name, ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		kind := model.EdgeCalls
+		if target.Kind == model.KindClass {
+			kind = model.EdgeInstantiates
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: kind, Line: ref.Line, Column: ref.Column}
+	}
+
+	return nil
+}
+
+// resolveDartDefinitionByName returns the best real (non-import, non-file) Dart
+// definition node named name, preferring same-file/same-dir.
+func resolveDartDefinitionByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangDart {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolveDartTypeByName returns the best Dart type (class/enum/type-alias) named
+// name, preferring same-file/same-dir.
+func resolveDartTypeByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var types []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangDart {
+			continue
+		}
+		switch n.Kind {
+		case model.KindClass, model.KindEnum, model.KindTypeAlias:
+			types = append(types, n)
+		}
+	}
+	if len(types) == 0 {
+		return nil
+	}
+	return pickBestNode(types, refFilePath)
+}
+
+// resolveDartMethodCall resolves a dotted "recv.method" call by method name to a
+// Dart method/property (unambiguous or proximity-best).
+func resolveDartMethodCall(ref model.UnresolvedReference, s *store.Store, method string) *model.Edge {
+	candidates, err := s.GetNodesByName(method)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var matches []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangDart && (n.Kind == model.KindMethod || n.Kind == model.KindProperty || n.Kind == model.KindFunction) {
+			matches = append(matches, n)
+		}
+	}
+	if len(matches) == 0 {
+		return nil
+	}
+	target := pickBestNode(matches, ref.FilePath)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+}
+
+// resolveDartImportsRef resolves a relative `import 'x.dart'` ref (ReferenceName
+// carries the raw URI) to the in-repo file node, or nil for package:/dart: URIs.
+func resolveDartImportsRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	uri := ref.ReferenceName
+	if uri == "" || strings.Contains(uri, ":") {
+		// package:… / dart:… — not an in-repo relative path.
+		return nil
+	}
+	relDir := filepath.Dir(ref.FilePath)
+	candPath := filepath.ToSlash(filepath.Clean(filepath.Join(relDir, uri)))
+	if n, err := s.GetNodeByID(model.FileNodeID(candPath)); err == nil && n != nil {
+		return &model.Edge{Source: ref.FromNodeID, Target: n.ID, Kind: model.EdgeImports, Line: ref.Line, Column: ref.Column}
+	}
+	return nil
+}
+
+// resolveDartImportNodeRef falls back to the local KindImport node for an import
+// whose URI is not an in-repo relative file (package:/dart: libraries). The
+// import node is named after the URI's last path segment.
+func resolveDartImportNodeRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	uri := ref.ReferenceName
+	name := uri
+	if idx := strings.LastIndexAny(name, "/:"); idx >= 0 {
+		name = name[idx+1:]
+	}
+	nodes, err := s.GetNodesByFile(ref.FilePath)
+	if err != nil {
+		return nil
+	}
+	for _, n := range nodes {
+		if n.Kind == model.KindImport && n.Name == name {
+			return &model.Edge{Source: ref.FromNodeID, Target: n.ID, Kind: model.EdgeImports, Line: ref.Line, Column: ref.Column}
+		}
+	}
+	return nil
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

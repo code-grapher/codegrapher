@@ -91,6 +91,7 @@ const (
 	LangC           Language = "c"
 	LangCPP         Language = "cpp"
 	LangScala       Language = "scala"
+	LangDart        Language = "dart"
 	LangGoMod       Language = "go.mod"
 	LangPackageJSON Language = "package.json"
 	LangNode        Language = "node"

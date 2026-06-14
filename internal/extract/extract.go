@@ -47,6 +47,11 @@ type extractor struct {
 	// gotreesitter's ERROR root causes walkGo to visit the same AST node via
 	// multiple paths (direct child + inside ERROR subtree).
 	seenNodeIDs map[string]bool
+
+	// dartPendingMember holds the node ID of the most recently emitted Dart
+	// method/function whose body is a following sibling (function_body), so the
+	// sibling's calls attribute to it.
+	dartPendingMember string
 }
 
 // ExtractFile parses content as lang, extracts a file node (and, eventually,
@@ -202,6 +207,19 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 				})
 			}
 		}
+	case model.LangDart:
+		p, err := tsparse.NewParser(tsparse.LangDart)
+		if err == nil {
+			tree, err = p.Parse(content)
+			if err != nil {
+				e.errors = append(e.errors, model.ExtractionError{
+					Message:  err.Error(),
+					FilePath: path,
+					Severity: "error",
+					Code:     "parse_error",
+				})
+			}
+		}
 	}
 
 	// Build the comment index so docstring lookup works during TS/JS symbol walking.
@@ -268,6 +286,10 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 	case model.LangScala:
 		if tree != nil {
 			e.walkScala(tree.RootNode())
+		}
+	case model.LangDart:
+		if tree != nil {
+			e.walkDart(tree.RootNode())
 		}
 	case model.LangGoMod:
 		e.extractGoMod(content)
