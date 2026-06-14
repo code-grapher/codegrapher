@@ -18,6 +18,8 @@ const rootCollectionsYAML = `nodes: nodes
 edges: edges
 files: files
 metadata: project_metadata
+coverage: coverage
+nodecoverage: node_coverage
 `
 
 // settingsYAML sets the default namespace for the database.
@@ -234,6 +236,84 @@ columns:
       en: Value
 columns_order:
   - value
+`
+
+// coverageCollectionDef is the .collection/definition.yaml for the per-file
+// coverage collection. Columns mirror coverage.EncodeFileCoverage's layout.
+const coverageCollectionDef = `titles:
+  en: Coverage
+record_file:
+  name: coverage.ingr
+  format: ingr
+  type: "[]map[string]any"
+primary_key:
+  - $ID
+columns:
+  content_hash:
+    type: string
+    titles:
+      en: Content Hash
+  mode:
+    type: string
+    titles:
+      en: Mode
+  ranges:
+    type: string
+    titles:
+      en: Ranges
+  lines_covered:
+    type: int
+    titles:
+      en: Lines Covered
+  lines_uncovered:
+    type: int
+    titles:
+      en: Lines Uncovered
+  run_at:
+    type: int
+    titles:
+      en: Run At
+columns_order:
+  - content_hash
+  - mode
+  - ranges
+  - lines_covered
+  - lines_uncovered
+  - run_at
+`
+
+// nodeCoverageCollectionDef is the .collection/definition.yaml for the
+// per-function coverage collection. Columns mirror coverage.EncodeNodeCoverage.
+const nodeCoverageCollectionDef = `titles:
+  en: Node Coverage
+record_file:
+  name: node_coverage.ingr
+  format: ingr
+  type: "[]map[string]any"
+primary_key:
+  - $ID
+columns:
+  content_hash:
+    type: string
+    titles:
+      en: Content Hash
+  lines_covered:
+    type: int
+    titles:
+      en: Lines Covered
+  lines_uncovered:
+    type: int
+    titles:
+      en: Lines Uncovered
+  run_at:
+    type: int
+    titles:
+      en: Run At
+columns_order:
+  - content_hash
+  - lines_covered
+  - lines_uncovered
+  - run_at
 `
 
 func writeIngitdbConfig(outDir string) error {

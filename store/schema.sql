@@ -150,3 +150,33 @@ CREATE TABLE IF NOT EXISTS project_metadata (
     value TEXT NOT NULL,
     updated_at INTEGER NOT NULL
 );
+
+-- =============================================================================
+-- Coverage (schema v6) — volatile, kept in separate tables keyed by path/node.
+-- =============================================================================
+
+-- Per-file line coverage (latest ingested run for this file+ref).
+CREATE TABLE IF NOT EXISTS coverage (
+    file_path     TEXT NOT NULL,
+    content_hash  TEXT NOT NULL,        -- hash at ingest time; mismatch => stale
+    mode          TEXT NOT NULL,        -- go profile mode: set|count|atomic
+    ranges        TEXT NOT NULL,        -- RLE JSON: [[start,end,"hit"|"miss"], ...]
+    lines_covered   INTEGER NOT NULL,
+    lines_uncovered INTEGER NOT NULL,
+    pct_covered     REAL NOT NULL,
+    run_at        INTEGER NOT NULL,     -- unix ms
+    PRIMARY KEY (file_path)
+);
+
+-- Per-function innermost-attributed line counts.
+CREATE TABLE IF NOT EXISTS node_coverage (
+    node_id         TEXT NOT NULL,
+    content_hash    TEXT NOT NULL,
+    lines_covered   INTEGER NOT NULL,
+    lines_uncovered INTEGER NOT NULL,
+    pct_covered     REAL NOT NULL,
+    run_at          INTEGER NOT NULL,
+    PRIMARY KEY (node_id),
+    FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_node_coverage_hash ON node_coverage(content_hash);
