@@ -46,6 +46,10 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 		ver = detectGoVersion(projectRoot, filePath)
 	case model.LangTypeScript, model.LangJavaScript, model.LangTSX, model.LangJSX, model.LangPackageJSON:
 		ver = detectNodeVersion(projectRoot, filePath)
+	case model.LangPython:
+		// Python graphs are grouped under a single major; no manifest parsing
+		// in this pass (PEP 621 pyproject support is a later enhancement).
+		ver = "3"
 	}
 	return majorVersion(ver)
 }

@@ -8,6 +8,14 @@ import (
 	"github.com/specscore/codegrapher/model"
 )
 
+func TestDetectVersionPython(t *testing.T) {
+	dir := t.TempDir()
+	got := DetectVersion(dir, filepath.Join(dir, "m.py"), model.LangPython)
+	if got != "v3" {
+		t.Fatalf("python default version = %q, want v3", got)
+	}
+}
+
 func TestScopeKey(t *testing.T) {
 	cases := []struct {
 		lang model.Language
