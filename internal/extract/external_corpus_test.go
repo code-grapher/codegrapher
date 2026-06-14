@@ -23,6 +23,7 @@ type externalRepo struct {
 	URL    string `json:"url"`
 	SHA    string `json:"sha"`
 	Python int    `json:"python"`
+	Lang   string `json:"lang"`
 }
 
 type externalManifest struct {
@@ -63,7 +64,13 @@ func TestExternalCorpus(t *testing.T) {
 				t.Skipf("skipping %s: could not obtain repo at %s", repo.Name, repo.SHA)
 			}
 
-			files, err := collectPythonFiles(dest)
+			// wantLang is the language this repo exercises (default: Python).
+			wantLang := model.LangPython
+			if repo.Lang == "csharp" {
+				wantLang = model.LangCSharp
+			}
+
+			files, err := collectSourceFiles(dest)
 			if err != nil {
 				t.Fatalf("walk clone %s: %v", dest, err)
 			}
@@ -76,7 +83,7 @@ func TestExternalCorpus(t *testing.T) {
 					t.Fatalf("read %s: %v", absPath, err)
 				}
 				lang := extract.DetectLanguage(absPath)
-				if lang != model.LangPython {
+				if lang != wantLang {
 					continue
 				}
 				relPath, err := filepath.Rel(dest, absPath)
@@ -104,8 +111,8 @@ func TestExternalCorpus(t *testing.T) {
 			if fileCount > 0 {
 				rate = float64(errorFiles) / float64(fileCount)
 			}
-			t.Logf("%s (python%d): files=%d nodes=%d parse-error-files=%d parse-error-rate=%.4f",
-				repo.Name, repo.Python, fileCount, totalNodes, errorFiles, rate)
+			t.Logf("%s (lang=%s python%d): files=%d nodes=%d parse-error-files=%d parse-error-rate=%.4f",
+				repo.Name, wantLang, repo.Python, fileCount, totalNodes, errorFiles, rate)
 
 			if repo.Python == 3 {
 				t.Logf("%s: enforcing parse-error-rate <= %.2f (threshold)", repo.Name, py3MaxParseErrorRate)
@@ -156,8 +163,8 @@ func (e *cmdError) Error() string {
 	return e.cmd + ": " + e.err.Error() + "\n" + e.out
 }
 
-// collectPythonFiles returns absolute paths of all .py/.pyi files under root.
-func collectPythonFiles(root string) ([]string, error) {
+// collectSourceFiles returns absolute paths of all .py/.pyi/.cs files under root.
+func collectSourceFiles(root string) ([]string, error) {
 	var files []string
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -170,7 +177,7 @@ func collectPythonFiles(root string) ([]string, error) {
 			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(path))
-		if ext == ".py" || ext == ".pyi" {
+		if ext == ".py" || ext == ".pyi" || ext == ".cs" {
 			files = append(files, path)
 		}
 		return nil
