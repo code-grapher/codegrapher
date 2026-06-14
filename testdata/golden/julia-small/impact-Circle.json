@@ -1,0 +1,38 @@
+{
+  "symbol": "Circle",
+  "depth": 2,
+  "nodeCount": 5,
+  "edgeCount": 4,
+  "affected": [
+    {
+      "name": "Circle",
+      "kind": "struct",
+      "filePath": "shapes.jl",
+      "startLine": 5
+    },
+    {
+      "name": "Geometry",
+      "kind": "module",
+      "filePath": "geometry.jl",
+      "startLine": 1
+    },
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shapes.jl",
+      "startLine": 14
+    },
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "geometry.jl",
+      "startLine": 8
+    },
+    {
+      "name": "r",
+      "kind": "field",
+      "filePath": "shapes.jl",
+      "startLine": 6
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "symbol": "Rectangle",
+  "depth": 2,
+  "nodeCount": 6,
+  "edgeCount": 5,
+  "affected": [
+    {
+      "name": "Geometry",
+      "kind": "module",
+      "filePath": "geometry.jl",
+      "startLine": 1
+    },
+    {
+      "name": "Rectangle",
+      "kind": "struct",
+      "filePath": "shapes.jl",
+      "startLine": 9
+    },
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shapes.jl",
+      "startLine": 14
+    },
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "geometry.jl",
+      "startLine": 8
+    },
+    {
+      "name": "h",
+      "kind": "field",
+      "filePath": "shapes.jl",
+      "startLine": 11
+    },
+    {
+      "name": "w",
+      "kind": "field",
+      "filePath": "shapes.jl",
+      "startLine": 10
+    }
+  ]
+}

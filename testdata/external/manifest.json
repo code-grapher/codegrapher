@@ -116,6 +116,12 @@
       "url": "https://github.com/jcomellas/getopt.git",
       "sha": "1c963cecd75cb5f7b37f28737abb120e61390c62",
       "lang": "erlang"
+    },
+    {
+      "name": "Glob.jl",
+      "url": "https://github.com/vtjnash/Glob.jl.git",
+      "sha": "d787ab4250fc6bad31b95a2da371045e81b906c8",
+      "lang": "julia"
     }
   ]
 }

@@ -1,0 +1,44 @@
+{
+  "symbol": "area",
+  "depth": 2,
+  "nodeCount": 6,
+  "edgeCount": 5,
+  "affected": [
+    {
+      "name": "Geometry",
+      "kind": "module",
+      "filePath": "geometry.jl",
+      "startLine": 1
+    },
+    {
+      "name": "Shapes",
+      "kind": "import",
+      "filePath": "geometry.jl",
+      "startLine": 3
+    },
+    {
+      "name": "area",
+      "kind": "import",
+      "filePath": "geometry.jl",
+      "startLine": 4
+    },
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shapes.jl",
+      "startLine": 14
+    },
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "geometry.jl",
+      "startLine": 8
+    },
+    {
+      "name": "scale",
+      "kind": "variable",
+      "filePath": "geometry.jl",
+      "startLine": 6
+    }
+  ]
+}

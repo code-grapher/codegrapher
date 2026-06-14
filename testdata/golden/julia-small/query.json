@@ -1,0 +1,88 @@
+[
+  {
+    "node": {
+      "id": "struct:8f6323d83e9807e382d54a620f25b94a",
+      "kind": "struct",
+      "name": "Circle",
+      "qualifiedName": "Shapes::Circle",
+      "filePath": "shapes.jl",
+      "language": "julia",
+      "startLine": 5,
+      "endLine": 7,
+      "startColumn": 0,
+      "endColumn": 3,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781435204997
+    },
+    "score": 88.61783961257663
+  },
+  {
+    "node": {
+      "id": "function:b4e311069b310321b93137caad7f9276",
+      "kind": "function",
+      "name": "area",
+      "qualifiedName": "Shapes::area",
+      "filePath": "shapes.jl",
+      "language": "julia",
+      "startLine": 14,
+      "endLine": 14,
+      "startColumn": 0,
+      "endColumn": 37,
+      "signature": "area(c::Circle)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781435204997
+    },
+    "score": 11.603156834626231
+  },
+  {
+    "node": {
+      "id": "field:8616b9bfd69c3d08df35a97920a32c06",
+      "kind": "field",
+      "name": "r",
+      "qualifiedName": "Shapes::Circle::r",
+      "filePath": "shapes.jl",
+      "language": "julia",
+      "startLine": 6,
+      "endLine": 6,
+      "startColumn": 4,
+      "endColumn": 14,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781435204997
+    },
+    "score": 5.222648820193144
+  },
+  {
+    "node": {
+      "id": "variable:179a137486bd4a3aaf3673451a7db8fd",
+      "kind": "variable",
+      "name": "c",
+      "qualifiedName": "Geometry::describe::c",
+      "filePath": "geometry.jl",
+      "language": "julia",
+      "startLine": 9,
+      "endLine": 9,
+      "startColumn": 4,
+      "endColumn": 19,
+      "signature": "= Circle(1.0)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781435204997
+    },
+    "score": 3.5410499432077707
+  }
+]

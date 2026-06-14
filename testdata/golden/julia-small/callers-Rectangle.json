@@ -1,0 +1,11 @@
+{
+  "symbol": "Rectangle",
+  "callers": [
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shapes.jl",
+      "startLine": 14
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "symbol": "area",
+  "callers": [
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "geometry.jl",
+      "startLine": 8
+    },
+    {
+      "name": "Geometry",
+      "kind": "module",
+      "filePath": "geometry.jl",
+      "startLine": 1
+    }
+  ]
+}

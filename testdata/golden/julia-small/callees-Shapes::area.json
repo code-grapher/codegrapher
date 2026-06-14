@@ -1,0 +1,17 @@
+{
+  "symbol": "Shapes::area",
+  "callees": [
+    {
+      "name": "Circle",
+      "kind": "struct",
+      "filePath": "shapes.jl",
+      "startLine": 5
+    },
+    {
+      "name": "Rectangle",
+      "kind": "struct",
+      "filePath": "shapes.jl",
+      "startLine": 9
+    }
+  ]
+}

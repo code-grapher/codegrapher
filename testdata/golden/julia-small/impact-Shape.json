@@ -1,0 +1,56 @@
+{
+  "symbol": "Shape",
+  "depth": 2,
+  "nodeCount": 8,
+  "edgeCount": 7,
+  "affected": [
+    {
+      "name": "Circle",
+      "kind": "struct",
+      "filePath": "shapes.jl",
+      "startLine": 5
+    },
+    {
+      "name": "Rectangle",
+      "kind": "struct",
+      "filePath": "shapes.jl",
+      "startLine": 9
+    },
+    {
+      "name": "Shape",
+      "kind": "interface",
+      "filePath": "shapes.jl",
+      "startLine": 3
+    },
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shapes.jl",
+      "startLine": 14
+    },
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "geometry.jl",
+      "startLine": 8
+    },
+    {
+      "name": "h",
+      "kind": "field",
+      "filePath": "shapes.jl",
+      "startLine": 11
+    },
+    {
+      "name": "r",
+      "kind": "field",
+      "filePath": "shapes.jl",
+      "startLine": 6
+    },
+    {
+      "name": "w",
+      "kind": "field",
+      "filePath": "shapes.jl",
+      "startLine": 10
+    }
+  ]
+}

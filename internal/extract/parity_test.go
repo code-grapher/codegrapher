@@ -165,6 +165,12 @@ func TestParityErlangSmall(t *testing.T) {
 	testParity(t, "erlang-small")
 }
 
+// TestParityJuliaSmall runs our extractor over all files in testdata/fixtures/julia-small
+// and compares against the golden.
+func TestParityJuliaSmall(t *testing.T) {
+	testParity(t, "julia-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 
