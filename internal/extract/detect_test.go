@@ -21,6 +21,19 @@ func TestDetectLanguageGoMod(t *testing.T) {
 	}
 }
 
+func TestDetectPython(t *testing.T) {
+	cases := map[string]model.Language{
+		"a/b/foo.py":  model.LangPython,
+		"stubs/x.pyi": model.LangPython,
+		"foo.pyc":     model.LangUnknown,
+	}
+	for path, want := range cases {
+		if got := DetectLanguage(path); got != want {
+			t.Errorf("DetectLanguage(%q) = %q, want %q", path, got, want)
+		}
+	}
+}
+
 func TestDetectLanguagePackageJSON(t *testing.T) {
 	cases := map[string]model.Language{
 		"package.json":         model.LangPackageJSON,
