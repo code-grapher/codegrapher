@@ -104,6 +104,7 @@ const (
 	LangR           Language = "r"
 	LangBash        Language = "bash"
 	LangPowerShell  Language = "powershell"
+	LangSql         Language = "sql"
 	LangGoMod       Language = "go.mod"
 	LangPackageJSON Language = "package.json"
 	LangNode        Language = "node"

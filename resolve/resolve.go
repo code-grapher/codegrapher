@@ -159,6 +159,8 @@ func resolveRef(
 		return resolveRRef(ref, s)
 	case model.LangPowerShell:
 		return resolvePowerShellRef(ref, s)
+	case model.LangSql:
+		return resolveSqlRef(ref, s)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -2386,6 +2388,43 @@ func resolveDartImportNodeRef(ref model.UnresolvedReference, s *store.Store) *mo
 		}
 	}
 	return nil
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// SQL resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolveSqlRef resolves a SQL `references` ref (a SELECT/DML FROM-or-JOIN
+// table, or a view's source table) by NAME to the best CREATE TABLE / CREATE
+// VIEW node (KindStruct), preferring a same-file definition then any file —
+// including cross-file (a SELECT in one .sql resolving to a table created in
+// another). Unknown tables (system tables, or tables not defined in-repo) are
+// left unresolved (no edge, no guessing). Deterministic.
+func resolveSqlRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	candidates, err := s.GetNodesByName(ref.ReferenceName)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangSql && n.Kind == model.KindStruct {
+			defs = append(defs, n)
+		}
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	target := pickBestNode(defs, ref.FilePath)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   model.EdgeReferences,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

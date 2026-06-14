@@ -133,6 +133,9 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 		// PowerShell scope uses the fallback version this pass: no module
 		// manifest (.psd1) parsing yet. majorVersion("") → fallbackVersion ("v0").
 		ver = ""
+	case model.LangSql:
+		// SQL has no project-version manifest to parse; fallback version ("v0").
+		ver = ""
 	}
 	return majorVersion(ver)
 }

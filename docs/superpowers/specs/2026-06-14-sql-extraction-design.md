@@ -81,5 +81,11 @@ then any file. SQL emits only `references` refs; no imports/calls.
 - View references are attributed to the view node; all other top-level query
   references are attributed to the file node (no per-statement node, matching
   the "no new node kinds" constraint).
+- **Grammar quirk:** `UPDATE schema.table …` (schema-qualified UPDATE target)
+  does NOT parse — the grammar emits ERROR nodes and treats `schema.table` as a
+  bare identifier + stray `.`. Bare-name UPDATE parses fine, as do
+  schema-qualified `INSERT INTO schema.t` / `DELETE FROM schema.t`. Fixtures use
+  bare-name UPDATE. (CREATE TABLE/VIEW, SELECT, INSERT, DELETE all accept the
+  schema-qualified form.)
 - If a future dialect produces ERROR nodes, extraction degrades gracefully:
   we walk whatever parsed and never panic (unknown node kinds simply recurse).
