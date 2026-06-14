@@ -1,0 +1,14 @@
+{
+  "symbol": "make_dog",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "make_dog",
+      "kind": "function",
+      "filePath": "service.php",
+      "startLine": 10
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "symbol": "Dog::speak",
+  "callers": [
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "service.php",
+      "startLine": 14
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "initialized": true,
+  "version": "0.9.9",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/php/testdata/fixtures/php-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/php/testdata/fixtures/php-small/.codegraph",
+  "lastIndexed": "",
+  "fileCount": 2,
+  "nodeCount": 28,
+  "edgeCount": 33,
+  "dbSizeBytes": 147456,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "class": 2,
+    "constant": 1,
+    "enum": 1,
+    "enum_member": 2,
+    "field": 5,
+    "file": 2,
+    "function": 2,
+    "import": 1,
+    "interface": 1,
+    "method": 6,
+    "namespace": 2,
+    "trait": 1,
+    "variable": 2
+  },
+  "languages": [
+    "php"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "0.9.9",
+    "builtWithExtractionVersion": 14,
+    "currentExtractionVersion": 14,
+    "reindexRecommended": false
+  }
+}

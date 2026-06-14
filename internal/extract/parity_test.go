@@ -87,6 +87,12 @@ func TestParityRbSmall(t *testing.T) {
 	testParity(t, "rb-small")
 }
 
+// TestParityPhpSmall runs our extractor over all files in testdata/fixtures/php-small
+// and compares against the golden.
+func TestParityPhpSmall(t *testing.T) {
+	testParity(t, "php-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 

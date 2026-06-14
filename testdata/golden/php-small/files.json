@@ -1,0 +1,14 @@
+[
+  {
+    "path": "models.php",
+    "language": "php",
+    "nodeCount": 20,
+    "size": 806
+  },
+  {
+    "path": "service.php",
+    "language": "php",
+    "nodeCount": 8,
+    "size": 368
+  }
+]

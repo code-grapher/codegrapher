@@ -1,0 +1,217 @@
+[
+  {
+    "node": {
+      "id": "class:bef38890d2bc7477029f2a1f1d6f1367",
+      "kind": "class",
+      "name": "Dog",
+      "qualifiedName": "Dog",
+      "filePath": "models.php",
+      "language": "php",
+      "startLine": 33,
+      "endLine": 46,
+      "startColumn": 0,
+      "endColumn": 1,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781425834412
+    },
+    "score": 89.20533619670783
+  },
+  {
+    "node": {
+      "id": "import:26b74afd2b94295b0af28445d2415587",
+      "kind": "import",
+      "name": "Dog",
+      "qualifiedName": "Dog",
+      "filePath": "service.php",
+      "language": "php",
+      "startLine": 6,
+      "endLine": 6,
+      "startColumn": 4,
+      "endColumn": 19,
+      "signature": "use App\\Animals\\Dog;",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781425834411
+    },
+    "score": 82.18507261360307
+  },
+  {
+    "node": {
+      "id": "function:eb63fb53ce8517d1a08cfae09673f76d",
+      "kind": "function",
+      "name": "make_dog",
+      "qualifiedName": "make_dog",
+      "filePath": "service.php",
+      "language": "php",
+      "startLine": 10,
+      "endLine": 12,
+      "startColumn": 0,
+      "endColumn": 1,
+      "signature": "function make_dog(string $name): Dog",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781425834411
+    },
+    "score": 21.168143037706447
+  },
+  {
+    "node": {
+      "id": "constant:22e5b8365fea720a054966a88b11b011",
+      "kind": "constant",
+      "name": "MAX_DOGS",
+      "qualifiedName": "MAX_DOGS",
+      "filePath": "service.php",
+      "language": "php",
+      "startLine": 8,
+      "endLine": 8,
+      "startColumn": 6,
+      "endColumn": 19,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781425834411
+    },
+    "score": 14.192763200802855
+  },
+  {
+    "node": {
+      "id": "method:c484f0d64745dd94a4c1389f70b9a387",
+      "kind": "method",
+      "name": "speak",
+      "qualifiedName": "Dog::speak",
+      "filePath": "models.php",
+      "language": "php",
+      "startLine": 43,
+      "endLine": 45,
+      "startColumn": 4,
+      "endColumn": 5,
+      "signature": "function speak(): string",
+      "visibility": "public",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781425834412
+    },
+    "score": 10.975056925356427
+  },
+  {
+    "node": {
+      "id": "method:b96c23cd27b0f64577c947193fb4d105",
+      "kind": "method",
+      "name": "__construct",
+      "qualifiedName": "Dog::__construct",
+      "filePath": "models.php",
+      "language": "php",
+      "startLine": 38,
+      "endLine": 41,
+      "startColumn": 4,
+      "endColumn": 5,
+      "signature": "function __construct(string $name, string $breed)",
+      "visibility": "public",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781425834412
+    },
+    "score": 10.9164465225919
+  },
+  {
+    "node": {
+      "id": "field:d5360c0c02c7944d17fef5202df5516d",
+      "kind": "field",
+      "name": "breed",
+      "qualifiedName": "Dog::breed",
+      "filePath": "models.php",
+      "language": "php",
+      "startLine": 36,
+      "endLine": 36,
+      "startColumn": 18,
+      "endColumn": 29,
+      "visibility": "public",
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781425834412
+    },
+    "score": 4.041676268833106
+  },
+  {
+    "node": {
+      "id": "field:f4706414bc7866a86c5fef3d0e81938b",
+      "kind": "field",
+      "name": "name",
+      "qualifiedName": "Dog::name",
+      "filePath": "models.php",
+      "language": "php",
+      "startLine": 39,
+      "endLine": 39,
+      "startColumn": 8,
+      "endColumn": 27,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781425834412
+    },
+    "score": 4.041676268833106
+  },
+  {
+    "node": {
+      "id": "field:90f39a5231ced4e13dd3ab07c3360a69",
+      "kind": "field",
+      "name": "breed",
+      "qualifiedName": "Dog::breed",
+      "filePath": "models.php",
+      "language": "php",
+      "startLine": 40,
+      "endLine": 40,
+      "startColumn": 8,
+      "endColumn": 29,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781425834412
+    },
+    "score": 4.041676268833106
+  },
+  {
+    "node": {
+      "id": "variable:4b543445ba75889a550744cbe79f2bb4",
+      "kind": "variable",
+      "name": "d",
+      "qualifiedName": "describe::d",
+      "filePath": "service.php",
+      "language": "php",
+      "startLine": 15,
+      "endLine": 15,
+      "startColumn": 4,
+      "endColumn": 30,
+      "signature": "= Dog($name, \"lab\")",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781425834411
+    },
+    "score": 2.735203183839152
+  }
+]

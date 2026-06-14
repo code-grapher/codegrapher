@@ -38,6 +38,12 @@
       "url": "https://github.com/sinatra/sinatra.git",
       "sha": "599a007a779dc9940e49f34e9077220f4c209f4b",
       "lang": "ruby"
+    },
+    {
+      "name": "php-fig-log",
+      "url": "https://github.com/php-fig/log.git",
+      "sha": "f16e1d5863e37f8d8c2a01719f5b34baa2b714d3",
+      "lang": "php"
     }
   ]
 }

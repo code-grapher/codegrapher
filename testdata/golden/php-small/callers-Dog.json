@@ -1,0 +1,11 @@
+{
+  "symbol": "Dog",
+  "callers": [
+    {
+      "name": "service.php",
+      "kind": "file",
+      "filePath": "service.php",
+      "startLine": 1
+    }
+  ]
+}
