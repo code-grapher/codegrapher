@@ -1,9 +1,21 @@
 [
   {
+    "path": "src/badge.jsx",
+    "language": "jsx",
+    "nodeCount": 2,
+    "size": 84
+  },
+  {
     "path": "package.json",
     "language": "package.json",
     "nodeCount": 6,
     "size": 281
+  },
+  {
+    "path": "src/card.tsx",
+    "language": "tsx",
+    "nodeCount": 2,
+    "size": 208
   },
   {
     "path": "src/cache.ts",
