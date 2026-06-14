@@ -67,7 +67,13 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 	var tree *tsparse.Tree
 	switch lang {
 	case model.LangTypeScript, model.LangTSX, model.LangJavaScript, model.LangJSX:
-		p, err := tsparse.NewParser(tsparse.LangTypeScript)
+		// JSX-bearing files (.tsx/.jsx) need the tsx grammar; plain TS/JS use
+		// the typescript grammar (which handles `<T>` type assertions tsx can't).
+		tsLang := tsparse.LangTypeScript
+		if lang == model.LangTSX || lang == model.LangJSX {
+			tsLang = tsparse.LangTSX
+		}
+		p, err := tsparse.NewParser(tsLang)
 		if err == nil {
 			tree, err = p.Parse(content)
 			if err != nil {

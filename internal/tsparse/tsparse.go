@@ -22,6 +22,9 @@ type Language int
 const (
 	LangGo Language = iota
 	LangTypeScript
+	// LangTSX selects the tree-sitter `tsx` grammar, a superset of the
+	// typescript grammar that also parses JSX. Used for .tsx/.jsx files.
+	LangTSX
 )
 
 // Point is a (row, column) position in source text (0-indexed).
@@ -130,6 +133,8 @@ func NewParser(lang Language) (*Parser, error) {
 		return &Parser{lang: grammars.GoLanguage()}, nil
 	case LangTypeScript:
 		return &Parser{lang: grammars.TypescriptLanguage()}, nil
+	case LangTSX:
+		return &Parser{lang: grammars.TsxLanguage()}, nil
 	default:
 		return nil, fmt.Errorf("tsparse: unknown language %d", lang)
 	}
