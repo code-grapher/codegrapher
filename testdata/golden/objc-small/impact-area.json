@@ -1,0 +1,38 @@
+{
+  "symbol": "area",
+  "depth": 2,
+  "nodeCount": 5,
+  "edgeCount": 1,
+  "affected": [
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.h",
+      "startLine": 15
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.h",
+      "startLine": 21
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.m",
+      "startLine": 6
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.m",
+      "startLine": 15
+    },
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "shapes.m",
+      "startLine": 24
+    }
+  ]
+}

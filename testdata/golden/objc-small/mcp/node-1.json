@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "**4 definitions named \"area\"**\nReturning 4 in full \u2014 pick the one you need (no Read required).\n\n## area (method)\n\n**Location:** shapes.h:15\n**Signature:** `- (double)area`\n\n```objc\n15\t- (double)area;\n```\n\n---\n\n## area (method)\n\n**Location:** shapes.h:21\n**Signature:** `- (double)area`\n\n```objc\n21\t- (double)area;\n```\n\n---\n\n## area (method)\n\n**Location:** shapes.m:6\n**Signature:** `- (double)area`\n\n```objc\n6\t- (double)area {\n7\t    return 0.0;\n8\t}\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Called by \u2190** run (shapes.m:24)\n\n---\n\n## area (method)\n\n**Location:** shapes.m:15\n**Signature:** `- (double)area`\n\n```objc\n15\t- (double)area {\n16\t    return 3.14;\n17\t}\n```"
+      }
+    ]
+  }
+}

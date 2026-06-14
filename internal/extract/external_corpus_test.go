@@ -58,6 +58,8 @@ func (r externalRepo) repoLang() model.Language {
 		return model.LangElixir
 	case "haskell":
 		return model.LangHaskell
+	case "objc":
+		return model.LangObjC
 	default:
 		return model.LangPython
 	}
@@ -94,6 +96,8 @@ func (r externalRepo) sourceExts() []string {
 		return []string{".ex", ".exs"}
 	case model.LangHaskell:
 		return []string{".hs"}
+	case model.LangObjC:
+		return []string{".m", ".h"}
 	default:
 		return []string{".py", ".pyi"}
 	}

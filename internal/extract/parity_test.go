@@ -147,6 +147,12 @@ func TestParityHaskellSmall(t *testing.T) {
 	testParity(t, "haskell-small")
 }
 
+// TestParityObjcSmall runs our extractor over all files in testdata/fixtures/objc-small
+// and compares against the golden.
+func TestParityObjcSmall(t *testing.T) {
+	testParity(t, "objc-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 

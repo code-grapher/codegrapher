@@ -55,6 +55,8 @@ const (
 	LangElixir
 	// LangHaskell selects the tree-sitter `haskell` grammar.
 	LangHaskell
+	// LangObjC selects the tree-sitter `objc` grammar (a superset of `c`).
+	LangObjC
 )
 
 // Point is a (row, column) position in source text (0-indexed).
@@ -195,6 +197,8 @@ func NewParser(lang Language) (*Parser, error) {
 		return &Parser{lang: grammars.ElixirLanguage()}, nil
 	case LangHaskell:
 		return &Parser{lang: grammars.HaskellLanguage()}, nil
+	case LangObjC:
+		return &Parser{lang: grammars.ObjcLanguage()}, nil
 	default:
 		return nil, fmt.Errorf("tsparse: unknown language %d", lang)
 	}

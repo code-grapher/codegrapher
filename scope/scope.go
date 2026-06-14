@@ -102,6 +102,10 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 		// Haskell scope uses the fallback version this pass: no cabal/stack
 		// parsing yet. majorVersion("") → fallbackVersion ("v0").
 		ver = ""
+	case model.LangObjC:
+		// Objective-C scope uses the fallback version this pass: no build-system
+		// (Xcode/CocoaPods/SwiftPM) parsing. majorVersion("") → "v0".
+		ver = ""
 	}
 	return majorVersion(ver)
 }

@@ -1,0 +1,11 @@
+{
+  "symbol": "run",
+  "callees": [
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "shapes.m",
+      "startLine": 6
+    }
+  ]
+}

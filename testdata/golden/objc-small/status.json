@@ -1,0 +1,38 @@
+{
+  "initialized": true,
+  "version": "0.9.9",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/objc/testdata/fixtures/objc-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/objc/testdata/fixtures/objc-small/.codegraph",
+  "lastIndexed": "",
+  "fileCount": 2,
+  "nodeCount": 21,
+  "edgeCount": 27,
+  "dbSizeBytes": 167936,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "class": 4,
+    "field": 1,
+    "file": 2,
+    "function": 1,
+    "import": 2,
+    "interface": 1,
+    "method": 9,
+    "property": 1
+  },
+  "languages": [
+    "objc"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "0.9.9",
+    "builtWithExtractionVersion": 14,
+    "currentExtractionVersion": 14,
+    "reindexRecommended": false
+  }
+}

@@ -96,6 +96,7 @@ const (
 	LangLua         Language = "lua"
 	LangElixir      Language = "elixir"
 	LangHaskell     Language = "haskell"
+	LangObjC        Language = "objc"
 	LangGoMod       Language = "go.mod"
 	LangPackageJSON Language = "package.json"
 	LangNode        Language = "node"
