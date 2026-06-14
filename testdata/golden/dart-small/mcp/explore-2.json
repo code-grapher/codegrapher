@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 11,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "## Flow (call path among the symbols you queried)\n\n1. run (lib/app.dart:6)\n   \u2193 calls\n2. describe (lib/app.dart:3)\n   \u2193 calls\n3. label (lib/shapes.dart:6)\n\n> Full source for these symbols is below \u2014 the call flow among them, followed by their bodies.\n## Exploration: area label run\n\nFound 16 symbols across 2 files.\n\n### Blast radius \u2014 what depends on these (update/verify before editing)\n\n- `area` (lib/shapes.dart:4) \u2014 1 caller in `lib/app.dart`; \u26a0\ufe0f no covering tests found\n- `label` (lib/shapes.dart:6) \u2014 1 caller in `lib/app.dart`; \u26a0\ufe0f no covering tests found\n\n### Source Code\n\n> The code below is the **verbatim, current on-disk source** of these files \u2014 re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here.\n\n#### lib/shapes.dart \u2014 area(method), label(method), Circle(class), Shape(class), pi(constant), +6 more\n\n```dart\n1\timport 'dart:math';\n2\t\n3\tabstract class Shape {\n4\t  double area();\n5\t\n6\t  String label();\n7\t}\n8\t\n9\tmixin Logger {\n10\t  void log(String message) {}\n11\t}\n12\t\n13\tabstract class Base extends Shape {\n14\t  final String name;\n15\t\n16\t  Base(this.name);\n17\t\n18\t  @override\n19\t  String label() => name;\n20\t}\n21\t\n22\tclass Circle extends Base with Logger implements Shape {\n23\t  static const double pi = 3.14159;\n24\t\n25\t  final double radius;\n26\t\n27\t  Circle(String name, this.radius) : super(name);\n28\t\n29\t  Circle.unit() : radius = 1.0, super('unit');\n30\t\n31\t  @override\n32\t  double area() {\n33\t    log('area');\n34\t    return pi * radius * radius;\n35\t  }\n36\t}\n37\t\n38\tenum Size { small, medium, large }\n```\n\n#### lib/app.dart \u2014 run(method), App(class), describe(function)\n\n```dart\n1\timport 'shapes.dart';\n2\t\n3\tString describe(Shape s) => s.label();\n4\t\n5\tclass App {\n6\t  double run() {\n7\t    var c = Circle('unit', 1.0);\n8\t    var u = Circle.unit();\n9\t    var a = c.area();\n10\t    describe(c);\n11\t    return a;\n12\t  }\n13\t}\n```\n"
+      }
+    ]
+  }
+}

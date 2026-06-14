@@ -1,0 +1,11 @@
+{
+  "symbol": "area",
+  "callees": [
+    {
+      "name": "log",
+      "kind": "method",
+      "filePath": "lib/shapes.dart",
+      "startLine": 10
+    }
+  ]
+}

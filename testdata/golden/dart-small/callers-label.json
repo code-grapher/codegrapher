@@ -1,0 +1,11 @@
+{
+  "symbol": "label",
+  "callers": [
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "lib/app.dart",
+      "startLine": 3
+    }
+  ]
+}

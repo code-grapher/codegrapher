@@ -1,0 +1,50 @@
+{
+  "symbol": "Circle",
+  "depth": 2,
+  "nodeCount": 7,
+  "edgeCount": 6,
+  "affected": [
+    {
+      "name": "Circle",
+      "kind": "class",
+      "filePath": "lib/shapes.dart",
+      "startLine": 22
+    },
+    {
+      "name": "Circle",
+      "kind": "method",
+      "filePath": "lib/shapes.dart",
+      "startLine": 27
+    },
+    {
+      "name": "Circle.unit",
+      "kind": "method",
+      "filePath": "lib/shapes.dart",
+      "startLine": 29
+    },
+    {
+      "name": "area",
+      "kind": "method",
+      "filePath": "lib/shapes.dart",
+      "startLine": 32
+    },
+    {
+      "name": "pi",
+      "kind": "constant",
+      "filePath": "lib/shapes.dart",
+      "startLine": 23
+    },
+    {
+      "name": "radius",
+      "kind": "field",
+      "filePath": "lib/shapes.dart",
+      "startLine": 25
+    },
+    {
+      "name": "run",
+      "kind": "method",
+      "filePath": "lib/app.dart",
+      "startLine": 6
+    }
+  ]
+}

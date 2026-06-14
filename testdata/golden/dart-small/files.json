@@ -1,0 +1,14 @@
+[
+  {
+    "path": "lib/app.dart",
+    "language": "dart",
+    "nodeCount": 5,
+    "size": 211
+  },
+  {
+    "path": "lib/shapes.dart",
+    "language": "dart",
+    "nodeCount": 21,
+    "size": 589
+  }
+]

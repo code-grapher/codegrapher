@@ -1,0 +1,32 @@
+{
+  "symbol": "label",
+  "depth": 2,
+  "nodeCount": 4,
+  "edgeCount": 2,
+  "affected": [
+    {
+      "name": "describe",
+      "kind": "function",
+      "filePath": "lib/app.dart",
+      "startLine": 3
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "lib/shapes.dart",
+      "startLine": 6
+    },
+    {
+      "name": "label",
+      "kind": "method",
+      "filePath": "lib/shapes.dart",
+      "startLine": 19
+    },
+    {
+      "name": "run",
+      "kind": "method",
+      "filePath": "lib/app.dart",
+      "startLine": 6
+    }
+  ]
+}

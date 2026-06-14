@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": 9,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "**2 definitions named \"area\"**\nReturning 2 in full \u2014 pick the one you need (no Read required).\n\n## area (method)\n\n**Location:** lib/shapes.dart:4\n**Signature:** `double area()`\n\n```dart\n4\t  double area();\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Called by \u2190** run (lib/app.dart:6)\n\n---\n\n## area (method)\n\n**Location:** lib/shapes.dart:32\n**Signature:** `double area()`\n\n```dart\n32\t  double area() {\n```\n### Trail \u2014 codegraph_node any of these to follow it (no Read needed)\n**Calls \u2192** log (lib/shapes.dart:10)"
+      }
+    ]
+  }
+}

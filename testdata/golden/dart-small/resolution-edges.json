@@ -1,0 +1,12 @@
+[{"source":"class:1c87f23a1f1429a93d862e68df9573f9","target":"class:93625028b02a94af29e809277c6c5616","kind":"extends","provenance":null,"line":22,"col":21},
+{"source":"class:1c87f23a1f1429a93d862e68df9573f9","target":"class:b71a609bee3888cd43fee6e02d913c08","kind":"implements","provenance":null,"line":22,"col":31},
+{"source":"class:1c87f23a1f1429a93d862e68df9573f9","target":"class:ed1ca18fc4411b475ede1e27980c720a","kind":"implements","provenance":null,"line":22,"col":49},
+{"source":"class:93625028b02a94af29e809277c6c5616","target":"class:ed1ca18fc4411b475ede1e27980c720a","kind":"extends","provenance":null,"line":13,"col":28},
+{"source":"file:lib/app.dart","target":"file:lib/shapes.dart","kind":"imports","provenance":null,"line":1,"col":null},
+{"source":"file:lib/shapes.dart","target":"import:8bf0cd86c4e4f69aa5a3baa94277e184","kind":"imports","provenance":null,"line":1,"col":null},
+{"source":"function:26c2421d4dc52a72591afe2869d770ee","target":"method:3834fb1a7bfa9e92f6f0817ee04983b6","kind":"calls","provenance":null,"line":3,"col":28},
+{"source":"method:baf7be0ea66ad2087b71f67ba9ae7fd4","target":"class:1c87f23a1f1429a93d862e68df9573f9","kind":"instantiates","provenance":null,"line":7,"col":12},
+{"source":"method:baf7be0ea66ad2087b71f67ba9ae7fd4","target":"class:1c87f23a1f1429a93d862e68df9573f9","kind":"instantiates","provenance":null,"line":8,"col":12},
+{"source":"method:baf7be0ea66ad2087b71f67ba9ae7fd4","target":"function:26c2421d4dc52a72591afe2869d770ee","kind":"calls","provenance":null,"line":10,"col":4},
+{"source":"method:baf7be0ea66ad2087b71f67ba9ae7fd4","target":"method:4fcf6745c28137a467977597a96227cf","kind":"calls","provenance":null,"line":9,"col":12},
+{"source":"method:e6336a1388690231bc4fbc9be5338d98","target":"method:56d413cec25f952b064afc5b985088fd","kind":"calls","provenance":null,"line":33,"col":4}]
