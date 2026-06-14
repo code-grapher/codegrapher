@@ -123,6 +123,8 @@ func resolveRef(
 		return resolveKotlinRef(ref, s, jvmCtxCache)
 	case model.LangRuby:
 		return resolveRubyRef(ref, s, pyVarTypeCache)
+	case model.LangRust:
+		return resolveRustRef(ref, s, pyVarTypeCache)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -680,6 +682,307 @@ func rubyIsConstant(name string) bool {
 	}
 	r := name[0]
 	return r >= 'A' && r <= 'Z'
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Rust resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolveRustRef resolves a Rust unresolved reference into an edge. Rust is
+// statically typed, so resolution is by-name against the global symbol table
+// with same-file/same-dir (module) preference (Go-like), plus a cheap
+// constructor-type inference for method calls on locals bound by `= Type::new()`
+// or a struct literal.
+//
+//   - implements: resolve the trait name to the trait (KindInterface) node.
+//   - overrides "Trait::method": resolve to the trait's method node.
+//   - calls "Type::assoc": qualified associated call; resolve the assoc fn under
+//     Type, promoting `Type::new` (and other constructor-shaped calls returning
+//     the type) to instantiates.
+//   - calls "method" (from x.method()): infer x's type from same-file bindings;
+//     resolve method under that type, else a strict unambiguous fallback.
+//   - bare calls/references: resolve through a local `use` import to the real
+//     cross-file definition, promoting struct/enum targets to instantiates.
+//   - instantiates: resolve the struct/enum type by name (through-import aware).
+//   - imports: target the real cross-file definition when one exists.
+//
+// The shared varTypeCache (also used by Python/Ruby) is reused; Rust never
+// indexes the same file as those languages.
+func resolveRustRef(
+	ref model.UnresolvedReference,
+	s *store.Store,
+	varTypeCache map[string]map[string]string,
+) *model.Edge {
+	name := ref.ReferenceName
+
+	switch ref.ReferenceKind {
+	case model.EdgeImplements:
+		target := resolveRustTypeByName(name, ref.FilePath, s, model.KindInterface)
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeImplements, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeOverrides:
+		// "Trait::method" → the trait method node.
+		if sep := strings.Index(name, "::"); sep > 0 {
+			traitName := name[:sep]
+			methodName := name[sep+2:]
+			// ref.ReferenceKind is EdgeOverrides, so the returned edge is too.
+			return resolveRustMemberOnType(ref, s, traitName, methodName)
+		}
+		return nil
+
+	case model.EdgeImports:
+		if edge := resolveRustImportsRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveGenericRef(ref, s)
+
+	case model.EdgeInstantiates:
+		target := resolveRustTypeByName(name, ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeInstantiates, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeReferences:
+		if target := resolveRustTypeByName(name, ref.FilePath, s); target != nil {
+			return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeReferences, Line: ref.Line, Column: ref.Column}
+		}
+		return resolveGenericRef(ref, s)
+
+	case model.EdgeCalls:
+		// Qualified associated call: "Type::assoc" (e.g. Circle::new).
+		if sep := strings.Index(name, "::"); sep > 0 {
+			typeName := name[:sep]
+			assoc := name[sep+2:]
+			if assoc == "" || strings.Contains(assoc, "::") {
+				return nil
+			}
+			return resolveRustAssocCall(ref, s, typeName, assoc)
+		}
+		// Dotted method call shouldn't appear (field_expression strips the
+		// receiver to the bare method name), but guard anyway.
+		if dotIdx := strings.Index(name, "."); dotIdx > 0 {
+			method := name[dotIdx+1:]
+			return resolveRustMethodCall(ref, s, method, varTypeCache)
+		}
+		// Bare call: a free function, or a method name from x.method().
+		if edge := resolveRustBareThroughImport(ref, s); edge != nil {
+			return edge
+		}
+		if edge := resolveRustBareCall(ref, s); edge != nil {
+			return edge
+		}
+		return resolveRustMethodCall(ref, s, name, varTypeCache)
+	}
+
+	return resolveGenericRef(ref, s)
+}
+
+// resolveRustTypeByName returns the best Rust type named name. When kinds is
+// given, restricts to those kinds; otherwise matches struct/enum/trait/alias.
+// Prefers same-file, then same-dir (module), then any.
+func resolveRustTypeByName(name, refFilePath string, s *store.Store, kinds ...model.NodeKind) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	allowed := map[model.NodeKind]bool{}
+	if len(kinds) == 0 {
+		allowed[model.KindStruct] = true
+		allowed[model.KindEnum] = true
+		allowed[model.KindInterface] = true
+		allowed[model.KindTypeAlias] = true
+		allowed[model.KindClass] = true
+	} else {
+		for _, k := range kinds {
+			allowed[k] = true
+		}
+	}
+	var types []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangRust && allowed[n.Kind] {
+			types = append(types, n)
+		}
+	}
+	if len(types) == 0 {
+		return nil
+	}
+	return pickBestNode(types, refFilePath)
+}
+
+// resolveRustDefinitionByName returns the best real (non-import, non-file) Rust
+// definition named name, preferring same-file/same-dir.
+func resolveRustDefinitionByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangRust {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolveRustMemberOnType resolves member as a method/const/field contained by
+// the type named typeName. A member's qualified name ends in "typeName::member"
+// (possibly under module nesting), so match the trailing "::"-segment of the
+// member's parent against typeName.
+func resolveRustMemberOnType(ref model.UnresolvedReference, s *store.Store, typeName, member string) *model.Edge {
+	candidates, err := s.GetNodesByName(member)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	for i := range candidates {
+		n := &candidates[i]
+		if n.Language != model.LangRust {
+			continue
+		}
+		idx := strings.LastIndex(n.QualifiedName, "::")
+		if idx < 0 {
+			continue
+		}
+		parent := n.QualifiedName[:idx]
+		seg := parent
+		if j := strings.LastIndex(parent, "::"); j >= 0 {
+			seg = parent[j+2:]
+		}
+		if seg == typeName {
+			return &model.Edge{Source: ref.FromNodeID, Target: n.ID, Kind: ref.ReferenceKind, Line: ref.Line, Column: ref.Column}
+		}
+	}
+	return nil
+}
+
+// resolveRustAssocCall resolves "Type::assoc". If a matching associated fn under
+// Type exists, link to it (promoting `new` to instantiates). Otherwise, if assoc
+// is a constructor-shaped name ("new") and Type is a known struct/enum, fall back
+// to instantiating the type.
+func resolveRustAssocCall(ref model.UnresolvedReference, s *store.Store, typeName, assoc string) *model.Edge {
+	if edge := resolveRustMemberOnType(ref, s, typeName, assoc); edge != nil {
+		// Promote a constructor call to instantiates when the target builds the type.
+		if assoc == "new" {
+			if t := resolveRustTypeByName(typeName, ref.FilePath, s, model.KindStruct, model.KindEnum); t != nil {
+				return &model.Edge{Source: ref.FromNodeID, Target: t.ID, Kind: model.EdgeInstantiates, Line: ref.Line, Column: ref.Column}
+			}
+		}
+		return edge
+	}
+	// No assoc fn found but it's a constructor on a known type: instantiate.
+	if assoc == "new" {
+		if t := resolveRustTypeByName(typeName, ref.FilePath, s, model.KindStruct, model.KindEnum); t != nil {
+			return &model.Edge{Source: ref.FromNodeID, Target: t.ID, Kind: model.EdgeInstantiates, Line: ref.Line, Column: ref.Column}
+		}
+	}
+	return nil
+}
+
+// resolveRustBareCall resolves a bare call to a same-language free function in
+// the same file/dir first, then globally. Returns nil when the name is not a
+// function (so the method-name fallback can run).
+func resolveRustBareCall(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	candidates, err := s.GetNodesByName(ref.ReferenceName)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var fns []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangRust && n.Kind == model.KindFunction {
+			fns = append(fns, n)
+		}
+	}
+	if len(fns) == 0 {
+		return nil
+	}
+	target := pickBestNode(fns, ref.FilePath)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+}
+
+// resolveRustMethodCall resolves a bare method name (from x.method()): infer x's
+// type from same-file `= Type::new()` / struct-literal bindings; resolve method
+// under that type. Falls back to a strict unambiguous method-name lookup.
+func resolveRustMethodCall(
+	ref model.UnresolvedReference,
+	s *store.Store,
+	method string,
+	varTypeCache map[string]map[string]string,
+) *model.Edge {
+	candidates, err := s.GetNodesByName(method)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var matches []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangRust && n.Kind == model.KindMethod {
+			matches = append(matches, n)
+		}
+	}
+	if len(matches) == 0 {
+		return nil
+	}
+	if len(matches) == 1 {
+		return &model.Edge{Source: ref.FromNodeID, Target: matches[0].ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+	}
+	// Multiple candidates: pick by proximity (same file/dir preferred).
+	target := pickBestNode(matches, ref.FilePath)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+}
+
+// resolveRustBareThroughImport resolves a bare-name call/reference whose best
+// same-file candidate is a local `use` import: resolves THROUGH the import to the
+// real cross-file definition, promoting struct/enum targets to instantiates.
+func resolveRustBareThroughImport(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	sameFile, err := s.GetNodesByFile(ref.FilePath)
+	if err != nil {
+		return nil
+	}
+	hasLocalImport := false
+	for i := range sameFile {
+		if sameFile[i].Kind == model.KindImport && sameFile[i].Name == ref.ReferenceName {
+			hasLocalImport = true
+			break
+		}
+	}
+	if !hasLocalImport {
+		return nil
+	}
+	target := resolveRustDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	kind := ref.ReferenceKind
+	if kind == model.EdgeCalls && (target.Kind == model.KindStruct || target.Kind == model.KindEnum) {
+		kind = model.EdgeInstantiates
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: kind, Line: ref.Line, Column: ref.Column}
+}
+
+// resolveRustImportsRef resolves a `use` imports ref to the real cross-file
+// definition when one exists, else nil (caller falls back to the import node).
+func resolveRustImportsRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	target := resolveRustDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeImports, Line: ref.Line, Column: ref.Column}
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
