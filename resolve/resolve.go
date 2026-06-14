@@ -37,11 +37,14 @@ func Resolve(s *store.Store, projectRoot string) (Stats, error) {
 	// Per-file Python var→class inference map (built once per file, lazily).
 	pyVarTypeCache := make(map[string]map[string]string) // filePath → varName → className
 
+	// Per-file JVM (Java/Kotlin) resolution context cache (built once per file).
+	jvmCtxCache := make(map[string]*jvmFileContext)
+
 	var edges []model.Edge
 	stats := Stats{}
 
 	for _, ref := range refs {
-		edge := resolveRef(ref, s, projectRoot, goModulePath, importCache, pyVarTypeCache)
+		edge := resolveRef(ref, s, projectRoot, goModulePath, importCache, pyVarTypeCache, jvmCtxCache)
 		if edge != nil {
 			edges = append(edges, *edge)
 			stats.Resolved++
@@ -93,6 +96,7 @@ func resolveRef(
 	goModulePath string,
 	importCache map[string][]importMapping,
 	pyVarTypeCache map[string]map[string]string,
+	jvmCtxCache map[string]*jvmFileContext,
 ) *model.Edge {
 	// Fill in missing FilePath / Language from the from-node.
 	if ref.FilePath == "" || ref.Language == "" || ref.Language == model.LangUnknown {
@@ -111,6 +115,8 @@ func resolveRef(
 		return resolveGoRef(ref, s, projectRoot, goModulePath, importCache)
 	case model.LangPython:
 		return resolvePythonRef(ref, s, pyVarTypeCache)
+	case model.LangJava:
+		return resolveJVMRef(ref, s, jvmCtxCache)
 	default:
 		return resolveGenericRef(ref, s)
 	}
