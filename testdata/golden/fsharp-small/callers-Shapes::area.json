@@ -1,0 +1,11 @@
+{
+  "symbol": "Shapes::area",
+  "callers": [
+    {
+      "name": "Area",
+      "kind": "method",
+      "filePath": "shapes.fs",
+      "startLine": 7
+    }
+  ]
+}

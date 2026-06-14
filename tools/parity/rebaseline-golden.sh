@@ -119,6 +119,7 @@ capture haskell-small "circle" "area" "label" "run" "Circle" "Shape" "Shape.Circ
 capture objc-small "circle" "area" "label" "run" "Circle" "Shape" "Drawable"
 capture perl-small "dog" "speak" "new" "Dog" "Animal" "Dog::speak" "Animal::new"
 capture erlang-small "shape" "area" "run" "shape" "app" "circle" "shape::area"
+capture fsharp-small "circle" "Radius" "run" "Shapes" "App" "Circle" "Shapes::area"
 
 echo ""
 echo "=== MCP goldens ==="

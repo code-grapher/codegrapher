@@ -1,0 +1,14 @@
+[
+  {
+    "path": "app.fs",
+    "language": "fsharp",
+    "nodeCount": 5,
+    "size": 75
+  },
+  {
+    "path": "shapes.fs",
+    "language": "fsharp",
+    "nodeCount": 7,
+    "size": 149
+  }
+]

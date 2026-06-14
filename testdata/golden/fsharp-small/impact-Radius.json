@@ -1,0 +1,14 @@
+{
+  "symbol": "Radius",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "Radius",
+      "kind": "property",
+      "filePath": "shapes.fs",
+      "startLine": 6
+    }
+  ]
+}

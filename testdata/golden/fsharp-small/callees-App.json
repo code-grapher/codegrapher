@@ -1,0 +1,11 @@
+{
+  "symbol": "App",
+  "callees": [
+    {
+      "name": "Shapes",
+      "kind": "module",
+      "filePath": "shapes.fs",
+      "startLine": 1
+    }
+  ]
+}

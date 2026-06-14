@@ -1,0 +1,38 @@
+{
+  "symbol": "Circle",
+  "depth": 2,
+  "nodeCount": 5,
+  "edgeCount": 4,
+  "affected": [
+    {
+      "name": "Area",
+      "kind": "method",
+      "filePath": "shapes.fs",
+      "startLine": 7
+    },
+    {
+      "name": "Circle",
+      "kind": "class",
+      "filePath": "shapes.fs",
+      "startLine": 5
+    },
+    {
+      "name": "Radius",
+      "kind": "property",
+      "filePath": "shapes.fs",
+      "startLine": 6
+    },
+    {
+      "name": "c",
+      "kind": "variable",
+      "filePath": "app.fs",
+      "startLine": 6
+    },
+    {
+      "name": "radius",
+      "kind": "field",
+      "filePath": "shapes.fs",
+      "startLine": 5
+    }
+  ]
+}

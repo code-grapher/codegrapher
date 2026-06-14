@@ -116,6 +116,12 @@
       "url": "https://github.com/jcomellas/getopt.git",
       "sha": "1c963cecd75cb5f7b37f28737abb120e61390c62",
       "lang": "erlang"
+    },
+    {
+      "name": "argu",
+      "url": "https://github.com/fsprojects/Argu.git",
+      "sha": "8cf83db2c951a93eee7d5f793ecdce6620306311",
+      "lang": "fsharp"
     }
   ]
 }

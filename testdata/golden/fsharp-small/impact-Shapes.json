@@ -1,0 +1,68 @@
+{
+  "symbol": "Shapes",
+  "depth": 2,
+  "nodeCount": 10,
+  "edgeCount": 9,
+  "affected": [
+    {
+      "name": "App",
+      "kind": "module",
+      "filePath": "app.fs",
+      "startLine": 1
+    },
+    {
+      "name": "Area",
+      "kind": "method",
+      "filePath": "shapes.fs",
+      "startLine": 7
+    },
+    {
+      "name": "Circle",
+      "kind": "class",
+      "filePath": "shapes.fs",
+      "startLine": 5
+    },
+    {
+      "name": "Radius",
+      "kind": "property",
+      "filePath": "shapes.fs",
+      "startLine": 6
+    },
+    {
+      "name": "Shapes",
+      "kind": "import",
+      "filePath": "app.fs",
+      "startLine": 3
+    },
+    {
+      "name": "Shapes",
+      "kind": "module",
+      "filePath": "shapes.fs",
+      "startLine": 1
+    },
+    {
+      "name": "area",
+      "kind": "function",
+      "filePath": "shapes.fs",
+      "startLine": 3
+    },
+    {
+      "name": "c",
+      "kind": "variable",
+      "filePath": "app.fs",
+      "startLine": 6
+    },
+    {
+      "name": "radius",
+      "kind": "field",
+      "filePath": "shapes.fs",
+      "startLine": 5
+    },
+    {
+      "name": "run",
+      "kind": "function",
+      "filePath": "app.fs",
+      "startLine": 5
+    }
+  ]
+}

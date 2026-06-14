@@ -1,0 +1,10 @@
+[{"source":"class:c55278cb98cfa1fba08f3b3e01a50c61","target":"field:4184b38534407c06f749e5a7c7ab5a79","kind":"contains"},
+{"source":"class:c55278cb98cfa1fba08f3b3e01a50c61","target":"method:550613c4b9f7bba1bdd1f0e0fd935596","kind":"contains"},
+{"source":"class:c55278cb98cfa1fba08f3b3e01a50c61","target":"property:aaee1ff92a05d7e78c1028535856ae61","kind":"contains"},
+{"source":"file:app.fs","target":"module:dc8a9f8d57e7ccea523aab3e730c8735","kind":"contains"},
+{"source":"file:shapes.fs","target":"module:1ae91097dd5e5dfd5e1c16a7b3e9da97","kind":"contains"},
+{"source":"function:10c239b1317a3ddfb258dc6930fb79bd","target":"variable:55e406214c7950f5164dbd0a509f4eda","kind":"contains"},
+{"source":"module:1ae91097dd5e5dfd5e1c16a7b3e9da97","target":"class:c55278cb98cfa1fba08f3b3e01a50c61","kind":"contains"},
+{"source":"module:1ae91097dd5e5dfd5e1c16a7b3e9da97","target":"function:0a358df7dc274dfa5c11d839fe6616cf","kind":"contains"},
+{"source":"module:dc8a9f8d57e7ccea523aab3e730c8735","target":"function:10c239b1317a3ddfb258dc6930fb79bd","kind":"contains"},
+{"source":"module:dc8a9f8d57e7ccea523aab3e730c8735","target":"import:b68e9aee90ae6f0274609c9971a385d3","kind":"contains"}]

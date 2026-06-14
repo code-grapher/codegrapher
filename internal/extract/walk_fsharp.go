@@ -545,11 +545,21 @@ func (e *extractor) extractFSharpApplication(node *tsparse.Node) {
 			Column:        int(node.StartPoint().Column),
 		})
 	}
-	// Walk arguments (skip the callee at index 0) for nested calls.
-	for i := 1; i < node.NamedChildCount(); i++ {
-		if c := node.NamedChild(i); c != nil {
-			e.visitNodeFSharp(c)
+	// Walk children for nested calls. When the callee (child 0) is itself an
+	// application_expression (curried application `f a b`), descend into it so
+	// the real callee is seen; a plain long_identifier_or_op callee is skipped.
+	for i := 0; i < node.NamedChildCount(); i++ {
+		c := node.NamedChild(i)
+		if c == nil {
+			continue
 		}
+		if i == 0 {
+			switch c.Kind() {
+			case "long_identifier_or_op", "long_identifier", "identifier":
+				continue // already recorded as the callee
+			}
+		}
+		e.visitNodeFSharp(c)
 	}
 }
 

@@ -1,0 +1,113 @@
+[
+  {
+    "node": {
+      "id": "class:c55278cb98cfa1fba08f3b3e01a50c61",
+      "kind": "class",
+      "name": "Circle",
+      "qualifiedName": "Shapes::Circle",
+      "filePath": "shapes.fs",
+      "language": "fsharp",
+      "startLine": 5,
+      "endLine": 7,
+      "startColumn": 5,
+      "endColumn": 53,
+      "signature": "type Circle",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781435456917
+    },
+    "score": 88.65665821005304
+  },
+  {
+    "node": {
+      "id": "method:550613c4b9f7bba1bdd1f0e0fd935596",
+      "kind": "method",
+      "name": "Area",
+      "qualifiedName": "Shapes::Circle::Area",
+      "filePath": "shapes.fs",
+      "language": "fsharp",
+      "startLine": 7,
+      "endLine": 7,
+      "startColumn": 4,
+      "endColumn": 53,
+      "signature": "member this.Area() = area this.Radius this.Radius",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781435456917
+    },
+    "score": 10.500837376885237
+  },
+  {
+    "node": {
+      "id": "field:4184b38534407c06f749e5a7c7ab5a79",
+      "kind": "field",
+      "name": "radius",
+      "qualifiedName": "Shapes::Circle::radius",
+      "filePath": "shapes.fs",
+      "language": "fsharp",
+      "startLine": 5,
+      "endLine": 5,
+      "startColumn": 12,
+      "endColumn": 25,
+      "signature": "radius: float",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "float",
+      "updatedAt": 1781435456917
+    },
+    "score": 3.553488678024373
+  },
+  {
+    "node": {
+      "id": "property:aaee1ff92a05d7e78c1028535856ae61",
+      "kind": "property",
+      "name": "Radius",
+      "qualifiedName": "Shapes::Circle::Radius",
+      "filePath": "shapes.fs",
+      "language": "fsharp",
+      "startLine": 6,
+      "endLine": 6,
+      "startColumn": 4,
+      "endColumn": 28,
+      "signature": "member _.Radius = radius",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781435456917
+    },
+    "score": 3.5439579418594125
+  },
+  {
+    "node": {
+      "id": "variable:55e406214c7950f5164dbd0a509f4eda",
+      "kind": "variable",
+      "name": "c",
+      "qualifiedName": "App::run::c",
+      "filePath": "app.fs",
+      "language": "fsharp",
+      "startLine": 6,
+      "endLine": 7,
+      "startColumn": 4,
+      "endColumn": 12,
+      "signature": "let c = Circle(2.0)",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781435456916
+    },
+    "score": 2.391250482952091
+  }
+]

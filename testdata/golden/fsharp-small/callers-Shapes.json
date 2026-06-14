@@ -1,0 +1,11 @@
+{
+  "symbol": "Shapes",
+  "callers": [
+    {
+      "name": "App",
+      "kind": "module",
+      "filePath": "app.fs",
+      "startLine": 1
+    }
+  ]
+}
