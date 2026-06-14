@@ -44,6 +44,8 @@ func DetectLanguage(filePath string) model.Language {
 		return model.LangKotlin
 	case ".rb":
 		return model.LangRuby
+	case ".rs":
+		return model.LangRust
 	// File-level-only languages: tracked in the files table with zero
 	// symbol nodes, matching isFileLevelOnlyLanguage() in grammars.ts.
 	case ".yml", ".yaml":

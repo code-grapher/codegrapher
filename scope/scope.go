@@ -66,6 +66,10 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 		// Ruby scope uses the fallback version this pass: no Gemfile /
 		// .ruby-version parsing yet. majorVersion("") → fallbackVersion ("v0").
 		ver = ""
+	case model.LangRust:
+		// Rust scope uses the fallback version this pass: no Cargo.toml edition
+		// parsing yet. majorVersion("") → fallbackVersion ("v0").
+		ver = ""
 	}
 	return majorVersion(ver)
 }
