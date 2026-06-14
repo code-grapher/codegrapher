@@ -137,6 +137,8 @@ func resolveRef(
 		return resolveCPPRef(ref, s)
 	case model.LangDart:
 		return resolveDartRef(ref, s)
+	case model.LangElixir:
+		return resolveElixirRef(ref, s)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -2770,6 +2772,236 @@ var cppBuiltins = map[string]bool{
 	"make_unique": true, "move": true, "size": true, "push_back": true,
 	"printf": true, "malloc": true, "free": true, "memcpy": true, "memset": true,
 	"sizeof": true, "nullptr": true, "true": true, "false": true,
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Elixir resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolveElixirRef resolves an Elixir unresolved reference into an edge.
+//
+//   - implements (`defimpl Proto, for: Type`): resolve Proto to the protocol
+//     (KindInterface) definition by name.
+//   - imports (alias/import/require/use): resolve through to the real module
+//     definition (KindModule/KindInterface) named like the imported module's
+//     last segment; otherwise fall back to the local import node.
+//   - calls: `Module.func` resolves func on the named module (expanding a local
+//     alias first); a bare `func` resolves to a same-module or imported function,
+//     resolving THROUGH a local import shadow to the real cross-file definition.
+func resolveElixirRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	name := ref.ReferenceName
+
+	switch ref.ReferenceKind {
+	case model.EdgeImplements:
+		target := resolveElixirModuleByName(elixirLastSeg(name), ref.FilePath, s, model.KindInterface)
+		if target == nil {
+			target = resolveElixirDefinitionByName(elixirLastSeg(name), ref.FilePath, s)
+		}
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeImplements, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeImports:
+		if edge := resolveElixirImportsRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveGenericRef(ref, s)
+
+	case model.EdgeCalls:
+		if dotIdx := strings.LastIndex(name, "."); dotIdx > 0 {
+			recv := name[:dotIdx]
+			fn := name[dotIdx+1:]
+			if fn == "" || strings.ContainsAny(fn, "./") {
+				return nil
+			}
+			// Expand a local alias for the receiver to its real module name.
+			module := elixirExpandAlias(recv, ref.FilePath, s)
+			if edge := resolveElixirFunctionOnModule(ref, s, module, fn); edge != nil {
+				return edge
+			}
+			// Fall back to a unique-name function lookup.
+			return resolveElixirDottedFallback(ref, s, fn)
+		}
+		// Bare call: resolve through a local import shadow, else by name.
+		if edge := resolveElixirBareThroughImport(ref, s); edge != nil {
+			return edge
+		}
+		target := resolveElixirDefinitionByName(name, ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+	}
+
+	return resolveGenericRef(ref, s)
+}
+
+// elixirLastSeg returns the final dotted segment of a module name (A.B.C → C).
+func elixirLastSeg(name string) string {
+	if idx := strings.LastIndex(name, "."); idx >= 0 {
+		return name[idx+1:]
+	}
+	return name
+}
+
+// resolveElixirDefinitionByName returns the best real (non-import, non-file)
+// Elixir definition node named name, preferring same-file/same-dir.
+func resolveElixirDefinitionByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangElixir {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolveElixirModuleByName returns the best Elixir node named name of the given
+// kind (e.g. KindModule or KindInterface), preferring same-file/same-dir.
+func resolveElixirModuleByName(name, refFilePath string, s *store.Store, kind model.NodeKind) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangElixir && n.Kind == kind {
+			defs = append(defs, n)
+		}
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// elixirExpandAlias expands a (possibly aliased) module receiver name to its
+// real module name. A local alias import node binds a short name → full module
+// (stored as the import node's QualifiedName). The returned module name's last
+// segment is used for definition matching.
+func elixirExpandAlias(recv, refFilePath string, s *store.Store) string {
+	sameFile, err := s.GetNodesByFile(refFilePath)
+	if err == nil {
+		short := elixirLastSeg(recv)
+		for i := range sameFile {
+			n := &sameFile[i]
+			if n.Kind == model.KindImport && n.Name == short && n.QualifiedName != "" {
+				return n.QualifiedName
+			}
+		}
+	}
+	return recv
+}
+
+// resolveElixirFunctionOnModule resolves fn as a function/method contained by the
+// module named like the last segment of module. Matches a candidate whose
+// qualified name's parent segment equals the module's last segment.
+func resolveElixirFunctionOnModule(ref model.UnresolvedReference, s *store.Store, module, fn string) *model.Edge {
+	candidates, err := s.GetNodesByName(fn)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	modSeg := elixirLastSeg(module)
+	for i := range candidates {
+		n := &candidates[i]
+		if n.Language != model.LangElixir {
+			continue
+		}
+		if n.Kind != model.KindFunction && n.Kind != model.KindMethod {
+			continue
+		}
+		if elixirQualParent(n.QualifiedName) == modSeg {
+			return &model.Edge{Source: ref.FromNodeID, Target: n.ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+		}
+	}
+	return nil
+}
+
+// elixirQualParent returns the parent segment of a "::"-joined qualified name
+// (Geometry.Circle::area → "Geometry.Circle", reduced to its last dotted segment
+// "Circle"). Returns "" when there is no parent.
+func elixirQualParent(qn string) string {
+	idx := strings.LastIndex(qn, "::")
+	if idx < 0 {
+		return ""
+	}
+	parent := qn[:idx]
+	// The parent may itself be "::"-nested; take its trailing segment.
+	if j := strings.LastIndex(parent, "::"); j >= 0 {
+		parent = parent[j+2:]
+	}
+	return elixirLastSeg(parent)
+}
+
+// resolveElixirDottedFallback resolves a dotted call whose module didn't match a
+// contained function: emit an edge only when exactly one same-language
+// function/method named fn exists.
+func resolveElixirDottedFallback(ref model.UnresolvedReference, s *store.Store, fn string) *model.Edge {
+	candidates, err := s.GetNodesByName(fn)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var matches []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangElixir && (n.Kind == model.KindFunction || n.Kind == model.KindMethod) {
+			matches = append(matches, n)
+		}
+	}
+	if len(matches) != 1 {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: matches[0].ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+}
+
+// resolveElixirBareThroughImport resolves a bare-name call whose best same-file
+// candidate is a local import: it resolves THROUGH the import to the real
+// cross-file definition. Returns nil when no local import shadow exists.
+func resolveElixirBareThroughImport(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	sameFile, err := s.GetNodesByFile(ref.FilePath)
+	if err != nil {
+		return nil
+	}
+	hasLocalImport := false
+	for i := range sameFile {
+		if sameFile[i].Kind == model.KindImport && sameFile[i].Name == ref.ReferenceName {
+			hasLocalImport = true
+			break
+		}
+	}
+	if !hasLocalImport {
+		return nil
+	}
+	target := resolveElixirDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+}
+
+// resolveElixirImportsRef resolves an `imports` ref (alias/import/require/use) to
+// the real cross-file module/interface definition named like the imported
+// module's last segment, when one exists. Returns nil otherwise.
+func resolveElixirImportsRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	target := resolveElixirModuleByName(elixirLastSeg(ref.ReferenceName), ref.FilePath, s, model.KindModule)
+	if target == nil {
+		target = resolveElixirModuleByName(elixirLastSeg(ref.ReferenceName), ref.FilePath, s, model.KindInterface)
+	}
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeImports, Line: ref.Line, Column: ref.Column}
 }
 
 func resolveGenericRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
