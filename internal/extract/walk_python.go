@@ -303,7 +303,6 @@ func (e *extractor) extractPyAssignment(node *tsparse.Node) {
 			kind = model.KindVariable
 		}
 		e.createNode(kind, name, node, nodeExtra{signature: pyAssignSignature(right)})
-		e.recordPyVarType(name, right)
 
 	case "attribute":
 		// self.<attr> = ... inside a method → field on the enclosing class.
@@ -360,22 +359,6 @@ func (e *extractor) nearestPyClassID() string {
 		}
 	}
 	return ""
-}
-
-// recordPyVarType records localName = ClassName(...) hints for the resolver.
-// consumed in Phase 3 resolver.
-func (e *extractor) recordPyVarType(name string, right *tsparse.Node) {
-	if right == nil || right.Kind() != "call" {
-		return
-	}
-	fn := right.ChildByFieldName("function")
-	if fn == nil || fn.Kind() != "identifier" {
-		return
-	}
-	if e.pyVarTypes == nil {
-		e.pyVarTypes = make(map[string]string)
-	}
-	e.pyVarTypes[name] = fn.Text()
 }
 
 // extractPyCall handles a call node: emits an EdgeCalls reference from the top

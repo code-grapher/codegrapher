@@ -34,11 +34,14 @@ func Resolve(s *store.Store, projectRoot string) (Stats, error) {
 	// Build a per-file import-mapping cache (populated lazily from the store).
 	importCache := make(map[string][]importMapping) // filePath → mappings
 
+	// Per-file Python var→class inference map (built once per file, lazily).
+	pyVarTypeCache := make(map[string]map[string]string) // filePath → varName → className
+
 	var edges []model.Edge
 	stats := Stats{}
 
 	for _, ref := range refs {
-		edge := resolveRef(ref, s, projectRoot, goModulePath, importCache)
+		edge := resolveRef(ref, s, projectRoot, goModulePath, importCache, pyVarTypeCache)
 		if edge != nil {
 			edges = append(edges, *edge)
 			stats.Resolved++
@@ -89,6 +92,7 @@ func resolveRef(
 	projectRoot string,
 	goModulePath string,
 	importCache map[string][]importMapping,
+	pyVarTypeCache map[string]map[string]string,
 ) *model.Edge {
 	// Fill in missing FilePath / Language from the from-node.
 	if ref.FilePath == "" || ref.Language == "" || ref.Language == model.LangUnknown {
@@ -105,9 +109,178 @@ func resolveRef(
 	switch ref.Language {
 	case model.LangGo:
 		return resolveGoRef(ref, s, projectRoot, goModulePath, importCache)
+	case model.LangPython:
+		return resolvePythonRef(ref, s, pyVarTypeCache)
 	default:
 		return resolveGenericRef(ref, s)
 	}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Python resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolvePythonRef resolves a Python unresolved reference into an edge.
+//
+//   - dotted calls "recv.attr": infer recv's class from constructor assignments
+//     in the same file (varTypeCache). When the class is known, resolve attr as a
+//     method/field of that class. Otherwise fall back to a strict method-name
+//     lookup that only resolves when the candidate is unambiguous.
+//   - bare names, extends, imports, decorates: delegate to the generic name
+//     resolver (same name-based lookup + calls→instantiates promotion).
+func resolvePythonRef(
+	ref model.UnresolvedReference,
+	s *store.Store,
+	varTypeCache map[string]map[string]string,
+) *model.Edge {
+	name := ref.ReferenceName
+
+	if ref.ReferenceKind == model.EdgeCalls {
+		if dotIdx := strings.Index(name, "."); dotIdx > 0 {
+			recv := name[:dotIdx]
+			attr := name[dotIdx+1:]
+			if attr == "" || strings.ContainsAny(attr, "./") {
+				return nil
+			}
+
+			// (a) Type inference: recv's class from same-file constructor assigns.
+			if className := pyInferType(ref.FilePath, recv, s, varTypeCache); className != "" {
+				if edge := resolvePyAttrOnClass(ref, s, className, attr); edge != nil {
+					return edge
+				}
+				// Type known but no matching member → leave unresolved (don't guess).
+				return nil
+			}
+
+			// (b) Unknown receiver: strict method-name lookup (unambiguous only).
+			return resolvePyDottedFallback(ref, s, attr)
+		}
+	}
+
+	// Bare names and extends/imports/decorates: generic name resolution.
+	return resolveGenericRef(ref, s)
+}
+
+// resolvePyAttrOnClass resolves attr as a method/field contained by the class
+// named className: it finds candidate nodes named attr whose qualified name is
+// prefixed with "className::".
+func resolvePyAttrOnClass(ref model.UnresolvedReference, s *store.Store, className, attr string) *model.Edge {
+	candidates, err := s.GetNodesByName(attr)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	prefix := className + "::"
+	for i := range candidates {
+		n := &candidates[i]
+		if n.Language != model.LangPython {
+			continue
+		}
+		if strings.HasPrefix(n.QualifiedName, prefix) {
+			return &model.Edge{
+				Source: ref.FromNodeID,
+				Target: n.ID,
+				Kind:   ref.ReferenceKind,
+				Line:   ref.Line,
+				Column: ref.Column,
+			}
+		}
+	}
+	return nil
+}
+
+// resolvePyDottedFallback resolves a dotted call whose receiver type is unknown.
+// It is conservative: it only emits an edge when exactly one same-language
+// method/function named attr exists. Anything ambiguous stays unresolved.
+func resolvePyDottedFallback(ref model.UnresolvedReference, s *store.Store, attr string) *model.Edge {
+	candidates, err := s.GetNodesByName(attr)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var matches []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangPython && (n.Kind == model.KindMethod || n.Kind == model.KindFunction) {
+			matches = append(matches, n)
+		}
+	}
+	if len(matches) != 1 {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: matches[0].ID,
+		Kind:   ref.ReferenceKind,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// pyInferType returns the class name bound to local variable varName in the file
+// at filePath, or "" if unknown. The per-file binding map is built once (cached)
+// from the file's own variable/constant node signatures of the form
+// "= ClassName(...)" (ClassName may be dotted; the last segment is used).
+func pyInferType(
+	filePath, varName string,
+	s *store.Store,
+	cache map[string]map[string]string,
+) string {
+	m, ok := cache[filePath]
+	if !ok {
+		m = buildPyVarTypeMap(filePath, s)
+		cache[filePath] = m
+	}
+	return m[varName]
+}
+
+// buildPyVarTypeMap reads the variable/constant nodes of one file and derives a
+// varName→className map from constructor-assignment signatures. Building the
+// whole file's map up front makes resolution order-independent.
+func buildPyVarTypeMap(filePath string, s *store.Store) map[string]string {
+	m := make(map[string]string)
+	nodes, err := s.GetNodesByFile(filePath)
+	if err != nil {
+		return m
+	}
+	for i := range nodes {
+		n := &nodes[i]
+		if n.Language != model.LangPython {
+			continue
+		}
+		if n.Kind != model.KindVariable && n.Kind != model.KindConstant {
+			continue
+		}
+		if className := pyConstructorClass(n.Signature); className != "" {
+			m[n.Name] = className
+		}
+	}
+	return m
+}
+
+// pyConstructorClass parses a signature of the form "= ClassName(...)" and
+// returns ClassName (dotted paths reduced to the last segment), or "" when the
+// signature is not a direct constructor assignment.
+func pyConstructorClass(sig string) string {
+	s := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(sig), "="))
+	paren := strings.IndexByte(s, '(')
+	if paren <= 0 {
+		return ""
+	}
+	head := strings.TrimSpace(s[:paren])
+	// head must be a (possibly dotted) identifier path; reject anything else.
+	if head == "" {
+		return ""
+	}
+	for _, r := range head {
+		if !(r == '.' || r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+			return ""
+		}
+	}
+	if idx := strings.LastIndex(head, "."); idx >= 0 {
+		head = head[idx+1:]
+	}
+	if head == "" {
+		return ""
+	}
+	return head
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
