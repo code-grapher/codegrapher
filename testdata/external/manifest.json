@@ -140,6 +140,12 @@
       "url": "https://github.com/client9/shlib.git",
       "sha": "1d3c4befaa8f6e61be231a9b8c2c345ed55e561d",
       "lang": "bash"
+    },
+    {
+      "name": "posh-git",
+      "url": "https://github.com/dahlbyk/posh-git.git",
+      "sha": "d8b126decc29193a78e71cca6f59598017703a85",
+      "lang": "powershell"
     }
   ]
 }

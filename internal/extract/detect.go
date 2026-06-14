@@ -83,6 +83,8 @@ func DetectLanguage(filePath string) model.Language {
 		return model.LangR
 	case ".sh", ".bash":
 		return model.LangBash
+	case ".ps1", ".psm1", ".psd1":
+		return model.LangPowerShell
 	// File-level-only languages: tracked in the files table with zero
 	// symbol nodes, matching isFileLevelOnlyLanguage() in grammars.ts.
 	case ".yml", ".yaml":

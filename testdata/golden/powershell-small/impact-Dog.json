@@ -1,0 +1,26 @@
+{
+  "symbol": "Dog",
+  "depth": 2,
+  "nodeCount": 3,
+  "edgeCount": 2,
+  "affected": [
+    {
+      "name": "Dog",
+      "kind": "class",
+      "filePath": "main.ps1",
+      "startLine": 3
+    },
+    {
+      "name": "Invoke-Main",
+      "kind": "function",
+      "filePath": "main.ps1",
+      "startLine": 9
+    },
+    {
+      "name": "Speak",
+      "kind": "method",
+      "filePath": "main.ps1",
+      "startLine": 4
+    }
+  ]
+}

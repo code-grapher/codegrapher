@@ -157,6 +157,8 @@ func resolveRef(
 		return resolveFSharpRef(ref, s)
 	case model.LangR:
 		return resolveRRef(ref, s)
+	case model.LangPowerShell:
+		return resolvePowerShellRef(ref, s)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -2795,6 +2797,122 @@ func resolveRSourceFile(name, refFilePath string, s *store.Store) *model.Node {
 		}
 		for _, n := range candidates {
 			if n.Kind == model.KindFile && n.Language == model.LangR {
+				files = append(files, n)
+			}
+		}
+	}
+	if len(files) == 0 {
+		return nil
+	}
+	return pickBestNode(files, refFilePath)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// PowerShell resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolvePowerShellRef resolves a PowerShell unresolved reference into an edge.
+// PowerShell mixes scripting (functions, command calls, dot-source imports —
+// resolved like Lua/R) with PS5 classes (extends/implements/instantiates —
+// resolved by name via the generic resolver).
+//
+//   - imports: dot-source `. ./lib.ps1` targets the in-repo file whose basename
+//     minus the .ps1/.psm1/.psd1 extension is the import name; Import-Module/using
+//     usually have no in-repo target and fall through to the local import node.
+//   - bare calls/references: resolve same-file → through a local import → any
+//     in-repo definition. Names with no in-repo definition produce no edge, so
+//     external cmdlets (Write-Host, Get-ChildItem, …) stay edge-free.
+//   - extends/implements/instantiates: generic name resolution (calls→instantiates
+//     promotion already happens there; we also emit instantiates directly for
+//     [C]::new / New-Object C).
+func resolvePowerShellRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	if ref.ReferenceKind == model.EdgeImports {
+		if edge := resolvePowerShellImportsRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveGenericRef(ref, s)
+	}
+
+	if ref.ReferenceKind == model.EdgeCalls || ref.ReferenceKind == model.EdgeReferences {
+		if edge := resolvePowerShellBareRef(ref, s); edge != nil {
+			return edge
+		}
+		// No in-repo definition → no edge (skip external cmdlet noise).
+		return nil
+	}
+
+	// extends/implements/instantiates and anything else: generic name resolution.
+	return resolveGenericRef(ref, s)
+}
+
+// resolvePowerShellDefinitionByName returns the best real (non-import, non-file)
+// PowerShell definition node named name, preferring same-file/same-dir.
+func resolvePowerShellDefinitionByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangPowerShell {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolvePowerShellBareRef resolves a bare-name call/reference to the best
+// in-repo PowerShell definition (same-file → through dot-source import → any).
+func resolvePowerShellBareRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	target := resolvePowerShellDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{
+		Source: ref.FromNodeID,
+		Target: target.ID,
+		Kind:   ref.ReferenceKind,
+		Line:   ref.Line,
+		Column: ref.Column,
+	}
+}
+
+// resolvePowerShellImportsRef resolves an `imports` ref. Dot-source first targets
+// the in-repo .ps1/.psm1 file whose basename minus extension is the import name;
+// failing that, a cross-file definition named like the import. Returns nil
+// otherwise (fall back to the local import node — the case for external modules).
+func resolvePowerShellImportsRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	if file := resolvePowerShellModuleFile(ref.ReferenceName, ref.FilePath, s); file != nil {
+		return &model.Edge{
+			Source: ref.FromNodeID,
+			Target: file.ID,
+			Kind:   model.EdgeImports,
+			Line:   ref.Line,
+			Column: ref.Column,
+		}
+	}
+	return nil
+}
+
+// resolvePowerShellModuleFile returns the in-repo PowerShell file node whose
+// basename minus a .ps1/.psm1/.psd1 extension equals name (preferring same-dir),
+// or nil.
+func resolvePowerShellModuleFile(name, refFilePath string, s *store.Store) *model.Node {
+	var files []model.Node
+	for _, ext := range []string{".ps1", ".psm1", ".psd1"} {
+		candidates, err := s.GetNodesByName(name + ext)
+		if err != nil {
+			continue
+		}
+		for _, n := range candidates {
+			if n.Kind == model.KindFile && n.Language == model.LangPowerShell {
 				files = append(files, n)
 			}
 		}

@@ -1,0 +1,5 @@
+[{"source":"class:a935a73f1e618245c75789ef77c35109","target":"class:e4c83fb39d89b0e723d8da675327455f","kind":"extends","provenance":null,"line":3,"col":12},
+{"source":"file:main.ps1","target":"file:lib.ps1","kind":"imports","provenance":null,"line":1,"col":null},
+{"source":"function:c063e5bac7b9e8bd6c67af0fe60ee58d","target":"class:a935a73f1e618245c75789ef77c35109","kind":"instantiates","provenance":null,"line":11,"col":9},
+{"source":"function:c063e5bac7b9e8bd6c67af0fe60ee58d","target":"function:7e6daaed36c6cc37090eff3df498ae38","kind":"calls","provenance":null,"line":10,"col":12},
+{"source":"function:c063e5bac7b9e8bd6c67af0fe60ee58d","target":"method:df3b040789fc4516fc2d51e91efdeb0d","kind":"calls","provenance":null,"line":12,"col":4}]

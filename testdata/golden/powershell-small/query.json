@@ -1,0 +1,46 @@
+[
+  {
+    "node": {
+      "id": "method:0804b807e5f7b263ae967f397b66812e",
+      "kind": "method",
+      "name": "Speak",
+      "qualifiedName": "Animal::Speak",
+      "filePath": "lib.ps1",
+      "language": "powershell",
+      "startLine": 9,
+      "endLine": 11,
+      "startColumn": 4,
+      "endColumn": 5,
+      "signature": "[string] Speak()",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781437206491
+    },
+    "score": 92.57889896833214
+  },
+  {
+    "node": {
+      "id": "method:df3b040789fc4516fc2d51e91efdeb0d",
+      "kind": "method",
+      "name": "Speak",
+      "qualifiedName": "Dog::Speak",
+      "filePath": "main.ps1",
+      "language": "powershell",
+      "startLine": 4,
+      "endLine": 6,
+      "startColumn": 4,
+      "endColumn": 5,
+      "signature": "[string] Speak()",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781437206491
+    },
+    "score": 92.57889896833214
+  }
+]

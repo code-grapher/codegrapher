@@ -1,0 +1,44 @@
+{
+  "symbol": "Animal",
+  "depth": 2,
+  "nodeCount": 6,
+  "edgeCount": 5,
+  "affected": [
+    {
+      "name": "Animal",
+      "kind": "class",
+      "filePath": "lib.ps1",
+      "startLine": 6
+    },
+    {
+      "name": "Dog",
+      "kind": "class",
+      "filePath": "main.ps1",
+      "startLine": 3
+    },
+    {
+      "name": "Invoke-Main",
+      "kind": "function",
+      "filePath": "main.ps1",
+      "startLine": 9
+    },
+    {
+      "name": "Name",
+      "kind": "property",
+      "filePath": "lib.ps1",
+      "startLine": 7
+    },
+    {
+      "name": "Speak",
+      "kind": "method",
+      "filePath": "lib.ps1",
+      "startLine": 9
+    },
+    {
+      "name": "Speak",
+      "kind": "method",
+      "filePath": "main.ps1",
+      "startLine": 4
+    }
+  ]
+}

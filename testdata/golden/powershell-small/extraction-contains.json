@@ -1,0 +1,8 @@
+[{"source":"class:a935a73f1e618245c75789ef77c35109","target":"method:df3b040789fc4516fc2d51e91efdeb0d","kind":"contains"},
+{"source":"class:e4c83fb39d89b0e723d8da675327455f","target":"method:0804b807e5f7b263ae967f397b66812e","kind":"contains"},
+{"source":"class:e4c83fb39d89b0e723d8da675327455f","target":"property:c13aa508204713c211f53f145ee33aca","kind":"contains"},
+{"source":"file:lib.ps1","target":"class:e4c83fb39d89b0e723d8da675327455f","kind":"contains"},
+{"source":"file:lib.ps1","target":"function:7e6daaed36c6cc37090eff3df498ae38","kind":"contains"},
+{"source":"file:main.ps1","target":"class:a935a73f1e618245c75789ef77c35109","kind":"contains"},
+{"source":"file:main.ps1","target":"function:c063e5bac7b9e8bd6c67af0fe60ee58d","kind":"contains"},
+{"source":"file:main.ps1","target":"import:350626b2e14bdd2d67a7450da4d05440","kind":"contains"}]

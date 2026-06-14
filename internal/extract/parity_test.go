@@ -189,6 +189,12 @@ func TestParityBashSmall(t *testing.T) {
 	testParity(t, "bash-small")
 }
 
+// TestParityPowershellSmall runs our extractor over all files in
+// testdata/fixtures/powershell-small and compares against the golden.
+func TestParityPowershellSmall(t *testing.T) {
+	testParity(t, "powershell-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 

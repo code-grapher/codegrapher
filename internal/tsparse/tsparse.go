@@ -69,6 +69,8 @@ const (
 	LangR
 	// LangBash selects the tree-sitter `bash` grammar.
 	LangBash
+	// LangPowerShell selects the tree-sitter `powershell` grammar.
+	LangPowerShell
 )
 
 // Point is a (row, column) position in source text (0-indexed).
@@ -223,6 +225,8 @@ func NewParser(lang Language) (*Parser, error) {
 		return &Parser{lang: grammars.RLanguage()}, nil
 	case LangBash:
 		return &Parser{lang: grammars.BashLanguage()}, nil
+	case LangPowerShell:
+		return &Parser{lang: grammars.PowershellLanguage()}, nil
 	default:
 		return nil, fmt.Errorf("tsparse: unknown language %d", lang)
 	}

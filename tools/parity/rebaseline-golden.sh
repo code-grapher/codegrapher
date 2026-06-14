@@ -123,6 +123,7 @@ capture julia-small "circle" "area" "describe" "Circle" "Rectangle" "Shape" "Sha
 capture fsharp-small "circle" "Radius" "run" "Shapes" "App" "Circle" "Shapes::area"
 capture r-small "area" "area" "twice" "run" "util" "RADIUS" "stats"
 capture bash-small "greet" "greet" "helper" "MAX_RETRIES" "name"
+capture powershell-small "speak" "Get-Area" "Animal" "Dog" "Invoke-Main" "Speak" "Name"
 
 echo ""
 echo "=== MCP goldens ==="
