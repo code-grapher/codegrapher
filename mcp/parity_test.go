@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/specscore/codegrapher/mcp"
 	"github.com/specscore/codegrapher/model"
 	"github.com/specscore/codegrapher/resolve"
+	"github.com/specscore/codegrapher/scope"
 	"github.com/specscore/codegrapher/store"
 )
 
@@ -68,18 +70,29 @@ func requestsFor(fixture string) []mcpRequest {
 	return nil
 }
 
-// buildFixtureStore builds an indexed store for a fixture using the
-// extract → insert → resolve pattern (resolve/resolve_test.go), including the
-// file records the MCP status/files tools need.
-func buildFixtureStore(t *testing.T, fixtureDir string) *store.Store {
+// buildFixtureStores builds one store per (folded-language, version) scope for a
+// fixture, mirroring how the indexer partitions a project (go.mod folds into the
+// Go scope, package.json into the node scope) so the MCP MultiBackend fans out
+// exactly as the binary does. Includes the file records the status/files tools
+// need. Returns stores in stable scope-key order.
+func buildFixtureStores(t *testing.T, fixtureDir string) []*store.Store {
 	t.Helper()
-	s, err := store.Initialize(filepath.Join(t.TempDir(), store.DatabaseFilename))
-	if err != nil {
-		t.Fatalf("store.Initialize: %v", err)
-	}
-	t.Cleanup(func() { s.Close() })
 
-	err = filepath.Walk(fixtureDir, func(path string, info os.FileInfo, err error) error {
+	foldScope := func(lang model.Language) model.Language {
+		switch lang {
+		case model.LangGoMod:
+			return model.LangGo
+		case model.LangPackageJSON:
+			return model.LangNode
+		default:
+			return lang
+		}
+	}
+
+	byScope := map[string]*store.Store{}
+	var order []string
+
+	err := filepath.Walk(fixtureDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return err
 		}
@@ -96,6 +109,21 @@ func buildFixtureStore(t *testing.T, fixtureDir string) *store.Store {
 			return err
 		}
 		relPath = filepath.ToSlash(relPath)
+
+		key := scope.Scope{
+			Language: foldScope(lang),
+			Version:  scope.DetectVersion(fixtureDir, path, lang),
+		}.Key()
+		s := byScope[key]
+		if s == nil {
+			s, err = store.Initialize(filepath.Join(t.TempDir(), store.DatabaseFilename))
+			if err != nil {
+				t.Fatalf("store.Initialize: %v", err)
+			}
+			t.Cleanup(func() { s.Close() })
+			byScope[key] = s
+			order = append(order, key)
+		}
 
 		result, err := extract.ExtractFile(relPath, content, lang)
 		if err != nil {
@@ -124,10 +152,16 @@ func buildFixtureStore(t *testing.T, fixtureDir string) *store.Store {
 		t.Fatalf("walk fixture: %v", err)
 	}
 
-	if _, err := resolve.Resolve(s, fixtureDir); err != nil {
-		t.Fatalf("Resolve: %v", err)
+	sort.Strings(order)
+	stores := make([]*store.Store, 0, len(order))
+	for _, key := range order {
+		s := byScope[key]
+		if _, err := resolve.Resolve(s, fixtureDir); err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+		stores = append(stores, s)
 	}
-	return s
+	return stores
 }
 
 // dbSizeRe normalizes the one machine-specific value embedded in tool text:
@@ -152,8 +186,8 @@ func TestMCPParityGoldens(t *testing.T) {
 			}
 			goldenDir := filepath.Join(repoRoot, "testdata", "golden", fixture, "mcp")
 
-			s := buildFixtureStore(t, fixtureDir)
-			backend := mcp.NewStoreBackend(s, fixtureDir)
+			stores := buildFixtureStores(t, fixtureDir)
+			backend := mcp.NewMultiBackend(stores, fixtureDir)
 			server := mcp.NewServer(backend)
 
 			inR, inW := io.Pipe()
