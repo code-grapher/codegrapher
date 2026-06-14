@@ -141,6 +141,8 @@ func resolveRef(
 		return resolveLuaRef(ref, s)
 	case model.LangElixir:
 		return resolveElixirRef(ref, s)
+	case model.LangHaskell:
+		return resolveHaskellRef(ref, s)
 	default:
 		return resolveGenericRef(ref, s)
 	}
@@ -3204,6 +3206,246 @@ func resolveElixirImportsRef(ref model.UnresolvedReference, s *store.Store) *mod
 	if target == nil {
 		target = resolveElixirModuleByName(elixirLastSeg(ref.ReferenceName), ref.FilePath, s, model.KindInterface)
 	}
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeImports, Line: ref.Line, Column: ref.Column}
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Haskell resolution
+// ──────────────────────────────────────────────────────────────────────────────
+
+// resolveHaskellRef resolves a Haskell unresolved reference into an edge.
+//
+//   - implements (`instance C T`): ref name "T@C" — anchor the edge on T's
+//     struct/type-alias definition (source) → the class C interface (target).
+//     Falls back to the original from-node (the synthetic instance module) when
+//     T can't be resolved.
+//   - imports: resolve through to the real module definition by the imported
+//     module's last segment; else fall back to the local import node.
+//   - calls: `B.func`/`Foo.Bar.func` resolve func on the module (expanding a
+//     local alias first); a bare `func` resolves same-module → through-import →
+//     unique-name.
+func resolveHaskellRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	name := ref.ReferenceName
+
+	switch ref.ReferenceKind {
+	case model.EdgeImplements:
+		typeName, className := name, name
+		if at := strings.Index(name, "@"); at >= 0 {
+			typeName = name[:at]
+			className = name[at+1:]
+		}
+		class := resolveHaskellTypeByName(className, ref.FilePath, s, model.KindInterface)
+		if class == nil {
+			return nil
+		}
+		source := ref.FromNodeID
+		if typeName != "" {
+			if tn := resolveHaskellTypeByName(typeName, ref.FilePath, s, model.KindStruct); tn != nil {
+				source = tn.ID
+			} else if tn := resolveHaskellTypeByName(typeName, ref.FilePath, s, model.KindTypeAlias); tn != nil {
+				source = tn.ID
+			}
+		}
+		return &model.Edge{Source: source, Target: class.ID, Kind: model.EdgeImplements, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeImports:
+		if edge := resolveHaskellImportsRef(ref, s); edge != nil {
+			return edge
+		}
+		return resolveGenericRef(ref, s)
+
+	case model.EdgeCalls:
+		if dotIdx := strings.LastIndex(name, "."); dotIdx > 0 {
+			recv := name[:dotIdx]
+			fn := name[dotIdx+1:]
+			if fn == "" || strings.ContainsAny(fn, "./") {
+				return nil
+			}
+			module := haskellExpandAlias(recv, ref.FilePath, s)
+			if edge := resolveHaskellFunctionOnModule(ref, s, module, fn); edge != nil {
+				return edge
+			}
+			return resolveHaskellDottedFallback(ref, s, fn)
+		}
+		if edge := resolveHaskellBareThroughImport(ref, s); edge != nil {
+			return edge
+		}
+		target := resolveHaskellDefinitionByName(name, ref.FilePath, s)
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+
+	case model.EdgeReferences:
+		target := resolveHaskellTypeByName(name, ref.FilePath, s, model.KindStruct)
+		if target == nil {
+			target = resolveHaskellTypeByName(name, ref.FilePath, s, model.KindTypeAlias)
+		}
+		if target == nil {
+			target = resolveHaskellTypeByName(name, ref.FilePath, s, model.KindInterface)
+		}
+		if target == nil {
+			return nil
+		}
+		return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeReferences, Line: ref.Line, Column: ref.Column}
+	}
+
+	return resolveGenericRef(ref, s)
+}
+
+// haskellLastSeg returns the final dotted segment of a name (A.B.C → C).
+func haskellLastSeg(name string) string {
+	if idx := strings.LastIndex(name, "."); idx >= 0 {
+		return name[idx+1:]
+	}
+	return name
+}
+
+// resolveHaskellDefinitionByName returns the best real (non-import, non-file)
+// Haskell definition named name, preferring same-file/same-dir.
+func resolveHaskellDefinitionByName(name, refFilePath string, s *store.Store) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language != model.LangHaskell {
+			continue
+		}
+		if n.Kind == model.KindImport || n.Kind == model.KindFile {
+			continue
+		}
+		defs = append(defs, n)
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// resolveHaskellTypeByName returns the best Haskell node named name of the given
+// kind, preferring same-file/same-dir.
+func resolveHaskellTypeByName(name, refFilePath string, s *store.Store, kind model.NodeKind) *model.Node {
+	candidates, err := s.GetNodesByName(name)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var defs []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangHaskell && n.Kind == kind {
+			defs = append(defs, n)
+		}
+	}
+	if len(defs) == 0 {
+		return nil
+	}
+	return pickBestNode(defs, refFilePath)
+}
+
+// haskellExpandAlias expands a (possibly aliased) module receiver to its real
+// module name via a local import node's QualifiedName.
+func haskellExpandAlias(recv, refFilePath string, s *store.Store) string {
+	sameFile, err := s.GetNodesByFile(refFilePath)
+	if err == nil {
+		short := haskellLastSeg(recv)
+		for i := range sameFile {
+			n := &sameFile[i]
+			if n.Kind == model.KindImport && n.Name == short && n.QualifiedName != "" {
+				return n.QualifiedName
+			}
+		}
+	}
+	return recv
+}
+
+// resolveHaskellFunctionOnModule resolves fn as a function/method contained by
+// the module named like the last segment of module.
+func resolveHaskellFunctionOnModule(ref model.UnresolvedReference, s *store.Store, module, fn string) *model.Edge {
+	candidates, err := s.GetNodesByName(fn)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	modSeg := haskellLastSeg(module)
+	for i := range candidates {
+		n := &candidates[i]
+		if n.Language != model.LangHaskell {
+			continue
+		}
+		if n.Kind != model.KindFunction && n.Kind != model.KindMethod {
+			continue
+		}
+		if haskellQualParent(n.QualifiedName) == modSeg {
+			return &model.Edge{Source: ref.FromNodeID, Target: n.ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+		}
+	}
+	return nil
+}
+
+// haskellQualParent returns the parent segment of a "::"-joined qualified name
+// (Foo.Bar::f → "Foo.Bar", reduced to its last dotted segment "Bar").
+func haskellQualParent(qn string) string {
+	idx := strings.LastIndex(qn, "::")
+	if idx < 0 {
+		return ""
+	}
+	parent := qn[:idx]
+	if j := strings.LastIndex(parent, "::"); j >= 0 {
+		parent = parent[j+2:]
+	}
+	return haskellLastSeg(parent)
+}
+
+// resolveHaskellDottedFallback resolves a dotted call whose module didn't match:
+// emit an edge only when exactly one same-language function/method named fn exists.
+func resolveHaskellDottedFallback(ref model.UnresolvedReference, s *store.Store, fn string) *model.Edge {
+	candidates, err := s.GetNodesByName(fn)
+	if err != nil || len(candidates) == 0 {
+		return nil
+	}
+	var matches []model.Node
+	for _, n := range candidates {
+		if n.Language == model.LangHaskell && (n.Kind == model.KindFunction || n.Kind == model.KindMethod) {
+			matches = append(matches, n)
+		}
+	}
+	if len(matches) != 1 {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: matches[0].ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+}
+
+// resolveHaskellBareThroughImport resolves a bare-name call whose name matches a
+// local import shadow: resolve THROUGH it to the real cross-file definition.
+func resolveHaskellBareThroughImport(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	sameFile, err := s.GetNodesByFile(ref.FilePath)
+	if err != nil {
+		return nil
+	}
+	hasLocalImport := false
+	for i := range sameFile {
+		if sameFile[i].Kind == model.KindImport && sameFile[i].Name == ref.ReferenceName {
+			hasLocalImport = true
+			break
+		}
+	}
+	if !hasLocalImport {
+		return nil
+	}
+	target := resolveHaskellDefinitionByName(ref.ReferenceName, ref.FilePath, s)
+	if target == nil {
+		return nil
+	}
+	return &model.Edge{Source: ref.FromNodeID, Target: target.ID, Kind: model.EdgeCalls, Line: ref.Line, Column: ref.Column}
+}
+
+// resolveHaskellImportsRef resolves an `imports` ref to the real cross-file
+// module definition named like the imported module's last segment.
+func resolveHaskellImportsRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
+	target := resolveHaskellTypeByName(haskellLastSeg(ref.ReferenceName), ref.FilePath, s, model.KindModule)
 	if target == nil {
 		return nil
 	}

@@ -53,6 +53,8 @@ const (
 	LangLua
 	// LangElixir selects the tree-sitter `elixir` grammar.
 	LangElixir
+	// LangHaskell selects the tree-sitter `haskell` grammar.
+	LangHaskell
 )
 
 // Point is a (row, column) position in source text (0-indexed).
@@ -191,6 +193,8 @@ func NewParser(lang Language) (*Parser, error) {
 		return &Parser{lang: grammars.LuaLanguage()}, nil
 	case LangElixir:
 		return &Parser{lang: grammars.ElixirLanguage()}, nil
+	case LangHaskell:
+		return &Parser{lang: grammars.HaskellLanguage()}, nil
 	default:
 		return nil, fmt.Errorf("tsparse: unknown language %d", lang)
 	}

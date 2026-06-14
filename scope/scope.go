@@ -98,6 +98,10 @@ func DetectVersion(projectRoot, filePath string, lang model.Language) string {
 		// Elixir scope uses the fallback version this pass: no mix.exs
 		// parsing yet. majorVersion("") → fallbackVersion ("v0").
 		ver = ""
+	case model.LangHaskell:
+		// Haskell scope uses the fallback version this pass: no cabal/stack
+		// parsing yet. majorVersion("") → fallbackVersion ("v0").
+		ver = ""
 	}
 	return majorVersion(ver)
 }
