@@ -105,6 +105,12 @@ func TestParityCSmall(t *testing.T) {
 	testParity(t, "c-small")
 }
 
+// TestParityCppSmall runs our extractor over all files in testdata/fixtures/cpp-small
+// and compares against the golden.
+func TestParityCppSmall(t *testing.T) {
+	testParity(t, "cpp-small")
+}
+
 func testParity(t *testing.T, fixture string) {
 	t.Helper()
 
@@ -322,6 +328,11 @@ func TestExtractFileDetectLanguage(t *testing.T) {
 		{"foo.c", model.LangC},
 		{"foo.h", model.LangC},     // path-only: .h defaults to C for back-compat
 		{"foo.hpp", model.LangCPP}, // C++ header extensions
+		{"foo.cpp", model.LangCPP},
+		{"foo.cc", model.LangCPP},
+		{"foo.cxx", model.LangCPP},
+		{"foo.hh", model.LangCPP},
+		{"foo.hxx", model.LangCPP},
 		{"README.md", model.LangUnknown},
 	}
 	for _, c := range cases {

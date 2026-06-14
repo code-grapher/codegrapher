@@ -54,7 +54,7 @@ func DetectLanguage(filePath string) model.Language {
 	// content-aware DetectLanguageContent sniffs .h for C++ markers.
 	case ".h":
 		return model.LangC
-	case ".hpp", ".hh", ".hxx":
+	case ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx":
 		return model.LangCPP
 	// File-level-only languages: tracked in the files table with zero
 	// symbol nodes, matching isFileLevelOnlyLanguage() in grammars.ts.
