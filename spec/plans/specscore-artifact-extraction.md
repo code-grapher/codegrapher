@@ -32,7 +32,7 @@ Add `Language "specscore"`, the SpecScore-native `NodeKind`s (`feature`, `idea`,
 
 **Source:** idea:specscore-artifact-extraction
 **Depends-On:** 1
-**Status:** pending
+**Status:** done
 
 Add `github.com/specscore/specscore-cli` to `go.mod` and build a thin codegrapher-side adapter that calls its exported `pkg/feature` and `pkg/idea` parsers to turn an artifact's bytes into a structured doc (kind, slug, status, grade, child REQ/AC/Task headings, raw cross-references). No parsing logic is copied; any parse helper codegrapher needs that is not yet exported is exported upstream in `specscore-cli`. The CLI's full (cobra-based) dependency tree is accepted as-is; the only hard gate is that the `CGO_ENABLED=0` build stays green.
 
@@ -40,7 +40,7 @@ Add `github.com/specscore/specscore-cli` to `go.mod` and build a thin codegraphe
 
 **Source:** idea:specscore-artifact-extraction
 **Depends-On:** 1
-**Status:** pending
+**Status:** done
 
 Extend the detection layer so a `.md`/`README.md` under `spec/**` whose frontmatter carries `format: https://specscore.md/<kind>-specification` is classified as `LangSpecScore` and dispatched to the new extractor, without misclassifying ordinary repository markdown (READMEs, docs/). This is new content+path-aware detection beyond the current extension-only `DetectLanguage`.
 

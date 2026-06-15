@@ -135,7 +135,65 @@ func DetectLanguageContent(path string, content []byte) model.Language {
 		}
 		return model.LangUnknown
 	}
+	// SpecScore artifacts are Markdown under a spec/ tree with a specscore
+	// `format:` frontmatter key. They take precedence over the path-only
+	// classification (plain Markdown is LangUnknown).
+	if DetectSpecScore(path, content) {
+		return model.LangSpecScore
+	}
 	return DetectLanguage(path)
+}
+
+// specScoreFormat matches a leading-frontmatter `format:` value that identifies
+// a SpecScore artifact: `https://specscore.md/<kind>-specification`.
+var specScoreFormat = regexp.MustCompile(`^https://specscore\.md/[^\s]+-specification$`)
+
+// DetectSpecScore reports whether the file at filePath is a SpecScore artifact:
+// a `.md`/`README.md` file located under a `spec/` path segment whose leading
+// YAML frontmatter (delimited by `---` … `---` at the very top) carries a
+// `format:` key whose value is `https://specscore.md/<kind>-specification`.
+// Only the leading frontmatter block is scanned, not the whole file.
+func DetectSpecScore(filePath string, content []byte) bool {
+	if strings.ToLower(filepath.Ext(filePath)) != ".md" {
+		return false
+	}
+	if !hasSpecSegment(filePath) {
+		return false
+	}
+	return frontmatterHasSpecScoreFormat(content)
+}
+
+// hasSpecSegment reports whether filePath contains a `spec` path segment.
+func hasSpecSegment(filePath string) bool {
+	for _, seg := range strings.Split(filepath.ToSlash(filePath), "/") {
+		if seg == "spec" {
+			return true
+		}
+	}
+	return false
+}
+
+// frontmatterHasSpecScoreFormat scans only the leading YAML frontmatter block
+// (`---` … `---` at the very top) for a `format:` key with a SpecScore value.
+func frontmatterHasSpecScoreFormat(content []byte) bool {
+	s := string(content)
+	if !strings.HasPrefix(s, "---\n") && !strings.HasPrefix(s, "---\r\n") {
+		return false
+	}
+	lines := strings.Split(s, "\n")
+	// lines[0] is the opening `---`; scan until the closing delimiter.
+	for _, line := range lines[1:] {
+		trimmed := strings.TrimRight(line, "\r")
+		if trimmed == "---" || trimmed == "..." {
+			return false
+		}
+		key, val, ok := strings.Cut(trimmed, ":")
+		if !ok || strings.TrimSpace(key) != "format" {
+			continue
+		}
+		return specScoreFormat.MatchString(strings.TrimSpace(val))
+	}
+	return false
 }
 
 // sqliteMagic is the 16-byte header every SQLite database file begins with.
