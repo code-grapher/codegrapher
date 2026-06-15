@@ -64,13 +64,17 @@ In the `resolve/` package, link the recorded references between artifact nodes: 
 
 **Source:** idea:specscore-artifact-extraction
 **Depends-On:** 5
-**Status:** pending
+**Status:** in-progress
 
 Add fixtures (codegrapher's own `spec/` tree plus a small SpecScore sample), chosen so the goldens exercise all three new edge kinds (`promotes_to`, `supersedes`, `depends_on`) and the child-node kinds; generate deterministic self-goldens via the re-baseline script, and wire them into the binary golden-parity test. All gates green: `gofmt`, `go vet ./...`, `CGO_ENABLED=0 go build ./...`, `CGO_ENABLED=0 go test -count=1 ./...`.
 
 ## Open Questions
 
 None at this time.
+
+## Sidekick Seeds Generated
+
+- [index-all-non-gitignored-files-as-file-level-nodes-even](../ideas/seeds/index-all-non-gitignored-files-as-file-level-nodes-even.md) — captured 2026-06-15 by specstudio:implement
 
 ---
 *This document follows the https://specscore.md/plan-specification*
