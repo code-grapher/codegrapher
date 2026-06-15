@@ -40,11 +40,14 @@ func Resolve(s *store.Store, projectRoot string) (Stats, error) {
 	// Per-file JVM (Java/Kotlin) resolution context cache (built once per file).
 	jvmCtxCache := make(map[string]*jvmFileContext)
 
+	// SpecScore artifact index, built lazily once on first SpecScore ref.
+	specScoreCache := &specScoreIndex{}
+
 	var edges []model.Edge
 	stats := Stats{}
 
 	for _, ref := range refs {
-		edge := resolveRef(ref, s, projectRoot, goModulePath, importCache, pyVarTypeCache, jvmCtxCache)
+		edge := resolveRef(ref, s, projectRoot, goModulePath, importCache, pyVarTypeCache, jvmCtxCache, specScoreCache)
 		if edge != nil {
 			edges = append(edges, *edge)
 			stats.Resolved++
@@ -97,6 +100,7 @@ func resolveRef(
 	importCache map[string][]importMapping,
 	pyVarTypeCache map[string]map[string]string,
 	jvmCtxCache map[string]*jvmFileContext,
+	specScoreCache *specScoreIndex,
 ) *model.Edge {
 	// Fill in missing FilePath / Language from the from-node.
 	if ref.FilePath == "" || ref.Language == "" || ref.Language == model.LangUnknown {
@@ -161,6 +165,8 @@ func resolveRef(
 		return resolvePowerShellRef(ref, s)
 	case model.LangSql, model.LangSQLite:
 		return resolveSqlRef(ref, s)
+	case model.LangSpecScore:
+		return resolveSpecScoreRef(ref, s, specScoreCache)
 	default:
 		return resolveGenericRef(ref, s)
 	}

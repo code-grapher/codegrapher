@@ -56,7 +56,7 @@ Add `extractSpecScore` in `internal/extract` that, from the adapter's parsed doc
 
 **Source:** idea:specscore-artifact-extraction
 **Depends-On:** 4
-**Status:** pending
+**Status:** done
 
 In the `resolve/` package, link the recorded references between artifact nodes: relative-link and Related Ideas references → `references`, Promotes To → `promotes_to`, Supersedes → `supersedes`, and Plan Depends-On task ordering → `depends_on`. Single-repo resolution only.
 
