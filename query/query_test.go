@@ -5,8 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"testing"
 
+	"github.com/specscore/codegrapher/indexer"
 	"github.com/specscore/codegrapher/internal/cli"
 	"github.com/specscore/codegrapher/internal/extract"
 	"github.com/specscore/codegrapher/internal/paritytest"
@@ -82,6 +84,15 @@ func buildStore(t *testing.T, fixtureDir string) *store.Store {
 	_, err = resolve.Resolve(s, fixtureDir)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
+	}
+
+	// Mirror the production indexer's version stamp so the store represents a
+	// freshly-built, current-version index.
+	if err := s.SetMetadata("indexed_with_version", indexer.PackageVersion); err != nil {
+		t.Fatalf("SetMetadata version: %v", err)
+	}
+	if err := s.SetMetadata("indexed_with_extraction_version", strconv.Itoa(indexer.ExtractionVersion)); err != nil {
+		t.Fatalf("SetMetadata extraction: %v", err)
 	}
 	return s
 }
@@ -211,6 +222,33 @@ func TestGoSmall_Status(t *testing.T) {
 	}
 	if diff != "" {
 		t.Fatalf("parity mismatch:\n%s", diff)
+	}
+}
+
+// Status.Index.ReindexRecommended reflects whether the stored scanner/extraction
+// version differs from the running binary (spec feature version-gated-reindex,
+// AC-5).
+func TestStatus_ReindexRecommended(t *testing.T) {
+	fixtureDir := filepath.Join(repoRoot, "testdata", "fixtures", "go-small")
+	s := buildStore(t, fixtureDir)
+
+	res, err := query.Status(s, fixtureDir)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if res.Index.ReindexRecommended {
+		t.Errorf("ReindexRecommended = true, want false for a current-version index")
+	}
+
+	if err := s.SetMetadata("indexed_with_version", "0.0.0-old"); err != nil {
+		t.Fatalf("SetMetadata: %v", err)
+	}
+	res, err = query.Status(s, fixtureDir)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !res.Index.ReindexRecommended {
+		t.Errorf("ReindexRecommended = false, want true after the scanner version changed")
 	}
 }
 

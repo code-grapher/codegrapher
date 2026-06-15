@@ -96,6 +96,24 @@ func (idx *Indexer) IndexAll(opts Options) IndexResult {
 	}
 	defer idx.lock.Release()
 
+	return idx.indexAllLocked(opts)
+}
+
+// indexVersionStale reports whether the stored index was built by a different
+// scanner or extraction version than the running binary — or predates version
+// stamping entirely (missing metadata reads as ""). Read from the primary
+// scope store, which carries the same stamp as every other scope.
+func (idx *Indexer) indexVersionStale() bool {
+	s := idx.Store()
+	v, _ := s.GetMetadata("indexed_with_version")
+	ev, _ := s.GetMetadata("indexed_with_extraction_version")
+	return v != PackageVersion || ev != strconv.Itoa(ExtractionVersion)
+}
+
+// indexAllLocked indexes every source file. The caller MUST already hold
+// idx.mu and the cross-process file lock: IndexAll acquires them, and Sync's
+// version-gated escalation already holds them.
+func (idx *Indexer) indexAllLocked(opts Options) IndexResult {
 	now := opts.clock()
 	start := now()
 	result := IndexResult{}

@@ -3,6 +3,7 @@ package query
 import (
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/specscore/codegrapher/indexer"
@@ -500,6 +501,15 @@ func Status(s *store.Store, projectPath string) (*StatusResult, error) {
 		nodesByKind = map[model.NodeKind]int{}
 	}
 
+	// Recommend a reindex when the stored scanner/extraction version differs
+	// from the running binary (or is absent — an index predating version
+	// stamping). The BuiltWith* fields stay parity-faked; only this flag is
+	// derived from the actual stored metadata.
+	storedVersion, _ := s.GetMetadata("indexed_with_version")
+	storedExtraction, _ := s.GetMetadata("indexed_with_extraction_version")
+	reindexRecommended := storedVersion != indexer.PackageVersion ||
+		storedExtraction != strconv.Itoa(indexer.ExtractionVersion)
+
 	return &StatusResult{
 		Initialized: true,
 		// version / indexPath / lastIndexed are machine- or release-specific
@@ -522,7 +532,7 @@ func Status(s *store.Store, projectPath string) (*StatusResult, error) {
 			BuiltWithVersion:           codegraphParityVersion,
 			BuiltWithExtractionVersion: indexer.ExtractionVersion,
 			CurrentExtractionVersion:   indexer.ExtractionVersion,
-			ReindexRecommended:         false,
+			ReindexRecommended:         reindexRecommended,
 		},
 	}, nil
 }

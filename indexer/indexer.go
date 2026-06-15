@@ -62,6 +62,9 @@ type SyncResult struct {
 	NodesUpdated     int
 	DurationMs       int64
 	ChangedFilePaths []string
+	// FullReindex is true when Sync escalated to a from-scratch reindex
+	// because the index was built by a different scanner/extraction version.
+	FullReindex bool
 }
 
 // ChangedFiles classifies pending filesystem changes against the index.

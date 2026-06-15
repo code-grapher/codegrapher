@@ -30,6 +30,23 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 	start := now()
 	result := SyncResult{}
 
+	// Version gate: an index built by a different scanner/extraction version
+	// (or one predating version stamping) can't be safely updated in place —
+	// incrementally merging new-format data onto stale-format data yields a
+	// silently inconsistent graph. Rebuild from scratch instead. indexAllLocked
+	// re-stamps the current version metadata when it finishes.
+	if idx.indexVersionStale() {
+		for _, s := range idx.Stores() {
+			_ = s.Clear()
+		}
+		ir := idx.indexAllLocked(opts)
+		result.FullReindex = true
+		result.FilesChecked = ir.FilesIndexed
+		result.NodesUpdated = ir.NodesCreated
+		result.DurationMs = now() - start
+		return result
+	}
+
 	opts.progress(IndexProgress{Phase: PhaseScanning})
 
 	currentFiles := ScanDirectory(idx.root)
