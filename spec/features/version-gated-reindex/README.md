@@ -1,13 +1,13 @@
 ---
 format: https://specscore.md/feature-specification
-status: Draft
+status: Stable
 ---
 
 # Feature: Version-gated reindex
 
 > [SpecScore.**Studio**](https://specscore.studio): | [Explore](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/version-gated-reindex?op=explore) | [Edit](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/version-gated-reindex?op=edit) | [Ask question](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/version-gated-reindex?op=ask) | [Request change](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/version-gated-reindex?op=request-change) |
 
-**Status:** Draft
+**Status:** Stable
 **Source Ideas:** —
 
 ## Summary
