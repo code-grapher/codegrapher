@@ -34,7 +34,7 @@ Add `Language "specscore"`, the SpecScore-native `NodeKind`s (`feature`, `idea`,
 **Depends-On:** 1
 **Status:** pending
 
-Add `github.com/specscore/specscore-cli` to `go.mod` and build a thin codegrapher-side adapter that calls its exported `pkg/feature` and `pkg/idea` parsers to turn an artifact's bytes into a structured doc (kind, slug, status, grade, child REQ/AC/Task headings, raw cross-references). No parsing logic is copied; any missing export is added in `specscore-cli`. Verify the dependency builds under `CGO_ENABLED=0`.
+Add `github.com/specscore/specscore-cli` to `go.mod` and build a thin codegrapher-side adapter that calls its exported `pkg/feature` and `pkg/idea` parsers to turn an artifact's bytes into a structured doc (kind, slug, status, grade, child REQ/AC/Task headings, raw cross-references). No parsing logic is copied; any parse helper codegrapher needs that is not yet exported is exported upstream in `specscore-cli`. The CLI's full (cobra-based) dependency tree is accepted as-is; the only hard gate is that the `CGO_ENABLED=0` build stays green.
 
 ### Task 3: Detect SpecScore artifacts by path + frontmatter
 
@@ -50,7 +50,7 @@ Extend the detection layer so a `.md`/`README.md` under `spec/**` whose frontmat
 **Depends-On:** 2, 3
 **Status:** pending
 
-Add `extractSpecScore` in `internal/extract` that, from the adapter's parsed doc, emits the artifact node (slug, kind, status, grade) plus deep child nodes — Requirements/Acceptance Criteria under Features, Tasks under Plans — joined by `contains` edges, and the `file`→artifact `contains` edge, mirroring the `extractGoMod` pattern. Cross-file references are recorded but not yet resolved.
+Add `extractSpecScore` in `internal/extract` that, from the adapter's parsed doc, emits the artifact node (slug, kind, status, grade) plus deep child nodes — Requirements/Acceptance Criteria under Features, Tasks under Plans — joined by `contains` edges, and the `file`→artifact `contains` edge, mirroring the `extractGoMod` pattern. Child-node identity uses the artifact-local spec ID (e.g. the AC/REQ slug, `<feature-slug>#ac:<ac-slug>`) so SpecScore's own cross-reference IDs resolve directly in Task 5. Cross-file references are recorded but not yet resolved.
 
 ### Task 5: Resolve cross-file references into edges
 
@@ -70,9 +70,7 @@ Add fixtures (codegrapher's own `spec/` tree plus a small SpecScore sample), cho
 
 ## Open Questions
 
-- Strict reuse may require exporting currently-unexported `specscore-cli` parse helpers (e.g., section/status/dependency parsers); that export work lands in `specscore-cli`, scoped as a Task 2 dependency, not as porting here.
-- Whether REQ/AC/Task node identity should use the artifact-local ID from the spec or a derived slug, for stable cross-references — settle during Task 4.
-- Pulling the `specscore-cli` module brings its (cobra-based) dependency tree into codegrapher; confirm it stays `CGO_ENABLED=0`-clean and acceptably sized during Task 2.
+None at this time.
 
 ---
 *This document follows the https://specscore.md/plan-specification*
