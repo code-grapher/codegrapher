@@ -37,6 +37,11 @@ const (
 	KindExport     NodeKind = "export"
 	KindRoute      NodeKind = "route"
 	KindComponent  NodeKind = "component"
+
+	// SQL-native kinds, emitted by binary SQLite (.db) extraction.
+	KindIndex      NodeKind = "index"
+	KindTrigger    NodeKind = "trigger"
+	KindConstraint NodeKind = "constraint"
 )
 
 // NodeKinds lists every valid NodeKind (runtime-iterable, like NODE_KINDS).
@@ -45,7 +50,7 @@ var NodeKinds = []NodeKind{
 	KindProtocol, KindFunction, KindMethod, KindProperty, KindField,
 	KindVariable, KindConstant, KindEnum, KindEnumMember, KindTypeAlias,
 	KindNamespace, KindParameter, KindImport, KindExport, KindRoute,
-	KindComponent,
+	KindComponent, KindIndex, KindTrigger, KindConstraint,
 }
 
 // EdgeKind is the type of a relationship between two nodes.
@@ -105,6 +110,7 @@ const (
 	LangBash        Language = "bash"
 	LangPowerShell  Language = "powershell"
 	LangSql         Language = "sql"
+	LangSQLite      Language = "sqlite"
 	LangGoMod       Language = "go.mod"
 	LangPackageJSON Language = "package.json"
 	LangNode        Language = "node"
@@ -135,6 +141,11 @@ type Node struct {
 	Decorators     []string `json:"decorators,omitempty"`
 	TypeParameters []string `json:"typeParameters,omitempty"`
 	ReturnType     string   `json:"returnType,omitempty"`
+
+	// Metadata holds structured, language-specific attributes (activated for
+	// SQLite .db extraction: objectType, index/trigger/constraint details, FK
+	// actions, and the volatile rowCount). Persisted as JSON in nodes.metadata.
+	Metadata map[string]any `json:"metadata,omitempty"`
 
 	// UpdatedAt is a Unix timestamp in milliseconds (Date.now() in the original).
 	UpdatedAt int64 `json:"updatedAt"`

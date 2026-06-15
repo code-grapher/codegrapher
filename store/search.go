@@ -38,7 +38,7 @@ func (s *Store) SearchFTS(
 		       nodes.start_line, nodes.end_line, nodes.start_column, nodes.end_column,
 		       nodes.docstring, nodes.signature, nodes.visibility,
 		       nodes.is_exported, nodes.is_async, nodes.is_static, nodes.is_abstract,
-		       nodes.decorators, nodes.type_parameters, nodes.return_type, nodes.updated_at,
+		       nodes.decorators, nodes.type_parameters, nodes.return_type, nodes.metadata, nodes.updated_at,
 		       bm25(nodes_fts, 0, 20, 5, 1, 2) as score
 		FROM nodes_fts
 		JOIN nodes ON nodes_fts.rowid = nodes.rowid
@@ -407,6 +407,7 @@ func scanNodeWithScoreRow(rows *sql.Rows) (model.Node, float64, error) {
 		kind, lang                                  string
 		docstring, signature, visibility            sql.NullString
 		decoratorsRaw, typeParamsRaw, returnTypeRaw sql.NullString
+		metadataRaw                                 sql.NullString
 		isExported, isAsync, isStatic, isAbstract   int
 		score                                       float64
 	)
@@ -415,7 +416,7 @@ func scanNodeWithScoreRow(rows *sql.Rows) (model.Node, float64, error) {
 		&n.StartLine, &n.EndLine, &n.StartColumn, &n.EndColumn,
 		&docstring, &signature, &visibility,
 		&isExported, &isAsync, &isStatic, &isAbstract,
-		&decoratorsRaw, &typeParamsRaw, &returnTypeRaw, &n.UpdatedAt,
+		&decoratorsRaw, &typeParamsRaw, &returnTypeRaw, &metadataRaw, &n.UpdatedAt,
 		&score,
 	)
 	if err != nil {
@@ -436,6 +437,7 @@ func scanNodeWithScoreRow(rows *sql.Rows) (model.Node, float64, error) {
 	n.Decorators = parseJSONArray(decoratorsRaw)
 	n.TypeParameters = parseJSONArray(typeParamsRaw)
 	n.ReturnType = returnTypeRaw.String
+	n.Metadata = parseJSONMap(metadataRaw)
 	return n, score, nil
 }
 

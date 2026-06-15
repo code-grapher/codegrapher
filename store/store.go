@@ -31,7 +31,7 @@ var schemaSQL string
 const DatabaseFilename = "codegraph.db"
 
 // CurrentSchemaVersion mirrors CURRENT_SCHEMA_VERSION in the original.
-const CurrentSchemaVersion = 6
+const CurrentSchemaVersion = 7
 
 // NowFunc returns the current time in Unix milliseconds. Injectable for tests.
 type NowFunc func() int64
@@ -268,6 +268,8 @@ var migrations = []migration{
 			FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE
 		);
 		CREATE INDEX IF NOT EXISTS idx_node_coverage_hash ON node_coverage(content_hash);`},
+	{7, "Add nodes.metadata — structured language-specific attributes (SQLite .db schema details)",
+		`ALTER TABLE nodes ADD COLUMN metadata TEXT;`},
 }
 
 func (s *Store) runMigrations(from int) error {

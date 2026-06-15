@@ -13,7 +13,7 @@ const nodeColumns = `id, kind, name, qualified_name, file_path, language,
 	start_line, end_line, start_column, end_column,
 	docstring, signature, visibility,
 	is_exported, is_async, is_static, is_abstract,
-	decorators, type_parameters, return_type, updated_at`
+	decorators, type_parameters, return_type, metadata, updated_at`
 
 // sqliteParamChunkSize mirrors SQLITE_PARAM_CHUNK_SIZE in the original:
 // IN-list queries are chunked under SQLite's parameter limit.
@@ -43,12 +43,13 @@ func insertNode(db execer, now NowFunc, n model.Node) error {
 	}
 	_, err := db.Exec(`
 		INSERT OR REPLACE INTO nodes (`+nodeColumns+`)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		n.ID, string(n.Kind), n.Name, qualified, n.FilePath, string(n.Language),
 		n.StartLine, n.EndLine, n.StartColumn, n.EndColumn,
 		nullStr(n.Docstring), nullStr(n.Signature), n.Visibility,
 		b2i(n.IsExported), b2i(n.IsAsync), b2i(n.IsStatic), b2i(n.IsAbstract),
 		jsonOrNull(n.Decorators), jsonOrNull(n.TypeParameters), nullStr(n.ReturnType),
+		jsonMapOrNull(n.Metadata),
 		updatedAt,
 	)
 	return err
@@ -231,6 +232,7 @@ func scanNode(rows *sql.Rows) (model.Node, error) {
 		kind, language                            string
 		docstring, signature, visibility          sql.NullString
 		decorators, typeParams, returnType        sql.NullString
+		metadata                                  sql.NullString
 		isExported, isAsync, isStatic, isAbstract int
 	)
 	err := rows.Scan(
@@ -238,7 +240,7 @@ func scanNode(rows *sql.Rows) (model.Node, error) {
 		&n.StartLine, &n.EndLine, &n.StartColumn, &n.EndColumn,
 		&docstring, &signature, &visibility,
 		&isExported, &isAsync, &isStatic, &isAbstract,
-		&decorators, &typeParams, &returnType, &n.UpdatedAt,
+		&decorators, &typeParams, &returnType, &metadata, &n.UpdatedAt,
 	)
 	if err != nil {
 		return n, fmt.Errorf("store: scan node: %w", err)
@@ -258,6 +260,7 @@ func scanNode(rows *sql.Rows) (model.Node, error) {
 	n.Decorators = parseJSONArray(decorators)
 	n.TypeParameters = parseJSONArray(typeParams)
 	n.ReturnType = returnType.String
+	n.Metadata = parseJSONMap(metadata)
 	return n, nil
 }
 
@@ -286,6 +289,30 @@ func jsonOrNull(v []string) any {
 		return nil
 	}
 	return string(b)
+}
+
+// jsonMapOrNull marshals a metadata map to JSON for storage, or NULL when empty.
+func jsonMapOrNull(m map[string]any) any {
+	if len(m) == 0 {
+		return nil
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return nil
+	}
+	return string(b)
+}
+
+// parseJSONMap parses the stored metadata JSON object, or returns nil.
+func parseJSONMap(s sql.NullString) map[string]any {
+	if !s.Valid || s.String == "" {
+		return nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(s.String), &m); err != nil {
+		return nil
+	}
+	return m
 }
 
 // parseJSONArray mirrors safeJsonParse: malformed JSON yields nil, not an error.
