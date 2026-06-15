@@ -130,7 +130,7 @@ func (s *Store) ExistingNodeIDs(ids []string) (map[string]struct{}, error) {
 		for rows.Next() {
 			var id string
 			if err := rows.Scan(&id); err != nil {
-				rows.Close()
+				_ = rows.Close()
 				return nil, err
 			}
 			out[id] = struct{}{}
@@ -138,7 +138,7 @@ func (s *Store) ExistingNodeIDs(ids []string) (map[string]struct{}, error) {
 		if err := rows.Err(); err != nil {
 			return nil, err
 		}
-		rows.Close()
+		_ = rows.Close()
 	}
 	return out, nil
 }
@@ -198,7 +198,7 @@ func (s *Store) IterateNodesByKind(kind model.NodeKind, fn func(model.Node) erro
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		n, err := scanNode(rows)
 		if err != nil {
@@ -214,7 +214,7 @@ func (s *Store) IterateNodesByKind(kind model.NodeKind, fn func(model.Node) erro
 // --- scanning -------------------------------------------------------------
 
 func scanNodes(rows *sql.Rows) ([]model.Node, error) {
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []model.Node
 	for rows.Next() {
 		n, err := scanNode(rows)

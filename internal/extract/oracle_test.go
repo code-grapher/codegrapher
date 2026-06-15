@@ -16,7 +16,6 @@ package extract
 import (
 	"os"
 	"path/filepath"
-	"sort"
 	"testing"
 	"time"
 
@@ -209,14 +208,4 @@ func oracleWalkGo(t *testing.T, path string, content []byte) (map[string]nodeEnt
 		t.Logf("gotreesitter timeout on %s — treating as HasError", path)
 		return nil, nil, nil, false
 	}
-}
-
-// sortedKeys returns sorted keys of a string set (for stable error messages).
-func sortedKeys(m map[string]bool) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }

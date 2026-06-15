@@ -548,9 +548,6 @@ func (e *extractor) extractDartTopLevelFunction(node *tsparse.Node) {
 	if name == "" {
 		return
 	}
-	if node.Kind() == "function_signature" {
-		// only emit if this is truly a function_signature (not a getter/setter).
-	}
 	fn := e.createNode(model.KindFunction, name, node, nodeExtra{
 		signature:  strings.TrimSpace(node.Text()),
 		visibility: dartVisibility(name),
@@ -668,7 +665,6 @@ func (e *extractor) extractDartCallChain(node *tsparse.Node) {
 				}
 			} else if dartFindChild(sel, "argument_part") != nil {
 				invoked = true
-				j++ // consume the argument selector too
 				break
 			}
 		}

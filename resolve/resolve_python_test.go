@@ -16,7 +16,7 @@ func newPyStore(t *testing.T) *store.Store {
 	if err != nil {
 		t.Fatalf("store.Initialize: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	return s
 }
 

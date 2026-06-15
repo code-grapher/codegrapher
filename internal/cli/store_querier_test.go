@@ -16,7 +16,7 @@ func newMemStore(t *testing.T) *store.Store {
 	if err != nil {
 		t.Fatalf("store.Initialize: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	return s
 }
 
@@ -211,7 +211,7 @@ func TestStoreQuerier_Status_Aggregate(t *testing.T) {
 	}
 	sb := newMemStore(t)
 	mustInsertNodes(t, sb, fn("function:b.ts:g", "g", "b.ts", 1))
-	sb.InsertNodes([]model.Node{{ID: "function:b.ts:g2", Kind: model.KindFunction, Name: "g2", QualifiedName: "g2", FilePath: "b.ts", Language: model.LangTypeScript, StartLine: 5, EndLine: 8}})
+	_ = sb.InsertNodes([]model.Node{{ID: "function:b.ts:g2", Kind: model.KindFunction, Name: "g2", QualifiedName: "g2", FilePath: "b.ts", Language: model.LangTypeScript, StartLine: 5, EndLine: 8}})
 	if err := sb.UpsertFile(model.FileRecord{Path: "b.ts", Language: model.LangTypeScript, NodeCount: 2}); err != nil {
 		t.Fatal(err)
 	}

@@ -194,7 +194,7 @@ func (r *ignoreRule) matches(relPath string, isDir bool) bool {
 	// Anchored rule: match the path itself or, for dir rules (and plain
 	// prefixes), any ancestor directory.
 	if r.re.MatchString(relPath) {
-		return !(r.dirOnly && !isDir)
+		return !r.dirOnly || isDir
 	}
 	for i := 1; i < len(segs); i++ {
 		if r.re.MatchString(strings.Join(segs[:i], "/")) {

@@ -652,7 +652,7 @@ func (b *StoreBackend) FindNodesByNameSubstring(substring string, kinds []model.
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var id string
 			if err := rows.Scan(&id); err != nil {
@@ -700,7 +700,7 @@ func (b *StoreBackend) GetDominantFile() (*DominantFile, error) {
 		if err != nil {
 			return err
 		}
-		defer r.Close()
+		defer func() { _ = r.Close() }()
 		for r.Next() {
 			var x row
 			if err := r.Scan(&x.filePath, &x.edgeCount); err != nil {

@@ -41,7 +41,7 @@ func newQueryCmd() *cobra.Command {
 				printError(fmt.Sprintf("Failed to open index: %s", err))
 				os.Exit(1)
 			}
-			defer idx.Close()
+			defer func() { _ = idx.Close() }()
 
 			q := NewStoreQuerier(idx.StoresFiltered(splitCSV(scope))...)
 			opts := SearchOptions{Limit: limit}

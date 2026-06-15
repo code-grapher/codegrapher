@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -49,16 +48,6 @@ func copyDir(src, dst string) error {
 		}
 		return os.WriteFile(dstPath, data, 0o644)
 	})
-}
-
-// parseJSON unmarshals JSON bytes into any.
-func parseJSON(t *testing.T, data []byte) any {
-	t.Helper()
-	var v any
-	if err := json.Unmarshal(bytes.TrimSpace(data), &v); err != nil {
-		t.Fatalf("parse JSON: %v\ndata: %s", err, data)
-	}
-	return v
 }
 
 // ─── Callers ─────────────────────────────────────────────────────────────────
@@ -129,7 +118,7 @@ func TestCalleesJSONShape(t *testing.T) {
 	}
 	data, _ := json.MarshalIndent(result, "", "  ")
 	var obj map[string]any
-	json.Unmarshal(data, &obj)
+	_ = json.Unmarshal(data, &obj)
 
 	for _, field := range []string{"symbol", "callees"} {
 		if _, ok := obj[field]; !ok {
@@ -165,7 +154,7 @@ func TestImpactJSONShape(t *testing.T) {
 	}
 	data, _ := json.MarshalIndent(result, "", "  ")
 	var obj map[string]any
-	json.Unmarshal(data, &obj)
+	_ = json.Unmarshal(data, &obj)
 
 	for _, field := range []string{"symbol", "depth", "nodeCount", "edgeCount", "affected"} {
 		if _, ok := obj[field]; !ok {
@@ -212,7 +201,7 @@ func TestStatusJSONShape(t *testing.T) {
 	}
 	data, _ := json.MarshalIndent(result, "", "  ")
 	var obj map[string]any
-	json.Unmarshal(data, &obj)
+	_ = json.Unmarshal(data, &obj)
 
 	required := []string{
 		"initialized", "projectPath", "fileCount", "nodeCount", "edgeCount",
@@ -249,7 +238,7 @@ func TestFilesJSONShape(t *testing.T) {
 	}
 	data, _ := json.MarshalIndent(files, "", "  ")
 	var arr []map[string]any
-	json.Unmarshal(data, &arr)
+	_ = json.Unmarshal(data, &arr)
 
 	if len(arr) != 1 {
 		t.Fatalf("expected 1 file, got %d", len(arr))
@@ -293,7 +282,7 @@ func TestQueryJSONShape(t *testing.T) {
 	}
 	data, _ := json.MarshalIndent(results, "", "  ")
 	var arr []map[string]any
-	json.Unmarshal(data, &arr)
+	_ = json.Unmarshal(data, &arr)
 
 	if len(arr) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(arr))
@@ -329,7 +318,7 @@ func TestQueryJSONShape(t *testing.T) {
 // go-small fixture, asserting status JSON fields and golden DB node counts.
 func TestE2EInitSyncUninit(t *testing.T) {
 	projectPath, idx := initFixture(t)
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
 	q := NewStoreQuerier(idx.Store())
 	status, err := q.Status(projectPath)
@@ -370,7 +359,7 @@ func TestE2EInitSyncUninit(t *testing.T) {
 	}
 
 	// Uninit.
-	idx.Close()
+	_ = idx.Close()
 	if err := indexer.Uninit(projectPath); err != nil {
 		t.Fatalf("Uninit: %v", err)
 	}
@@ -381,7 +370,7 @@ func TestE2EInitSyncUninit(t *testing.T) {
 
 func TestE2ECallersCallees(t *testing.T) {
 	_, idx := initFixture(t)
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
 	q := NewStoreQuerier(idx.Store())
 
@@ -416,7 +405,7 @@ func TestE2ECallersCallees(t *testing.T) {
 
 func TestE2EUnlock(t *testing.T) {
 	projectPath, idx := initFixture(t)
-	idx.Close()
+	_ = idx.Close()
 
 	// Write a fake lock file.
 	lockPath := indexer.GetCodeGraphDir(projectPath) + "/codegraph.lock"

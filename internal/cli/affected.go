@@ -65,7 +65,7 @@ func newAffectedCmd() *cobra.Command {
 				printError(fmt.Sprintf("Failed to open index: %s", err))
 				os.Exit(1)
 			}
-			defer idx.Close()
+			defer func() { _ = idx.Close() }()
 
 			affectedTests, totalDependents := findAffectedTestsAcross(
 				idx.StoresFiltered(splitCSV(scope)), changedFiles, depth, filterGlob)

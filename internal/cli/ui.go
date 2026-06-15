@@ -62,15 +62,6 @@ func printBold(msg string) {
 	}
 }
 
-// printDim prints a dim text line (only if TTY).
-func printDim(msg string) {
-	if isTTY() {
-		fmt.Println("\x1b[2m" + msg + "\x1b[0m")
-	} else {
-		fmt.Println(msg)
-	}
-}
-
 // dim returns a dim-styled version of s when on a TTY.
 func dim(s string) string {
 	if isTTY() {

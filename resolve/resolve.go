@@ -423,7 +423,7 @@ func pyConstructorClass(sig string) string {
 		return ""
 	}
 	for _, r := range head {
-		if !(r == '.' || r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+		if r != '.' && r != '_' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
 			return ""
 		}
 	}
@@ -697,7 +697,7 @@ func rubyConstructorClass(sig string) string {
 		return ""
 	}
 	for _, r := range head {
-		if !(r == ':' || r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+		if r != ':' && r != '_' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
 			return ""
 		}
 	}
@@ -1169,7 +1169,7 @@ func perlConstructorPackage(sig string) string {
 		return ""
 	}
 	for _, r := range head {
-		if !(r == ':' || r == '_' || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')) {
+		if r != ':' && r != '_' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
 			return ""
 		}
 	}

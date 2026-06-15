@@ -137,7 +137,7 @@ func appendEdgeFilters(query string, args []any, kinds []model.EdgeKind, provena
 }
 
 func scanEdges(rows *sql.Rows) ([]model.Edge, error) {
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []model.Edge
 	for rows.Next() {
 		var (

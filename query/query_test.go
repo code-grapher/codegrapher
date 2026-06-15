@@ -29,7 +29,7 @@ func buildStore(t *testing.T, fixtureDir string) *store.Store {
 	if err != nil {
 		t.Fatalf("store.Initialize: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 
 	err = filepath.Walk(fixtureDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
@@ -132,7 +132,7 @@ func buildScopedStores(t *testing.T, fixtureDir string) []*store.Store {
 			if err != nil {
 				t.Fatalf("store.Initialize: %v", err)
 			}
-			t.Cleanup(func() { s.Close() })
+			t.Cleanup(func() { _ = s.Close() })
 			byScope[key] = s
 			order = append(order, key)
 		}

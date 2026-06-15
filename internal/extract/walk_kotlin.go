@@ -501,7 +501,6 @@ type ktMods struct {
 	isOverride  bool
 	isConst     bool
 	isSuspend   bool
-	isCompanion bool
 	annotations []string
 }
 

@@ -16,7 +16,7 @@ func newTestStore(t *testing.T) *Store {
 	if err != nil {
 		t.Fatalf("Initialize: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	return s
 }
 
@@ -201,11 +201,11 @@ func TestEdges_EndpointFilterAndQueries(t *testing.T) {
 
 func TestNodeDeletion_CascadesEdges(t *testing.T) {
 	s := newTestStore(t)
-	s.InsertNodes([]model.Node{
+	_ = s.InsertNodes([]model.Node{
 		testNode("function:a", "a", "a.go", 1),
 		testNode("function:b", "b", "b.go", 1),
 	})
-	s.InsertEdges([]model.Edge{{Source: "function:a", Target: "function:b", Kind: model.EdgeCalls}})
+	_ = s.InsertEdges([]model.Edge{{Source: "function:a", Target: "function:b", Kind: model.EdgeCalls}})
 
 	if err := s.DeleteNodesByFile("a.go"); err != nil {
 		t.Fatal(err)
@@ -247,7 +247,7 @@ func TestFiles_UpsertAndStale(t *testing.T) {
 
 func TestUnresolvedRefs_RoundTripAndBatch(t *testing.T) {
 	s := newTestStore(t)
-	s.InsertNode(testNode("function:a", "a", "a.go", 1))
+	_ = s.InsertNode(testNode("function:a", "a", "a.go", 1))
 	refs := []model.UnresolvedReference{
 		{FromNodeID: "function:a", ReferenceName: "helper", ReferenceKind: model.EdgeCalls,
 			Line: 3, Column: 4, FilePath: "a.go", Language: model.LangGo, Candidates: []string{"pkg.helper"}},
@@ -287,11 +287,11 @@ func TestUnresolvedRefs_RoundTripAndBatch(t *testing.T) {
 
 func TestStatsMetadataClear(t *testing.T) {
 	s := newTestStore(t)
-	s.InsertNodes([]model.Node{
+	_ = s.InsertNodes([]model.Node{
 		testNode("function:1", "f", "a.go", 1),
 		testNode("function:2", "g", "a.go", 9),
 	})
-	s.UpsertFile(model.FileRecord{Path: "a.go", ContentHash: "h", Language: model.LangGo})
+	_ = s.UpsertFile(model.FileRecord{Path: "a.go", ContentHash: "h", Language: model.LangGo})
 
 	stats, err := s.GetStats()
 	if err != nil {
@@ -306,7 +306,7 @@ func TestStatsMetadataClear(t *testing.T) {
 	if err := s.SetMetadata("k", "v1"); err != nil {
 		t.Fatal(err)
 	}
-	s.SetMetadata("k", "v2")
+	_ = s.SetMetadata("k", "v2")
 	if v, _ := s.GetMetadata("k"); v != "v2" {
 		t.Errorf("metadata = %q, want v2", v)
 	}
@@ -387,13 +387,13 @@ func TestMigrations_FromV1(t *testing.T) {
 			t.Fatalf("downgrade %q: %v", stmt, err)
 		}
 	}
-	s.Close()
+	_ = s.Close()
 
 	reopened, err := Open(path, WithNowFunc(fixedNow))
 	if err != nil {
 		t.Fatalf("Open with migrations: %v", err)
 	}
-	defer reopened.Close()
+	defer func() { _ = reopened.Close() }()
 	v, _ := reopened.SchemaVersion()
 	if v != CurrentSchemaVersion {
 		t.Errorf("migrated version = %d, want %d", v, CurrentSchemaVersion)

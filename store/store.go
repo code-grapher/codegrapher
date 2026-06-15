@@ -100,14 +100,14 @@ func Initialize(path string, opts ...Option) (*Store, error) {
 		return nil, err
 	}
 	if _, err := s.db.Exec(schemaSQL); err != nil {
-		s.db.Close()
+		_ = s.db.Close()
 		return nil, fmt.Errorf("store: apply schema: %w", err)
 	}
 	// Fresh schema.sql already includes every migration's effects; record the
 	// version so migrations aren't re-applied on open (mirrors initialize()).
 	v, err := s.schemaVersion()
 	if err != nil {
-		s.db.Close()
+		_ = s.db.Close()
 		return nil, err
 	}
 	if v < CurrentSchemaVersion {
@@ -115,7 +115,7 @@ func Initialize(path string, opts ...Option) (*Store, error) {
 			`INSERT OR IGNORE INTO schema_versions (version, applied_at, description) VALUES (?, ?, ?)`,
 			CurrentSchemaVersion, s.now(), "Initial schema includes all migrations",
 		); err != nil {
-			s.db.Close()
+			_ = s.db.Close()
 			return nil, fmt.Errorf("store: record schema version: %w", err)
 		}
 	}
@@ -133,12 +133,12 @@ func Open(path string, opts ...Option) (*Store, error) {
 	}
 	v, err := s.schemaVersion()
 	if err != nil {
-		s.db.Close()
+		_ = s.db.Close()
 		return nil, err
 	}
 	if v < CurrentSchemaVersion {
 		if err := s.runMigrations(v); err != nil {
-			s.db.Close()
+			_ = s.db.Close()
 			return nil, err
 		}
 	}
@@ -178,7 +178,7 @@ func (s *Store) Transaction(fn func(tx *sql.Tx) error) error {
 		return err
 	}
 	if err := fn(tx); err != nil {
-		tx.Rollback()
+		_ = tx.Rollback()
 		return err
 	}
 	return tx.Commit()

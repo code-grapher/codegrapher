@@ -119,7 +119,7 @@ func (s *Store) ClearUnresolvedReferences() error {
 }
 
 func scanUnresolved(rows *sql.Rows) ([]model.UnresolvedReference, error) {
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []model.UnresolvedReference
 	for rows.Next() {
 		var (

@@ -25,7 +25,7 @@ func ingestSampleCoverage(t *testing.T) (root, dbPath string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	nodes, err := s.GetNodesByFile("internal/store/store.go")
 	if err != nil {
@@ -105,7 +105,7 @@ func TestCoverageRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer imp.Close()
+	defer func() { _ = imp.Close() }()
 	cov, err := imp.GetAllCoverage()
 	if err != nil || len(cov) != 1 {
 		t.Fatalf("imported coverage rows = %d (%v)", len(cov), err)
@@ -153,8 +153,8 @@ func TestImportToleratesAbsentCoverage(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Simulate an older snapshot: remove the coverage collections entirely.
-	os.RemoveAll(filepath.Join(outDir, "coverage"))
-	os.RemoveAll(filepath.Join(outDir, "node_coverage"))
+	_ = os.RemoveAll(filepath.Join(outDir, "coverage"))
+	_ = os.RemoveAll(filepath.Join(outDir, "node_coverage"))
 
 	dbB := filepath.Join(t.TempDir(), "imported.db")
 	if err := snapshot.Import(dbB, outDir); err != nil {
@@ -164,7 +164,7 @@ func TestImportToleratesAbsentCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer imp.Close()
+	defer func() { _ = imp.Close() }()
 	if cov, _ := imp.GetAllCoverage(); len(cov) != 0 {
 		t.Errorf("expected no coverage rows, got %d", len(cov))
 	}

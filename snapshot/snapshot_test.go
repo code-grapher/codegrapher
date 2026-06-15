@@ -143,13 +143,13 @@ func TestRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open src: %v", err)
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 
 	dst, err := store.Open(dbPathDst)
 	if err != nil {
 		t.Fatalf("open dst: %v", err)
 	}
-	defer dst.Close()
+	defer func() { _ = dst.Close() }()
 
 	srcStats, err := src.GetStats()
 	if err != nil {
@@ -204,7 +204,7 @@ func TestEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	stats, err := s.GetStats()
 	if err != nil {
@@ -263,7 +263,7 @@ func countINGRRows(t *testing.T, path string) int {
 	if err != nil {
 		t.Fatalf("open %s: %v", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// Parse using the ingr-go library directly.
 	// We use snapshot's internal readINGR via the exported Export/Import;

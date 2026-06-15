@@ -61,7 +61,7 @@ func (s *Store) groupCount(query string, add func(key string, count int)) error 
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var key string
 		var count int
@@ -101,7 +101,7 @@ func (s *Store) GetAllMetadata() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := map[string]string{}
 	for rows.Next() {
 		var k, v string

@@ -39,7 +39,7 @@ func (e *extractor) extractSQLite() {
 		e.sqliteWarn("sqlite_open_error", err)
 		return
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	e.attachDBMetadata(db)
 
@@ -92,7 +92,7 @@ func (e *extractor) sqliteObjects(db *sql.DB) ([]sqliteObject, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []sqliteObject
 	for rows.Next() {
 		var o sqliteObject
@@ -215,7 +215,7 @@ func (e *extractor) sqliteColumns(db *sql.DB, table string) []sqliteColumn {
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []sqliteColumn
 	for rows.Next() {
 		var (
@@ -287,7 +287,7 @@ func (e *extractor) extractSQLiteForeignKeys(db *sql.DB, table, tblID string, no
 	if err != nil {
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	type fkRow struct {
 		id           int
 		from, to     string
@@ -307,7 +307,7 @@ func (e *extractor) extractSQLiteForeignKeys(db *sql.DB, table, tblID string, no
 		}
 		fks = append(fks, fkRow{id: id, from: from, to: to.String, refTable: refTable, onUpd: onUpd, onDel: onDel})
 	}
-	rows.Close()
+	_ = rows.Close()
 	if len(fks) == 0 {
 		return
 	}
@@ -374,7 +374,7 @@ func (e *extractor) extractSQLiteIndexesAndUnique(db *sql.DB, table, tblID strin
 		}
 		idxs = append(idxs, idxRow{name: name, unique: uniq == 1, origin: origin, partial: partial == 1})
 	}
-	rows.Close()
+	_ = rows.Close()
 
 	for _, ix := range idxs {
 		cols := e.sqliteIndexColumns(db, ix.name)
@@ -401,7 +401,7 @@ func (e *extractor) sqliteIndexColumns(db *sql.DB, index string) []string {
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var cols []string
 	for rows.Next() {
 		var (
@@ -537,12 +537,12 @@ func (e *extractor) sqliteOpenPath() (string, func(), error) {
 			return "", noop, err
 		}
 		if _, err := f.WriteString(e.content); err != nil {
-			f.Close()
-			os.Remove(f.Name())
+			_ = f.Close()
+			_ = os.Remove(f.Name())
 			return "", noop, err
 		}
-		f.Close()
-		return f.Name(), func() { os.Remove(f.Name()) }, nil
+		_ = f.Close()
+		return f.Name(), func() { _ = os.Remove(f.Name()) }, nil
 	}
 	return "", noop, errors.New("not a SQLite database file")
 }

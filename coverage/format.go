@@ -237,7 +237,7 @@ func toInt(v any) int {
 		return int(t)
 	default:
 		var n int64
-		fmt.Sscanf(str(v), "%d", &n)
+		_, _ = fmt.Sscanf(str(v), "%d", &n)
 		return int(n)
 	}
 }

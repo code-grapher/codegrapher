@@ -72,7 +72,7 @@ func OpenRegistry(projectRoot string, opts ...store.Option) (*Registry, error) {
 		}
 		s, err := store.Open(m, r.opts...)
 		if err != nil {
-			r.Close()
+			_ = r.Close()
 			return nil, err
 		}
 		r.stores[sc] = s

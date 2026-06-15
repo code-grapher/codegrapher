@@ -120,7 +120,7 @@ func buildFixtureStores(t *testing.T, fixtureDir string) []*store.Store {
 			if err != nil {
 				t.Fatalf("store.Initialize: %v", err)
 			}
-			t.Cleanup(func() { s.Close() })
+			t.Cleanup(func() { _ = s.Close() })
 			byScope[key] = s
 			order = append(order, key)
 		}
@@ -197,7 +197,7 @@ func TestMCPParityGoldens(t *testing.T) {
 			serveErr := make(chan error, 1)
 			go func() {
 				serveErr <- server.Serve(ctx, inR, outW)
-				outW.Close()
+				_ = outW.Close()
 			}()
 
 			responses := make(map[int64]json.RawMessage)
@@ -261,7 +261,7 @@ func TestMCPParityGoldens(t *testing.T) {
 				}
 			}
 
-			inW.Close()
+			_ = inW.Close()
 			if err := <-serveErr; err != nil {
 				t.Fatalf("serve: %v", err)
 			}

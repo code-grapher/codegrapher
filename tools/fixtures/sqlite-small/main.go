@@ -151,7 +151,7 @@ func buildDB(path string) error {
 	if err != nil {
 		return err
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if _, err := db.Exec("PRAGMA user_version = 7"); err != nil {
 		return err
 	}
@@ -201,13 +201,13 @@ func resolveEdges(res model.ExtractionResult) ([]goldenEdge, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	s, err := store.Initialize(filepath.Join(dir, store.DatabaseFilename))
 	if err != nil {
 		return nil, err
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	if err := s.InsertNodes(res.Nodes); err != nil {
 		return nil, err

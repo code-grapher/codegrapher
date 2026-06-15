@@ -17,7 +17,7 @@ func newStore(t *testing.T, nodes []model.Node, edges []model.Edge, files []mode
 	if err != nil {
 		t.Fatalf("store.Initialize: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	if err := s.InsertNodes(nodes); err != nil {
 		t.Fatalf("InsertNodes: %v", err)
 	}
