@@ -48,7 +48,7 @@ Extend the detection layer so a `.md`/`README.md` under `spec/**` whose frontmat
 
 **Source:** idea:specscore-artifact-extraction
 **Depends-On:** 2, 3
-**Status:** pending
+**Status:** done
 
 Add `extractSpecScore` in `internal/extract` that, from the adapter's parsed doc, emits the artifact node (slug, kind, status, grade) plus deep child nodes — Requirements/Acceptance Criteria under Features, Tasks under Plans — joined by `contains` edges, and the `file`→artifact `contains` edge, mirroring the `extractGoMod` pattern. Child-node identity uses the artifact-local spec ID (e.g. the AC/REQ slug, `<feature-slug>#ac:<ac-slug>`) so SpecScore's own cross-reference IDs resolve directly in Task 5. Cross-file references are recorded but not yet resolved.
 

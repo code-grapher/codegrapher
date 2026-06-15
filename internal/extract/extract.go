@@ -538,6 +538,9 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 	case model.LangSQLite:
 		// Opens the database by path (read-only); the content slice is ignored.
 		e.extractSQLite()
+	case model.LangSpecScore:
+		// Re-reads the artifact by path via the specdoc adapter; content ignored.
+		e.extractSpecScore(content)
 	}
 
 	// For Go files, also run the framework route extractor.
