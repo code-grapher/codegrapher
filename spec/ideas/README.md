@@ -10,7 +10,7 @@ Pre-spec one-pagers. Each Idea is a lint-clean problem-direction-MVP one-pager t
 
 | Idea | Status | Date | Owner | Promotes To |
 |------|--------|------|-------|-------------|
-| [index-all-non-gitignored-files-as-file-level-nodes-even](index-all-non-gitignored-files-as-file-level-nodes-even.md) | Specified | 2026-06-15 | specstudio:implement | whole-repo-file-nodes |
+| [index-all-non-gitignored-files-as-file-level-nodes-even](index-all-non-gitignored-files-as-file-level-nodes-even.md) | Implemented | 2026-06-15 | specstudio:implement | whole-repo-file-nodes |
 | [specscore-artifact-extraction](specscore-artifact-extraction.md) | Approved | 2026-06-15 | trakhimenok | — |
 
 ## Open Questions

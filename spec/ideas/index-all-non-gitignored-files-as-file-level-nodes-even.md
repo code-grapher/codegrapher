@@ -1,11 +1,11 @@
 ---
 format: https://specscore.md/idea-specification
-status: Specified
+status: Implemented
 ---
 
 # Idea: Index all non-gitignored files as file-level nodes (even unknown extensions like *.txt), not just recognized source languages
 
-**Status:** Specified
+**Status:** Implemented
 **Date:** 2026-06-15
 **Owner:** specstudio:implement
 **Promotes To:** whole-repo-file-nodes
