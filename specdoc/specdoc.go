@@ -97,7 +97,7 @@ func ParseContent(logicalPath string, content []byte) (*Doc, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 	rel := filepath.FromSlash(logicalPath)
 	tmp := filepath.Join(dir, rel)
 	if err := os.MkdirAll(filepath.Dir(tmp), 0o755); err != nil {

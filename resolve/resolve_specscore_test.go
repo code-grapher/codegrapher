@@ -80,7 +80,7 @@ status: Approved
 	if err != nil {
 		t.Fatalf("store init: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 
 	insert := func(path string) {
 		content, err := os.ReadFile(path)
