@@ -2,6 +2,7 @@ package resolve_test
 
 import (
 	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -95,6 +96,76 @@ func TestSQLiteResolution(t *testing.T) {
 	// Cross-link: the .sql query's file node → .db orders table.
 	if !sqliteHasEdge(t, s, model.FileNodeID("q.sql"), ordersID, model.EdgeReferences) {
 		t.Errorf(".sql query did not cross-link to .db orders table")
+	}
+}
+
+// TestResolutionParitySqliteSmall extracts the committed sqlite-small fixture,
+// resolves it, and checks the resolved (non-contains) edges exactly match the
+// resolution-edges self-golden.
+func TestResolutionParitySqliteSmall(t *testing.T) {
+	fixtureDir := filepath.Join(repoRoot, "testdata", "fixtures", "sqlite-small")
+	goldenFile := filepath.Join(repoRoot, "testdata", "golden", "sqlite-small", "resolution-edges.json")
+
+	rawGolden, err := os.ReadFile(goldenFile)
+	if err != nil {
+		t.Fatalf("read golden: %v", err)
+	}
+	var golden []goldenEdge
+	if err := json.Unmarshal(rawGolden, &golden); err != nil {
+		t.Fatalf("parse golden: %v", err)
+	}
+
+	s, err := store.Initialize(filepath.Join(t.TempDir(), store.DatabaseFilename))
+	if err != nil {
+		t.Fatalf("store init: %v", err)
+	}
+	t.Cleanup(func() { s.Close() })
+
+	content, err := os.ReadFile(filepath.Join(fixtureDir, "app.db"))
+	if err != nil {
+		t.Fatalf("read app.db: %v", err)
+	}
+	res, err := extract.ExtractFile("app.db", content, model.LangSQLite)
+	if err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	if err := s.InsertNodes(res.Nodes); err != nil {
+		t.Fatalf("insert nodes: %v", err)
+	}
+	if err := s.InsertEdges(res.Edges); err != nil {
+		t.Fatalf("insert edges: %v", err)
+	}
+	if err := s.InsertUnresolvedRefs(res.UnresolvedReferences); err != nil {
+		t.Fatalf("insert refs: %v", err)
+	}
+	if _, err := resolve.Resolve(s, fixtureDir); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+
+	got := map[string]model.Edge{}
+	for _, n := range res.Nodes {
+		edges, err := s.GetOutgoingEdges(n.ID, nil, "")
+		if err != nil {
+			t.Fatalf("GetOutgoingEdges: %v", err)
+		}
+		for _, e := range edges {
+			if e.Kind != model.EdgeContains {
+				got[edgeKey(e)] = e
+			}
+		}
+	}
+
+	wantKeys := map[string]bool{}
+	for _, g := range golden {
+		wantKeys[goldenEdgeKey(g)] = true
+		if _, ok := got[goldenEdgeKey(g)]; !ok {
+			t.Errorf("missing resolved edge: %s → %s kind=%s", g.Source, g.Target, g.Kind)
+		}
+	}
+	for k, e := range got {
+		if !wantKeys[k] {
+			t.Errorf("extra resolved edge: %s → %s kind=%s", e.Source, e.Target, e.Kind)
+		}
 	}
 }
 

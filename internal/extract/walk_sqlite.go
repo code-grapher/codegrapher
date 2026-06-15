@@ -2,6 +2,8 @@ package extract
 
 import (
 	"database/sql"
+	"errors"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,12 +19,22 @@ import (
 // indexes (KindIndex), triggers (KindTrigger), and PK/FK/UNIQUE/CHECK
 // constraints (KindConstraint), joined by `contains` and `references` edges.
 //
-// Integration note: unlike the tree-sitter walkers, this opens the database by
-// FILE PATH (read-only/immutable) and ignores the content byte slice — a binary
-// .db cannot be driven from a []byte. The file node has already been emitted by
+// Integration note: a binary .db cannot be driven from a []byte, so this opens
+// the database by FILE PATH (read-only/immutable). When e.filePath points at a
+// real SQLite file on disk (the indexer) it is opened directly; otherwise the
+// provided content bytes are written to a temp file and opened (so extraction
+// stays a pure function of (path, content) — e.g. the parity harness passes a
+// repo-relative path plus the bytes). The file node has already been emitted by
 // the caller and sits at e.nodes[0]; DB-level metadata is attached to it.
 func (e *extractor) extractSQLite() {
-	db, err := sql.Open("sqlite", "file:"+e.filePath+"?mode=ro&immutable=1")
+	openPath, cleanup, err := e.sqliteOpenPath()
+	if err != nil {
+		e.sqliteWarn("sqlite_open_error", err)
+		return
+	}
+	defer cleanup()
+
+	db, err := sql.Open("sqlite", "file:"+openPath+"?mode=ro&immutable=1")
 	if err != nil {
 		e.sqliteWarn("sqlite_open_error", err)
 		return
@@ -40,9 +52,16 @@ func (e *extractor) extractSQLite() {
 	fileID := model.FileNodeID(e.filePath)
 	now := time.Now().UnixMilli()
 
+	// Virtual tables (FTS5, R*Tree, …) create internal "shadow" tables named
+	// "<vtable>_<suffix>"; skip those so only the virtual table itself appears.
+	shadowPrefixes := sqliteShadowPrefixes(objects)
+
 	for _, o := range objects {
 		switch o.typ {
 		case "table":
+			if isSQLiteShadowTable(o.name, shadowPrefixes) {
+				continue
+			}
 			e.extractSQLiteTable(db, o, fileID, now)
 		case "view":
 			e.extractSQLiteView(o, fileID, now)
@@ -137,6 +156,11 @@ func (e *extractor) extractSQLiteTable(db *sql.DB, o sqliteObject, fileID string
 
 	cols := e.sqliteColumns(db, o.name)
 	for _, c := range cols {
+		// Skip auxiliary hidden columns (e.g. FTS5's table-named and `rank`
+		// columns). Generated columns (hidden 2/3) are kept.
+		if c.hidden == 1 {
+			continue
+		}
 		e.addSQLiteColumn(o.name, c, tblID, now)
 	}
 
@@ -365,7 +389,8 @@ func (e *extractor) extractSQLiteIndexesAndUnique(db *sql.DB, table, tblID strin
 			}
 		case "u": // UNIQUE constraint (backed by an auto index)
 			meta := map[string]any{"subtype": "unique", "columns": cols, "backingIndex": ix.name}
-			e.addSQLiteNode(model.KindConstraint, ix.name, table+"::"+ix.name, "UNIQUE", meta, tblID, now)
+			name := "unique_" + strings.Join(cols, "_")
+			e.addSQLiteNode(model.KindConstraint, name, table+"::"+name, "UNIQUE", meta, tblID, now)
 		}
 		// origin "pk": represented by the primary key constraint; skip.
 	}
@@ -497,6 +522,31 @@ func (e *extractor) sqliteRowCount(db *sql.DB, table string) (int64, bool) {
 	return n, true
 }
 
+// sqliteOpenPath returns a filesystem path to open as the SQLite database, plus
+// a cleanup func. If e.filePath is a readable SQLite file it is used directly;
+// otherwise the in-memory content bytes are spilled to a temp file. Errors when
+// neither source yields a SQLite database.
+func (e *extractor) sqliteOpenPath() (string, func(), error) {
+	noop := func() {}
+	if data, err := os.ReadFile(e.filePath); err == nil && isSQLiteFile(data) {
+		return e.filePath, noop, nil
+	}
+	if isSQLiteFile([]byte(e.content)) {
+		f, err := os.CreateTemp("", "codegrapher-*.db")
+		if err != nil {
+			return "", noop, err
+		}
+		if _, err := f.WriteString(e.content); err != nil {
+			f.Close()
+			os.Remove(f.Name())
+			return "", noop, err
+		}
+		f.Close()
+		return f.Name(), func() { os.Remove(f.Name()) }, nil
+	}
+	return "", noop, errors.New("not a SQLite database file")
+}
+
 func (e *extractor) sqliteWarn(code string, err error) {
 	e.errors = append(e.errors, model.ExtractionError{
 		Message:  err.Error(),
@@ -507,6 +557,29 @@ func (e *extractor) sqliteWarn(code string, err error) {
 }
 
 func sqliteKey(kind model.NodeKind, name string) string { return string(kind) + "\x00" + name }
+
+// sqliteShadowPrefixes returns "<name>_" for every virtual table, used to skip
+// the shadow tables those virtual tables create.
+func sqliteShadowPrefixes(objects []sqliteObject) []string {
+	var prefixes []string
+	for _, o := range objects {
+		if o.typ == "table" && reVirtualUsing.MatchString(o.sql) {
+			prefixes = append(prefixes, o.name+"_")
+		}
+	}
+	return prefixes
+}
+
+// isSQLiteShadowTable reports whether name is a shadow table of some virtual
+// table (matches one of the "<vtable>_" prefixes).
+func isSQLiteShadowTable(name string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(name, p) {
+			return true
+		}
+	}
+	return false
+}
 
 // quoteIdent double-quotes a SQLite identifier for safe interpolation.
 func quoteIdent(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
