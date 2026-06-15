@@ -4,7 +4,7 @@ status: Approved
 ---
 # Plan: Specscore Artifact Extraction
 
-**Status:** Approved
+**Status:** Implementing
 **Source:** idea:specscore-artifact-extraction
 **Date:** 2026-06-15
 **Owner:** alexandertrakhimenok
@@ -24,7 +24,7 @@ Strictly linear, bottom-up: register the vocabulary first (Task 1) so every late
 
 **Source:** idea:specscore-artifact-extraction
 **Depends-On:** —
-**Status:** pending
+**Status:** done
 
 Add `Language "specscore"`, the SpecScore-native `NodeKind`s (`feature`, `idea`, `plan`, `requirement`, `acceptance_criterion`, `task`) and `EdgeKind`s (`promotes_to`, `supersedes`, `depends_on`) to `model/model.go`, including their entries in the runtime-iterable `NodeKinds`/edge lists and any kind-validation paths. Foundation for every later task.
 

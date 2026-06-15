@@ -42,6 +42,14 @@ const (
 	KindIndex      NodeKind = "index"
 	KindTrigger    NodeKind = "trigger"
 	KindConstraint NodeKind = "constraint"
+
+	// SpecScore-native kinds, emitted by SpecScore artifact extraction.
+	KindFeature             NodeKind = "feature"
+	KindIdea                NodeKind = "idea"
+	KindPlan                NodeKind = "plan"
+	KindRequirement         NodeKind = "requirement"
+	KindAcceptanceCriterion NodeKind = "acceptance_criterion"
+	KindTask                NodeKind = "task"
 )
 
 // NodeKinds lists every valid NodeKind (runtime-iterable, like NODE_KINDS).
@@ -51,6 +59,8 @@ var NodeKinds = []NodeKind{
 	KindVariable, KindConstant, KindEnum, KindEnumMember, KindTypeAlias,
 	KindNamespace, KindParameter, KindImport, KindExport, KindRoute,
 	KindComponent, KindIndex, KindTrigger, KindConstraint,
+	KindFeature, KindIdea, KindPlan, KindRequirement,
+	KindAcceptanceCriterion, KindTask,
 }
 
 // EdgeKind is the type of a relationship between two nodes.
@@ -73,6 +83,11 @@ const (
 	EdgeRequires     EdgeKind = "requires"
 	EdgeReplaces     EdgeKind = "replaces"
 	EdgeExcludes     EdgeKind = "excludes"
+
+	// SpecScore-native edge kinds, emitted by SpecScore artifact extraction.
+	EdgePromotesTo EdgeKind = "promotes_to"
+	EdgeSupersedes EdgeKind = "supersedes"
+	EdgeDependsOn  EdgeKind = "depends_on"
 )
 
 // Language identifies the programming language of a file or symbol.
@@ -111,6 +126,7 @@ const (
 	LangPowerShell  Language = "powershell"
 	LangSql         Language = "sql"
 	LangSQLite      Language = "sqlite"
+	LangSpecScore   Language = "specscore"
 	LangGoMod       Language = "go.mod"
 	LangPackageJSON Language = "package.json"
 	LangNode        Language = "node"
