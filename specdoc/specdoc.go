@@ -12,6 +12,7 @@ package specdoc
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -78,8 +79,50 @@ func Parse(path string) (*Doc, error) {
 	if err != nil {
 		return nil, err
 	}
-	format := frontmatterFormat(data)
-	switch format {
+	return parse(path, data)
+}
+
+// ParseContent is Parse for callers that already hold the artifact bytes (the
+// indexer extract path). logicalPath is the artifact's project-relative path —
+// used only to derive the artifact slug (idea/plan slug = filename stem; feature
+// slug = README.md's parent directory) and for error messages, NOT to read the
+// file. Because the underlying specscore-cli parsers read by path, the content
+// is spilled to a temp file that mirrors the tail of logicalPath so slug
+// derivation stays correct regardless of the indexer's working directory.
+func ParseContent(logicalPath string, content []byte) (*Doc, error) {
+	if frontmatterFormat(content) == "" {
+		return nil, fmt.Errorf("specdoc: %s: unrecognized or missing format", logicalPath)
+	}
+	dir, err := os.MkdirTemp("", "codegrapher-specdoc-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(dir)
+	rel := filepath.FromSlash(logicalPath)
+	tmp := filepath.Join(dir, rel)
+	if err := os.MkdirAll(filepath.Dir(tmp), 0o755); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(tmp, content, 0o644); err != nil {
+		return nil, err
+	}
+	d, err := parse(tmp, content)
+	if err != nil {
+		return nil, err
+	}
+	// Re-derive the feature slug from the logical path: parseFeature computes it
+	// from the temp path, whose parent dir is the temp mirror (correct here since
+	// we mirrored the tail), but normalize against the logical path to be safe.
+	if d.Kind == KindFeature {
+		d.Slug = slugFromPath(logicalPath)
+	}
+	return d, nil
+}
+
+// parse dispatches an artifact (already-read bytes + a real readable path) to the
+// matching specscore-cli parser.
+func parse(path string, data []byte) (*Doc, error) {
+	switch frontmatterFormat(data) {
 	case formatFeature:
 		return parseFeature(path)
 	case formatIdea:
@@ -87,7 +130,7 @@ func Parse(path string) (*Doc, error) {
 	case formatPlan:
 		return parsePlan(path)
 	default:
-		return nil, fmt.Errorf("specdoc: %s: unrecognized or missing format %q", path, format)
+		return nil, fmt.Errorf("specdoc: %s: unrecognized or missing format", path)
 	}
 }
 

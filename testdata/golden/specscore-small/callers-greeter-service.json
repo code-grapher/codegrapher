@@ -1,0 +1,11 @@
+{
+  "symbol": "greeter-service",
+  "callers": [
+    {
+      "name": "greeter",
+      "kind": "plan",
+      "filePath": "spec/plans/greeter.md",
+      "startLine": 1
+    }
+  ]
+}

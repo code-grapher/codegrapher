@@ -1,19 +1,32 @@
 package extract
 
 import (
+	"os"
 	"testing"
 
 	"github.com/specscore/codegrapher/model"
 )
 
-// extractSpecScore re-reads the artifact from disk via the specdoc adapter, so
-// these tests point at the repo's own real SpecScore artifacts (relative to the
-// internal/extract package dir).
+// extractSpecScore parses the artifact bytes via the specdoc adapter. These
+// tests point at the repo's own real SpecScore artifacts (relative to the
+// internal/extract package dir): the logical path drives slug derivation and the
+// read-back content is the parsed body.
 const (
 	ideaFixture    = "../../spec/ideas/specscore-artifact-extraction.md"
 	planFixture    = "../../spec/plans/specscore-artifact-extraction.md"
 	featureFixture = "../../spec/features/version-gated-reindex/README.md"
 )
+
+// ssRead reads a fixture artifact's bytes for ExtractFile, failing the test on
+// error (these are committed repo artifacts that must exist).
+func ssRead(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", path, err)
+	}
+	return data
+}
 
 func ssFindNode(nodes []model.Node, kind model.NodeKind) *model.Node {
 	for i := range nodes {
@@ -44,7 +57,7 @@ func ssContainsEdge(edges []model.Edge, source, target string) bool {
 }
 
 func TestExtractSpecScorePlan(t *testing.T) {
-	res, err := ExtractFile(planFixture, nil, model.LangSpecScore)
+	res, err := ExtractFile(planFixture, ssRead(t, planFixture), model.LangSpecScore)
 	if err != nil {
 		t.Fatalf("ExtractFile: %v", err)
 	}
@@ -107,7 +120,7 @@ func TestExtractSpecScorePlan(t *testing.T) {
 }
 
 func TestExtractSpecScoreIdea(t *testing.T) {
-	res, err := ExtractFile(ideaFixture, nil, model.LangSpecScore)
+	res, err := ExtractFile(ideaFixture, ssRead(t, ideaFixture), model.LangSpecScore)
 	if err != nil {
 		t.Fatalf("ExtractFile: %v", err)
 	}
@@ -129,7 +142,7 @@ func TestExtractSpecScoreIdea(t *testing.T) {
 }
 
 func TestExtractSpecScoreFeature(t *testing.T) {
-	res, err := ExtractFile(featureFixture, nil, model.LangSpecScore)
+	res, err := ExtractFile(featureFixture, ssRead(t, featureFixture), model.LangSpecScore)
 	if err != nil {
 		t.Fatalf("ExtractFile: %v", err)
 	}

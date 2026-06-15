@@ -1,0 +1,14 @@
+{
+  "symbol": "greeter::1",
+  "depth": 2,
+  "nodeCount": 1,
+  "edgeCount": 0,
+  "affected": [
+    {
+      "name": "Define the greeting format",
+      "kind": "task",
+      "filePath": "spec/plans/greeter.md",
+      "startLine": 1
+    }
+  ]
+}

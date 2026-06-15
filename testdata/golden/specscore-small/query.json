@@ -1,0 +1,342 @@
+[
+  {
+    "node": {
+      "id": "plan:aaaaad23cd78438bb53fe6bdf3a6886f",
+      "kind": "plan",
+      "name": "greeter",
+      "qualifiedName": "greeter",
+      "filePath": "spec/plans/greeter.md",
+      "language": "specscore",
+      "startLine": 1,
+      "endLine": 1,
+      "startColumn": 0,
+      "endColumn": 0,
+      "signature": "status Approved",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781544638214
+    },
+    "score": 78.00000211524673
+  },
+  {
+    "node": {
+      "id": "feature:89a9880c06bf7ca5f96858eaa3613d22",
+      "kind": "feature",
+      "name": "greeter",
+      "qualifiedName": "greeter",
+      "filePath": "spec/features/greeter/README.md",
+      "language": "specscore",
+      "startLine": 1,
+      "endLine": 1,
+      "startColumn": 0,
+      "endColumn": 0,
+      "signature": "status Stable",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781544638214
+    },
+    "score": 70.00000211524673
+  },
+  {
+    "node": {
+      "id": "file:spec/plans/greeter.md",
+      "kind": "file",
+      "name": "greeter.md",
+      "qualifiedName": "spec/plans/greeter.md",
+      "filePath": "spec/plans/greeter.md",
+      "language": "specscore",
+      "startLine": 1,
+      "endLine": 38,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781544638214
+    },
+    "score": 29.000002068723703
+  },
+  {
+    "node": {
+      "id": "idea:a2e24900f0a264507fb60eb765a27e6d",
+      "kind": "idea",
+      "name": "greeter-service",
+      "qualifiedName": "greeter-service",
+      "filePath": "spec/ideas/greeter-service.md",
+      "language": "specscore",
+      "startLine": 1,
+      "endLine": 1,
+      "startColumn": 0,
+      "endColumn": 0,
+      "signature": "status Specified",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781544638214
+    },
+    "score": 22.000002096388656
+  },
+  {
+    "node": {
+      "id": "file:spec/ideas/greeter-service.md",
+      "kind": "file",
+      "name": "greeter-service.md",
+      "qualifiedName": "spec/ideas/greeter-service.md",
+      "filePath": "spec/ideas/greeter-service.md",
+      "language": "specscore",
+      "startLine": 1,
+      "endLine": 29,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781544638214
+    },
+    "score": 20.0000020417794
+  },
+  {
+    "node": {
+      "id": "task:6fb402fae3fd146425632a36aa3f3091",
+      "kind": "task",
+      "name": "Implement the greeter",
+      "qualifiedName": "greeter::2",
+      "filePath": "spec/plans/greeter.md",
+      "language": "specscore",
+      "startLine": 1,
+      "endLine": 1,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781544638214
+    },
+    "score": 8.00000210577547
+  },
+  {
+    "node": {
+      "id": "idea:bc5308d331e3b6b8c1c64f6bb3fab4d5",
+      "kind": "idea",
+      "name": "legacy-greeter",
+      "qualifiedName": "legacy-greeter",
+      "filePath": "spec/ideas/legacy-greeter.md",
+      "language": "specscore",
+      "startLine": 1,
+      "endLine": 1,
+      "startColumn": 0,
+      "endColumn": 0,
+      "signature": "status Archived",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781544638214
+    },
+    "score": 8.000002096388656
+  },
+  {
+    "node": {
+      "id": "file:spec/ideas/legacy-greeter.md",
+      "kind": "file",
+      "name": "legacy-greeter.md",
+      "qualifiedName": "spec/ideas/legacy-greeter.md",
+      "filePath": "spec/ideas/legacy-greeter.md",
+      "language": "specscore",
+      "startLine": 1,
+      "endLine": 29,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781544638214
+    },
+    "score": 8.0000020417794
+  },
+  {
+    "node": {
+      "id": "task:060564b2f1052e811691b968751fc749",
+      "kind": "task",
+      "name": "Define the greeting format",
+      "qualifiedName": "greeter::1",
+      "filePath": "spec/plans/greeter.md",
+      "language": "specscore",
+      "startLine": 1,
+      "endLine": 1,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781544638214
+    },
+    "score": -1.9999982359336776
+  },
+  {
+    "node": {
+      "id": "requirement:ff02efcf76b38bdcf049315e5bb08b87",
+      "kind": "requirement",
+      "name": "Summary",
+      "qualifiedName": "greeter::Summary",
+      "filePath": "spec/features/greeter/README.md",
+      "language": "specscore",
+      "startLine": 1,
+      "endLine": 1,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781544638214
+    },
+    "score": -9.99999813076037
+  },
+  {
+    "node": {
+      "id": "requirement:39944e478c2407371d9126e62c2c4247",
+      "kind": "requirement",
+      "name": "Problem",
+      "qualifiedName": "greeter::Problem",
+      "filePath": "spec/features/greeter/README.md",
+      "language": "specscore",
+      "startLine": 1,
+      "endLine": 1,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781544638214
+    },
+    "score": -9.99999813076037
+  },
+  {
+    "node": {
+      "id": "requirement:1c24757b015a8ae157494bb533ae93ad",
+      "kind": "requirement",
+      "name": "Behavior",
+      "qualifiedName": "greeter::Behavior",
+      "filePath": "spec/features/greeter/README.md",
+      "language": "specscore",
+      "startLine": 1,
+      "endLine": 1,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781544638214
+    },
+    "score": -9.99999813076037
+  },
+  {
+    "node": {
+      "id": "requirement:1bf0c1cf1d200d23413a9343ec65d7d0",
+      "kind": "requirement",
+      "name": "Dependencies",
+      "qualifiedName": "greeter::Dependencies",
+      "filePath": "spec/features/greeter/README.md",
+      "language": "specscore",
+      "startLine": 1,
+      "endLine": 1,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781544638214
+    },
+    "score": -9.99999813076037
+  },
+  {
+    "node": {
+      "id": "requirement:c2a30fb792c7716b29af8cb0c0339614",
+      "kind": "requirement",
+      "name": "Acceptance Criteria",
+      "qualifiedName": "greeter::Acceptance Criteria",
+      "filePath": "spec/features/greeter/README.md",
+      "language": "specscore",
+      "startLine": 1,
+      "endLine": 1,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781544638214
+    },
+    "score": -9.999998202216066
+  },
+  {
+    "node": {
+      "id": "requirement:1ff150596d1f08dc8befe30e8e232789",
+      "kind": "requirement",
+      "name": "Open Questions",
+      "qualifiedName": "greeter::Open Questions",
+      "filePath": "spec/features/greeter/README.md",
+      "language": "specscore",
+      "startLine": 1,
+      "endLine": 1,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781544638214
+    },
+    "score": -9.999998202216066
+  },
+  {
+    "node": {
+      "id": "file:spec/features/greeter/README.md",
+      "kind": "file",
+      "name": "README.md",
+      "qualifiedName": "spec/features/greeter/README.md",
+      "filePath": "spec/features/greeter/README.md",
+      "language": "specscore",
+      "startLine": 1,
+      "endLine": 44,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "updatedAt": 1781544638214
+    },
+    "score": -9.99999838717694
+  }
+]

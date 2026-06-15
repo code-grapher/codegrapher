@@ -1,0 +1,26 @@
+{
+  "symbol": "greeter",
+  "depth": 2,
+  "nodeCount": 3,
+  "edgeCount": 2,
+  "affected": [
+    {
+      "name": "greeter",
+      "kind": "feature",
+      "filePath": "spec/features/greeter/README.md",
+      "startLine": 1
+    },
+    {
+      "name": "greeter",
+      "kind": "plan",
+      "filePath": "spec/plans/greeter.md",
+      "startLine": 1
+    },
+    {
+      "name": "greeter-service",
+      "kind": "idea",
+      "filePath": "spec/ideas/greeter-service.md",
+      "startLine": 1
+    }
+  ]
+}

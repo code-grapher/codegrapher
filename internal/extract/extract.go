@@ -539,7 +539,7 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 		// Opens the database by path (read-only); the content slice is ignored.
 		e.extractSQLite()
 	case model.LangSpecScore:
-		// Re-reads the artifact by path via the specdoc adapter; content ignored.
+		// Parses the artifact bytes via the specdoc adapter (CWD-independent).
 		e.extractSpecScore(content)
 	}
 

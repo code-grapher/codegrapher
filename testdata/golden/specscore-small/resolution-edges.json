@@ -1,0 +1,6 @@
+[{"source":"feature:89a9880c06bf7ca5f96858eaa3613d22","target":"feature:98ea5e8f2d85900ea12227846948dad7","kind":"depends_on","provenance":"specscore","line":null,"col":null},
+{"source":"idea:a2e24900f0a264507fb60eb765a27e6d","target":"feature:89a9880c06bf7ca5f96858eaa3613d22","kind":"promotes_to","provenance":"specscore","line":null,"col":null},
+{"source":"idea:a2e24900f0a264507fb60eb765a27e6d","target":"idea:bc5308d331e3b6b8c1c64f6bb3fab4d5","kind":"supersedes","provenance":"specscore","line":null,"col":null},
+{"source":"plan:aaaaad23cd78438bb53fe6bdf3a6886f","target":"feature:89a9880c06bf7ca5f96858eaa3613d22","kind":"references","provenance":"specscore","line":null,"col":null},
+{"source":"plan:aaaaad23cd78438bb53fe6bdf3a6886f","target":"feature:89a9880c06bf7ca5f96858eaa3613d22","kind":"references","provenance":"specscore","line":null,"col":null},
+{"source":"plan:aaaaad23cd78438bb53fe6bdf3a6886f","target":"idea:a2e24900f0a264507fb60eb765a27e6d","kind":"references","provenance":"specscore","line":null,"col":null}]

@@ -1,0 +1,17 @@
+{
+  "symbol": "greeter",
+  "callees": [
+    {
+      "name": "greeter-service",
+      "kind": "idea",
+      "filePath": "spec/ideas/greeter-service.md",
+      "startLine": 1
+    },
+    {
+      "name": "greeter",
+      "kind": "feature",
+      "filePath": "spec/features/greeter/README.md",
+      "startLine": 1
+    }
+  ]
+}

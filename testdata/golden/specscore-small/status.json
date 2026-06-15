@@ -1,0 +1,36 @@
+{
+  "initialized": true,
+  "version": "0.9.9",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/specscore-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/specscore-small/.codegraph",
+  "lastIndexed": "",
+  "fileCount": 5,
+  "nodeCount": 23,
+  "edgeCount": 24,
+  "dbSizeBytes": 167936,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "feature": 2,
+    "file": 5,
+    "idea": 2,
+    "plan": 1,
+    "requirement": 11,
+    "task": 2
+  },
+  "languages": [
+    "specscore"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "0.9.9",
+    "builtWithExtractionVersion": 14,
+    "currentExtractionVersion": 14,
+    "reindexRecommended": false
+  }
+}

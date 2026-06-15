@@ -4,7 +4,7 @@ status: Approved
 ---
 # Plan: Specscore Artifact Extraction
 
-**Status:** Implementing
+**Status:** Completed
 **Source:** idea:specscore-artifact-extraction
 **Date:** 2026-06-15
 **Owner:** alexandertrakhimenok
@@ -64,7 +64,7 @@ In the `resolve/` package, link the recorded references between artifact nodes: 
 
 **Source:** idea:specscore-artifact-extraction
 **Depends-On:** 5
-**Status:** in-progress
+**Status:** done
 
 Add fixtures (codegrapher's own `spec/` tree plus a small SpecScore sample), chosen so the goldens exercise all three new edge kinds (`promotes_to`, `supersedes`, `depends_on`) and the child-node kinds; generate deterministic self-goldens via the re-baseline script, and wire them into the binary golden-parity test. All gates green: `gofmt`, `go vet ./...`, `CGO_ENABLED=0 go build ./...`, `CGO_ENABLED=0 go test -count=1 ./...`.
 

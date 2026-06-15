@@ -17,8 +17,8 @@ import (
 // resolution pass (Task 5) to rewrite into real edges. Called by ExtractFile
 // for LangSpecScore. A parse error is recorded as a warning and leaves only the
 // file node (mirrors extractGoMod's parse-error path).
-func (e *extractor) extractSpecScore(_ []byte) {
-	d, err := specdoc.Parse(e.filePath)
+func (e *extractor) extractSpecScore(content []byte) {
+	d, err := specdoc.ParseContent(e.filePath, content)
 	if err != nil {
 		e.errors = append(e.errors, model.ExtractionError{
 			Message:  err.Error(),

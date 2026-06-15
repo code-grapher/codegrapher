@@ -129,6 +129,7 @@ capture r-small "area" "area" "twice" "run" "util" "RADIUS" "stats"
 capture bash-small "greet" "greet" "helper" "MAX_RETRIES" "name"
 capture powershell-small "speak" "Get-Area" "Animal" "Dog" "Invoke-Main" "Speak" "Name"
 capture sql-small "users" "users" "orders" "user_orders" "id" "name" "user_id"
+capture specscore-small "greeter" "greeter" "clock" "greeter-service" "legacy-greeter" "monotonic" "greeter::1"
 
 echo ""
 echo "=== MCP goldens ==="

@@ -248,12 +248,29 @@ func ScanDirectory(rootDir string) []string {
 	}
 	out := files[:0]
 	for _, f := range files {
-		if IsSourceFile(f) {
+		if IsSourceFile(f) || isSpecScoreArtifact(rootDir, f) {
 			out = append(out, f)
 		}
 	}
 	sort.Strings(out)
 	return out
+}
+
+// isSpecScoreArtifact reports whether a project-relative path is a SpecScore
+// artifact (.md under a spec/ tree carrying the SpecScore frontmatter).
+// SpecScore files carry no source extension, so they are invisible to the
+// path-only IsSourceFile/DetectLanguage filter and must be admitted to the
+// scan by a content sniff — mirroring how .db files survive the scan and are
+// confirmed by their header at extraction time.
+func isSpecScoreArtifact(rootDir, relPath string) bool {
+	if filepath.Ext(relPath) != ".md" {
+		return false
+	}
+	content, err := os.ReadFile(filepath.Join(rootDir, relPath))
+	if err != nil {
+		return false
+	}
+	return extract.DetectSpecScore(relPath, content)
 }
 
 // gitVisibleFiles returns all files visible to git (tracked + untracked, not
@@ -418,7 +435,7 @@ func scanDirectoryWalk(rootDir string) []string {
 				if !ignored(fullPath, true, active) {
 					walk(fullPath, active)
 				}
-			} else if !ignored(fullPath, false, active) && IsSourceFile(relPath) {
+			} else if !ignored(fullPath, false, active) && (IsSourceFile(relPath) || isSpecScoreArtifact(rootDir, relPath)) {
 				files = append(files, relPath)
 			}
 		}

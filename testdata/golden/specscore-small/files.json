@@ -1,0 +1,32 @@
+[
+  {
+    "path": "spec/features/clock/README.md",
+    "language": "specscore",
+    "nodeCount": 7,
+    "size": 481
+  },
+  {
+    "path": "spec/features/greeter/README.md",
+    "language": "specscore",
+    "nodeCount": 8,
+    "size": 603
+  },
+  {
+    "path": "spec/ideas/greeter-service.md",
+    "language": "specscore",
+    "nodeCount": 2,
+    "size": 519
+  },
+  {
+    "path": "spec/ideas/legacy-greeter.md",
+    "language": "specscore",
+    "nodeCount": 2,
+    "size": 493
+  },
+  {
+    "path": "spec/plans/greeter.md",
+    "language": "specscore",
+    "nodeCount": 4,
+    "size": 618
+  }
+]
