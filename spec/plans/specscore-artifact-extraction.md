@@ -74,7 +74,7 @@ None at this time.
 
 ## Sidekick Seeds Generated
 
-- [index-all-non-gitignored-files-as-file-level-nodes-even](../ideas/seeds/index-all-non-gitignored-files-as-file-level-nodes-even.md) — captured 2026-06-15 by specstudio:implement
+- [index-all-non-gitignored-files-as-file-level-nodes-even](../ideas/index-all-non-gitignored-files-as-file-level-nodes-even.md) — captured 2026-06-15 by specstudio:implement
 
 ---
 *This document follows the https://specscore.md/plan-specification*

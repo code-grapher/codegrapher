@@ -5,3 +5,33 @@ project:
     host: github.com
     org: code-grapher
     repo: codegrapher
+
+gates:
+    feature.approved:
+        reviewers:
+            - type: ai
+              name: spec-reviewer
+              prompt: reviewers/spec-reviewer.md
+            - type: human
+              name: owner
+    plan.approved:
+        reviewers:
+            - type: ai
+              name: plan-reviewer
+              prompt: reviewers/plan-reviewer.md
+            - type: human
+              name: owner
+    implementation.pre_commit:
+        reviewers:
+            - type: ai
+              name: code-reviewer
+              prompt: reviewers/code-reviewer.md
+            - type: human
+              name: owner
+    implementation.pre_push:
+        reviewers:
+            - type: ai
+              name: code-reviewer
+              prompt: reviewers/code-reviewer.md
+            - type: human
+              name: owner
