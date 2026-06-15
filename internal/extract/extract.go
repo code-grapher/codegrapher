@@ -52,6 +52,10 @@ type extractor struct {
 	// method/function whose body is a following sibling (function_body), so the
 	// sibling's calls attribute to it.
 	dartPendingMember string
+
+	// sqliteNodeID maps (kind, name) → node ID for intra-.db lookups during
+	// binary SQLite extraction (e.g. attaching a trigger to its table node).
+	sqliteNodeID map[string]string
 }
 
 // ExtractFile parses content as lang, extracts a file node (and, eventually,
@@ -531,6 +535,9 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 		e.extractGoMod(content)
 	case model.LangPackageJSON:
 		e.extractPackageJSON(content)
+	case model.LangSQLite:
+		// Opens the database by path (read-only); the content slice is ignored.
+		e.extractSQLite()
 	}
 
 	// For Go files, also run the framework route extractor.

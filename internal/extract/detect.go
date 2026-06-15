@@ -87,6 +87,10 @@ func DetectLanguage(filePath string) model.Language {
 		return model.LangPowerShell
 	case ".sql":
 		return model.LangSql
+	// Binary SQLite database files. Path-only detection is a best guess;
+	// DetectLanguageContent verifies the magic header (.db is ambiguous).
+	case ".db", ".sqlite", ".sqlite3":
+		return model.LangSQLite
 	// File-level-only languages: tracked in the files table with zero
 	// symbol nodes, matching isFileLevelOnlyLanguage() in grammars.ts.
 	case ".yml", ".yaml":
@@ -113,7 +117,8 @@ var objcHeaderMarkers = regexp.MustCompile(`@interface\b|@protocol\b|@implementa
 // else LangC. Callers that have the file content available (the indexer extract
 // path, the parity test) should prefer this over DetectLanguage.
 func DetectLanguageContent(path string, content []byte) model.Language {
-	if strings.ToLower(filepath.Ext(path)) == ".h" {
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext == ".h" {
 		if objcHeaderMarkers.Match(content) {
 			return model.LangObjC
 		}
@@ -122,7 +127,23 @@ func DetectLanguageContent(path string, content []byte) model.Language {
 		}
 		return model.LangC
 	}
+	// .db is ambiguous and .sqlite/.sqlite3 may be empty/placeholder files;
+	// require the SQLite magic header before treating the file as a database.
+	if ext == ".db" || ext == ".sqlite" || ext == ".sqlite3" {
+		if isSQLiteFile(content) {
+			return model.LangSQLite
+		}
+		return model.LangUnknown
+	}
 	return DetectLanguage(path)
+}
+
+// sqliteMagic is the 16-byte header every SQLite database file begins with.
+var sqliteMagic = []byte("SQLite format 3\x00")
+
+// isSQLiteFile reports whether content begins with the SQLite file header.
+func isSQLiteFile(content []byte) bool {
+	return len(content) >= len(sqliteMagic) && string(content[:len(sqliteMagic)]) == string(sqliteMagic)
 }
 
 // IsFileLevelOnly reports whether lang is tracked at the file-record level

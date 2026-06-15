@@ -1,0 +1,32 @@
+[
+  {
+    "source": "constraint:b41e426b3655eb5db681bcaacde45e08",
+    "target": "struct:3d8b8e20b9939813468950a72a1a423a",
+    "kind": "references"
+  },
+  {
+    "source": "index:307cf16f1c56cc816727f569838ba4de",
+    "target": "struct:ca697d38572d7faed115cf7abe65a974",
+    "kind": "references"
+  },
+  {
+    "source": "index:47d0734f23138d9a16e9854da25a5acd",
+    "target": "struct:2495c8a15209401cfaaa2bb541c63855",
+    "kind": "references"
+  },
+  {
+    "source": "struct:e6f51c9df31d43fd868b8c41399e4efd",
+    "target": "struct:3d8b8e20b9939813468950a72a1a423a",
+    "kind": "references"
+  },
+  {
+    "source": "struct:e6f51c9df31d43fd868b8c41399e4efd",
+    "target": "struct:ca697d38572d7faed115cf7abe65a974",
+    "kind": "references"
+  },
+  {
+    "source": "trigger:d8846e759fa15a54fea30e2ca2f0222c",
+    "target": "struct:ca697d38572d7faed115cf7abe65a974",
+    "kind": "references"
+  }
+]

@@ -159,7 +159,7 @@ func resolveRef(
 		return resolveRRef(ref, s)
 	case model.LangPowerShell:
 		return resolvePowerShellRef(ref, s)
-	case model.LangSql:
+	case model.LangSql, model.LangSQLite:
 		return resolveSqlRef(ref, s)
 	default:
 		return resolveGenericRef(ref, s)
@@ -2407,7 +2407,10 @@ func resolveSqlRef(ref model.UnresolvedReference, s *store.Store) *model.Edge {
 	}
 	var defs []model.Node
 	for _, n := range candidates {
-		if n.Language == model.LangSql && n.Kind == model.KindStruct {
+		// Cross-link text-SQL (.sql) and binary SQLite (.db) by name: a table/view
+		// reference in either world resolves to a matching CREATE TABLE/VIEW struct
+		// node in the other.
+		if n.Kind == model.KindStruct && (n.Language == model.LangSql || n.Language == model.LangSQLite) {
 			defs = append(defs, n)
 		}
 	}

@@ -1,0 +1,132 @@
+[
+  {
+    "source": "file:app.db",
+    "target": "struct:09facc74c4d16106f8dd06eda02f3043",
+    "kind": "contains"
+  },
+  {
+    "source": "file:app.db",
+    "target": "struct:2495c8a15209401cfaaa2bb541c63855",
+    "kind": "contains"
+  },
+  {
+    "source": "file:app.db",
+    "target": "struct:3d8b8e20b9939813468950a72a1a423a",
+    "kind": "contains"
+  },
+  {
+    "source": "file:app.db",
+    "target": "struct:ca697d38572d7faed115cf7abe65a974",
+    "kind": "contains"
+  },
+  {
+    "source": "file:app.db",
+    "target": "struct:e6f51c9df31d43fd868b8c41399e4efd",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:09facc74c4d16106f8dd06eda02f3043",
+    "target": "field:790fa95550042c7d0735d07caa127962",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:2495c8a15209401cfaaa2bb541c63855",
+    "target": "constraint:1baed122632736702f548005989455ea",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:2495c8a15209401cfaaa2bb541c63855",
+    "target": "field:405c5eb2912b5e0e98e61a5ffb0501bf",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:2495c8a15209401cfaaa2bb541c63855",
+    "target": "field:ab77fb4b02dae6a5e3d5e2b4eff54e5b",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:2495c8a15209401cfaaa2bb541c63855",
+    "target": "field:b3fcaf1be2505bbdb88f247f8e4f930f",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:2495c8a15209401cfaaa2bb541c63855",
+    "target": "index:47d0734f23138d9a16e9854da25a5acd",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:3d8b8e20b9939813468950a72a1a423a",
+    "target": "constraint:2f841ed03bbe0f187ed04fb3963e665b",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:3d8b8e20b9939813468950a72a1a423a",
+    "target": "constraint:65c1b2dfbfecdb5fd2a1456a3940bd83",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:3d8b8e20b9939813468950a72a1a423a",
+    "target": "constraint:edfb6460aebb50ee562b91e15e21beb1",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:3d8b8e20b9939813468950a72a1a423a",
+    "target": "field:01eb0fb027ee3785fe0233b61e2dbfbe",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:3d8b8e20b9939813468950a72a1a423a",
+    "target": "field:16d8ff2125fe167d99d716e624b59e4a",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:3d8b8e20b9939813468950a72a1a423a",
+    "target": "field:3ccc3d79854f22293df0ff97f4e81817",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:3d8b8e20b9939813468950a72a1a423a",
+    "target": "field:85129a5150f619db080d9d8f63a34bc2",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:3d8b8e20b9939813468950a72a1a423a",
+    "target": "field:fae6acd36f781b8827e4c76a2416787f",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:ca697d38572d7faed115cf7abe65a974",
+    "target": "constraint:378618edace9b827d4bbb80b4e848991",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:ca697d38572d7faed115cf7abe65a974",
+    "target": "constraint:b41e426b3655eb5db681bcaacde45e08",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:ca697d38572d7faed115cf7abe65a974",
+    "target": "field:1e21645cfa675f400daac23175905cbe",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:ca697d38572d7faed115cf7abe65a974",
+    "target": "field:6ea7c0e64087717bd8f63fb45b03e203",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:ca697d38572d7faed115cf7abe65a974",
+    "target": "field:991cb92b80c70c89496e09f9bb3fd5f1",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:ca697d38572d7faed115cf7abe65a974",
+    "target": "index:307cf16f1c56cc816727f569838ba4de",
+    "kind": "contains"
+  },
+  {
+    "source": "struct:ca697d38572d7faed115cf7abe65a974",
+    "target": "trigger:d8846e759fa15a54fea30e2ca2f0222c",
+    "kind": "contains"
+  }
+]

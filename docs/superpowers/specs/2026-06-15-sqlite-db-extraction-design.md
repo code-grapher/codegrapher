@@ -20,8 +20,14 @@ tree-sitter. This pass introspects a **live binary database file**.
 cross-compilation). The standard `mattn/go-sqlite3` driver is CGO and is
 therefore **excluded**. We use **`modernc.org/sqlite`** — a pure-Go SQLite
 engine exposing the standard `database/sql` interface (PRAGMAs, `COUNT(*)`),
-which builds and cross-compiles with CGO disabled. Cost: a large module in
-`go.mod`/`go.sum`, amortized by the Go build cache.
+which builds and cross-compiles with CGO disabled.
+
+**Key cost finding (measured):** `modernc.org/sqlite` is **already a dependency**
+— it is the store's own database driver (`store/store.go`). So `.db` extraction
+adds **no new dependency**: `go.mod`/`go.sum` unchanged, build-module count
+unchanged (218), binary size unchanged (41M), warm build/test times within noise.
+The "heavy dependency" concern that motivated the alternatives below is moot for
+this codebase.
 
 The database is opened **read-only and immutable**
 (`file:<path>?mode=ro&immutable=1`).
@@ -54,18 +60,23 @@ Three SQL-native kinds are added to `model`:
 
 These touch all node consumers (store, query, MCP, goldens) but are additive.
 
-## Activate `Node.Metadata` (structured attributes)
+## Add `Node.Metadata` (structured attributes)
 
-The `nodes` table already has an **unused `metadata TEXT` (JSON) column**
-(vestigial from upstream; the Go `Node` struct never exposed it). We activate
-it:
+(Correction: the pre-existing `metadata` column is on the `edges` table, not
+`nodes`. The `nodes` table needs a new column, added via the standard migration
+mechanism — the same shape as v5's `return_type` addition.)
 
 - Add `Metadata map[string]any` to `model.Node` (JSON, `omitempty`).
-- Wire it through `store/nodes.go` insert/scan into the existing `metadata`
-  column — **no DB migration** (column already present).
-- The golden node serializer emits `metadata` (sorted keys for determinism),
-  **except** it omits the single volatile key `rowCount` (precedent: the golden
-  serializer already omits `updatedAt`).
+- Add `nodes.metadata TEXT` to `store/schema.sql` and a **migration v7**
+  (`ALTER TABLE nodes ADD COLUMN metadata`); bump `CurrentSchemaVersion` to 7.
+- Wire it through `store/nodes.go` insert/scan and the two `search.go` node
+  scanners (the shared `nodeColumns` list now carries `metadata`).
+- Goldens include the full `metadata` (sorted keys for determinism), **including
+  `rowCount`**: a committed fixture `.db` has fixed data, so its `COUNT(*)` is as
+  deterministic as any other extracted attribute (change the fixture → re-baseline,
+  same as everywhere else). `rowCount` is only "volatile" for live indexing of a
+  *changing* production database, which goldens never exercise — so no
+  golden-exclusion mechanism is needed.
 
 `Signature` keeps a human-readable summary (e.g. `CREATE TABLE users`, column
 type text) for continuity with the text-SQL extractor; structured facts live in
@@ -174,19 +185,27 @@ Unknown/unresolved targets produce no edge (deterministic; no guessing).
   (cid/seqno) order. Stable node/edge ordering.
 - Skip internal objects (`sqlite_sequence`, `sqlite_stat*`,
   `sqlite_autoindex_*` as standalone nodes).
-- `rowCount` is the only non-deterministic value and is excluded from goldens.
+- `rowCount` is deterministic for a fixed fixture and is included in goldens
+  like any other attribute.
 
-## Testing
+## Testing (as built)
 
 - Committed binary fixture `testdata/fixtures/sqlite-small/app.db` **plus a
-  committed generator** (`gen.sql` run through the `sqlite3` CLI, or a tiny Go
-  program) so the fixture is reproducible — never hand-crafted. The fixture
-  exercises: a table with PK/FK/UNIQUE/CHECK/NOT NULL/DEFAULT/generated column,
-  a second table, a view selecting from both, a non-unique partial index, a
-  unique index, a trigger, and a virtual (FTS5) table.
-- Deterministic self-goldens over the extracted graph (`rowCount` excluded).
-- Parity registration alongside the other languages; external-corpus hook
-  (a real `.db`) for smoke coverage.
+  committed Go generator** `tools/fixtures/sqlite-small/` (run
+  `go run ./tools/fixtures/sqlite-small`) that creates the `.db` **and** emits
+  the self-goldens from codegrapher's own extractor/resolver — reproducible,
+  never hand-crafted. The fixture exercises: a table with
+  PK/FK/UNIQUE/CHECK/NOT NULL/DEFAULT/generated column, a second table, a STRICT
+  table, a view over a join, a plain index, a unique index, an AFTER INSERT
+  trigger, and an FTS5 virtual table (whose shadow tables are skipped).
+- Self-goldens: `extraction-nodes.json` (incl. `metadata`, with `rowCount`),
+  `extraction-contains.json`, and `resolution-edges.json`.
+- Parity registration alongside the other languages:
+  `TestParitySqliteSmall` (extraction; the harness now also compares `metadata`
+  as canonical JSON) and `TestResolutionParitySqliteSmall` (resolved edges).
+  Plus unit tests `TestSQLite*` (extractor) and `TestSQLiteResolution`.
+- The parity harness passes a repo-relative path + the file bytes, so the
+  extractor's open-by-path / temp-spill fallback is exercised end to end.
 
 ## Out of scope (v1)
 

@@ -17,26 +17,27 @@ const repoRoot = "../.."
 
 // goldenNode mirrors the SQLite JSON output for comparison.
 type goldenNode struct {
-	ID             string  `json:"id"`
-	Kind           string  `json:"kind"`
-	Name           string  `json:"name"`
-	QualifiedName  string  `json:"qualified_name"`
-	FilePath       string  `json:"file_path"`
-	Language       string  `json:"language"`
-	StartLine      int     `json:"start_line"`
-	EndLine        int     `json:"end_line"`
-	StartColumn    int     `json:"start_column"`
-	EndColumn      int     `json:"end_column"`
-	Docstring      *string `json:"docstring"`
-	Signature      *string `json:"signature"`
-	Visibility     *string `json:"visibility"`
-	IsExported     int     `json:"is_exported"`
-	IsAsync        int     `json:"is_async"`
-	IsStatic       int     `json:"is_static"`
-	IsAbstract     int     `json:"is_abstract"`
-	Decorators     *string `json:"decorators"`
-	TypeParameters *string `json:"type_parameters"`
-	ReturnType     *string `json:"return_type"`
+	ID             string         `json:"id"`
+	Kind           string         `json:"kind"`
+	Name           string         `json:"name"`
+	QualifiedName  string         `json:"qualified_name"`
+	FilePath       string         `json:"file_path"`
+	Language       string         `json:"language"`
+	StartLine      int            `json:"start_line"`
+	EndLine        int            `json:"end_line"`
+	StartColumn    int            `json:"start_column"`
+	EndColumn      int            `json:"end_column"`
+	Docstring      *string        `json:"docstring"`
+	Signature      *string        `json:"signature"`
+	Visibility     *string        `json:"visibility"`
+	IsExported     int            `json:"is_exported"`
+	IsAsync        int            `json:"is_async"`
+	IsStatic       int            `json:"is_static"`
+	IsAbstract     int            `json:"is_abstract"`
+	Decorators     *string        `json:"decorators"`
+	TypeParameters *string        `json:"type_parameters"`
+	ReturnType     *string        `json:"return_type"`
+	Metadata       map[string]any `json:"metadata"`
 }
 
 type goldenEdge struct {
@@ -67,6 +68,23 @@ func TestParityPySmall(t *testing.T) {
 // and compares against the golden.
 func TestParityCsSmall(t *testing.T) {
 	testParity(t, "cs-small")
+}
+
+// TestParitySqliteSmall runs our extractor over the binary SQLite fixture
+// testdata/fixtures/sqlite-small/app.db and compares the schema graph (nodes,
+// metadata, and contains edges) against the self-golden.
+func TestParitySqliteSmall(t *testing.T) {
+	testParity(t, "sqlite-small")
+}
+
+// canonicalJSON marshals a metadata map to key-sorted JSON for comparison,
+// normalizing Go int/int64/[]string vs JSON float64/[]any differences.
+func canonicalJSON(m map[string]any) string {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "<error>"
+	}
+	return string(b)
 }
 
 // TestParityJavaSmall runs our extractor over all files in testdata/fixtures/java-small
@@ -351,6 +369,11 @@ func testParity(t *testing.T, fixture string) {
 			}
 			if g.Docstring == nil && got.Docstring != "" {
 				t.Errorf("node %s (%s %s): docstring got=%q want=null", g.ID, g.Kind, g.Name, got.Docstring)
+			}
+			// metadata (structured attributes; compared as canonical JSON so
+			// JSON float64 vs Go int/int64/[]string differences don't matter)
+			if gm, wm := canonicalJSON(got.Metadata), canonicalJSON(g.Metadata); gm != wm {
+				t.Errorf("node %s (%s %s): metadata got=%s want=%s", g.ID, g.Kind, g.Name, gm, wm)
 			}
 		}
 	})

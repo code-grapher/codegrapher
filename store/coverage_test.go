@@ -94,6 +94,7 @@ func TestMigrations_FromV5(t *testing.T) {
 		`DROP INDEX IF EXISTS idx_node_coverage_hash`,
 		`DROP TABLE IF EXISTS node_coverage`,
 		`DROP TABLE IF EXISTS coverage`,
+		`ALTER TABLE nodes DROP COLUMN metadata`,
 		`DELETE FROM schema_versions WHERE version > 1`,
 		`INSERT OR IGNORE INTO schema_versions (version, applied_at, description) VALUES (5, 0, 'v5')`,
 	} {

@@ -378,6 +378,7 @@ func TestMigrations_FromV1(t *testing.T) {
 		`DROP INDEX IF EXISTS idx_unresolved_from_name`,
 		`DROP INDEX IF EXISTS idx_nodes_lower_name`,
 		`ALTER TABLE nodes DROP COLUMN return_type`,
+		`ALTER TABLE nodes DROP COLUMN metadata`,
 		`ALTER TABLE edges DROP COLUMN provenance`,
 		`ALTER TABLE unresolved_refs DROP COLUMN file_path`,
 		`ALTER TABLE unresolved_refs DROP COLUMN language`,
