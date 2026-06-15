@@ -1,10 +1,10 @@
 ---
 format: https://specscore.md/plan-specification
-status: Under Review
+status: Approved
 ---
 # Plan: Specscore Artifact Extraction
 
-**Status:** Under Review
+**Status:** Approved
 **Source:** idea:specscore-artifact-extraction
 **Date:** 2026-06-15
 **Owner:** alexandertrakhimenok
