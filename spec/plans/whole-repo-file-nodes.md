@@ -1,10 +1,10 @@
 ---
 format: https://specscore.md/plan-specification
-status: Implementing
+status: Completed
 ---
 # Plan: Whole Repo File Nodes
 
-**Status:** Implementing
+**Status:** Completed
 **Source Feature:** whole-repo-file-nodes
 **Date:** 2026-06-15
 **Owner:** alexandertrakhimenok
