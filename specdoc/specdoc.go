@@ -110,10 +110,11 @@ func ParseContent(logicalPath string, content []byte) (*Doc, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Re-derive the feature slug from the logical path: parseFeature computes it
-	// from the temp path, whose parent dir is the temp mirror (correct here since
-	// we mirrored the tail), but normalize against the logical path to be safe.
-	if d.Kind == KindFeature {
+	// Re-derive path-based slugs (feature and plan) from the logical path. Both
+	// use slugFromPath, which on the temp mirror already matches the logical
+	// path's tail; re-deriving against logicalPath is belt-and-suspenders so the
+	// slug never depends on the temp directory layout.
+	if d.Kind == KindFeature || d.Kind == KindPlan {
 		d.Slug = slugFromPath(logicalPath)
 	}
 	return d, nil
@@ -170,8 +171,12 @@ func parsePlan(path string) (*Doc, error) {
 		return nil, err
 	}
 	d := &Doc{
-		Kind:   KindPlan,
-		Slug:   p.Slug,
+		Kind: KindPlan,
+		// pkg/plan.Slug is the file stem, which is "README" for directory-style
+		// plans (spec/plans/<slug>/README.md). Derive from the path instead so
+		// they get their directory slug; flat plans are unaffected
+		// (slugFromPath returns the file stem there).
+		Slug:   slugFromPath(path),
 		Title:  p.Title,
 		Status: p.Status,
 	}
