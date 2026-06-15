@@ -1,9 +1,12 @@
 name: Go CI
 
 on:
+  # Scope push to main (+ release tags) only; PR branches are covered by the
+  # pull_request trigger below. This avoids running every job twice on a PR
+  # (once for the branch push, once for the pull_request event).
   push:
-    branches-ignore:
-      - renovate/**
+    branches:
+      - main
     tags:
       - 'v[0-9]+\.[0-9]+\.[0-9]+' # Push events to matching v*, i.e. v20.15.10
   pull_request:
