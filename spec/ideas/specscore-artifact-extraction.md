@@ -1,11 +1,11 @@
 ---
 format: https://specscore.md/idea-specification
-status: Draft
+status: Approved
 ---
 
 # Idea: SpecScore artifact extraction (features, ideas, plans, …) into the codegrapher graph
 
-**Status:** Draft
+**Status:** Approved
 **Date:** 2026-06-15
 **Owner:** trakhimenok
 **Promotes To:** —
