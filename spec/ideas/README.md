@@ -10,7 +10,7 @@ Pre-spec one-pagers. Each Idea is a lint-clean problem-direction-MVP one-pager t
 
 | Idea | Status | Date | Owner | Promotes To |
 |------|--------|------|-------|-------------|
-| [specscore-artifact-extraction](specscore-artifact-extraction.md) | Draft | 2026-06-15 | trakhimenok | — |
+| [specscore-artifact-extraction](specscore-artifact-extraction.md) | Approved | 2026-06-15 | trakhimenok | — |
 
 ## Open Questions
 
