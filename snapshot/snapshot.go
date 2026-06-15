@@ -43,7 +43,7 @@ func Export(dbPath, outDir, projectRoot string) error {
 	if err != nil {
 		return fmt.Errorf("snapshot: open store: %w", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return fmt.Errorf("snapshot: mkdir %s: %w", outDir, err)
@@ -85,7 +85,7 @@ func Import(dbPath, inDir string) error {
 	if err != nil {
 		return fmt.Errorf("snapshot: init store: %w", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	if err := importNodes(s, ingrPath(inDir, "nodes")); err != nil {
 		return fmt.Errorf("snapshot: nodes: %w", err)
@@ -455,7 +455,7 @@ func writeINGR(path, title string, cols []ingr.ColDef, rows []recordRow) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	w := ingr.NewRecordsWriter(f)
 	if _, err := w.WriteHeader(title, cols); err != nil {
@@ -488,7 +488,7 @@ func readINGR(path string) ([]map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	dec := ingr.NewDecoder(f)
 	var rows []map[string]any
@@ -535,7 +535,7 @@ func intVal(v any) int {
 			return 0
 		}
 		var n int64
-		fmt.Sscanf(s, "%d", &n)
+		_, _ = fmt.Sscanf(s, "%d", &n)
 		return int(n)
 	}
 }

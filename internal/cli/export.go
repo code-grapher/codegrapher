@@ -51,7 +51,7 @@ current branch, falling back to HEAD).`,
 			if err != nil {
 				return fmt.Errorf("export failed: %w", err)
 			}
-			defer reg.Close()
+			defer func() { _ = reg.Close() }()
 
 			printInfo(fmt.Sprintf("Exporting index → %s (ref %s)", out, ref))
 

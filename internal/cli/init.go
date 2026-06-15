@@ -42,7 +42,7 @@ func newInitCmd() *cobra.Command {
 				printError(fmt.Sprintf("Failed: %s", err))
 				os.Exit(1)
 			}
-			defer idx.Close()
+			defer func() { _ = idx.Close() }()
 
 			printIndexResult(result, projectPath)
 			if !result.Success {
@@ -140,16 +140,16 @@ func writeErrorLog(projectPath string, errors []model.ExtractionError) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
-	fmt.Fprintf(f, "CodeGraph Error Log\n")
+	defer func() { _ = f.Close() }()
+	_, _ = fmt.Fprintf(f, "CodeGraph Error Log\n")
 	for _, e := range errors {
 		if e.Severity != "error" {
 			continue
 		}
 		if e.FilePath != "" {
-			fmt.Fprintf(f, "%s: %s\n", e.FilePath, e.Message)
+			_, _ = fmt.Fprintf(f, "%s: %s\n", e.FilePath, e.Message)
 		} else {
-			fmt.Fprintf(f, "%s\n", e.Message)
+			_, _ = fmt.Fprintf(f, "%s\n", e.Message)
 		}
 	}
 }

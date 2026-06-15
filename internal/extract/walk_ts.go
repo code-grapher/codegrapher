@@ -622,12 +622,7 @@ func (e *extractor) visitTSBody(body *tsparse.Node) {
 		case "new_expression":
 			e.extractTSInstantiation(node)
 		case "function_declaration":
-			// Named nested function — extract
-			nameNode := node.ChildByFieldName("name")
-			if nameNode != nil && nameNode.Text() != "" && nameNode.Text() != "<anonymous>" {
-				// We can't easily avoid double-visiting with Walk, so we use a different approach:
-				// don't use Walk for bodies, use recursive visitNodeTS instead.
-			}
+			// Named nested functions are handled via recursive visitNodeTS, not here.
 		}
 	})
 }

@@ -346,12 +346,12 @@ func writeREADME(outDir, projectRoot string) error {
 	var b strings.Builder
 
 	// Title
-	b.WriteString(fmt.Sprintf("# Code graph of %s/%s\n\n", org, repo))
+	fmt.Fprintf(&b, "# Code graph of %s/%s\n\n", org, repo)
 
 	// Links
 	b.WriteString("Indexed by [codegrapher](https://codegrapher.dev)")
 	if isGitHub {
-		b.WriteString(fmt.Sprintf(" · [Browse online](https://codegrapher.dev/github.com/%s/%s)", org, repo))
+		fmt.Fprintf(&b, " · [Browse online](https://codegrapher.dev/github.com/%s/%s)", org, repo)
 	}
 	b.WriteString("\n\n")
 

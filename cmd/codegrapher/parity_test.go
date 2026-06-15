@@ -23,7 +23,7 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 	binaryPath = bin
-	defer os.Remove(bin)
+	defer func() { _ = os.Remove(bin) }()
 	os.Exit(m.Run())
 }
 
@@ -32,7 +32,7 @@ func buildBinary() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tmp.Close()
+	_ = tmp.Close()
 	path := tmp.Name()
 	if runtime.GOOS == "windows" {
 		path += ".exe"

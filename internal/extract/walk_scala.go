@@ -372,7 +372,7 @@ func (e *extractor) extractScalaValVar(node *tsparse.Node) {
 		typeName = t.Text()
 	}
 
-	kind := model.KindField
+	var kind model.NodeKind
 	switch {
 	case e.isInsideFunctionLike():
 		// A `val`/`var` inside a def body is a local variable.

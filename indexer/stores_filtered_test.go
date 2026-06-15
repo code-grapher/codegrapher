@@ -24,7 +24,7 @@ func TestStoresFiltered(t *testing.T) {
 		}
 	}
 	idx := newIndexer(root, reg)
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
 	// Empty filter returns all stores (== Stores()).
 	if got := idx.StoresFiltered(nil); len(got) != 2 {

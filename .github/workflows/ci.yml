@@ -1,0 +1,28 @@
+name: Go CI
+
+on:
+  # Scope push to main (+ release tags) only; PR branches are covered by the
+  # pull_request trigger below. This avoids running every job twice on a PR
+  # (once for the branch push, once for the pull_request event).
+  push:
+    branches:
+      - main
+    tags:
+      - 'v[0-9]+\.[0-9]+\.[0-9]+' # Push events to matching v*, i.e. v20.15.10
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+
+  strongo_workflow:
+    permissions:
+      contents: write
+    # Reusable Go CI workflow: go get/vet/build/test + golangci-lint, and
+    # version-bump-and-tag on main. Defaults to CGO_ENABLED=0, which matches
+    # codegrapher's single-static-binary / cross-compilation launch requirement
+    # (no cgo_enabled override needed — the parser and SQLite driver are pure Go).
+    uses: strongo/go-ci-action/.github/workflows/workflow.yml@main
+
+    secrets:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

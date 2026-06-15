@@ -32,7 +32,7 @@ func newSyncCmd() *cobra.Command {
 				}
 				os.Exit(1)
 			}
-			defer idx.Close()
+			defer func() { _ = idx.Close() }()
 
 			if quiet {
 				idx.Sync(indexer.Options{})

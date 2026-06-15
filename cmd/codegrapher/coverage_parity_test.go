@@ -70,7 +70,7 @@ func TestCoverageExportRoundTrip(t *testing.T) {
 func findRecordset(t *testing.T, dir, leaf string) []byte {
 	t.Helper()
 	var found string
-	filepath.Walk(dir, func(p string, fi os.FileInfo, err error) error {
+	_ = filepath.Walk(dir, func(p string, fi os.FileInfo, err error) error {
 		if err == nil && !fi.IsDir() && filepath.Base(p) == leaf {
 			found = p
 		}

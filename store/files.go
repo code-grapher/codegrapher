@@ -78,7 +78,7 @@ func (s *Store) GetLastIndexedAt() (int64, error) {
 }
 
 func scanFiles(rows *sql.Rows) ([]model.FileRecord, error) {
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []model.FileRecord
 	for rows.Next() {
 		var (

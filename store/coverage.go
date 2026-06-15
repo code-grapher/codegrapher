@@ -77,7 +77,7 @@ func (s *Store) GetAllCoverage() ([]CoverageRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []CoverageRow
 	for rows.Next() {
 		var r CoverageRow
@@ -115,7 +115,7 @@ func (s *Store) GetAllNodeCoverage() ([]NodeCoverageRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []NodeCoverageRow
 	for rows.Next() {
 		var r NodeCoverageRow

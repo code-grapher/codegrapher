@@ -39,13 +39,13 @@ func TestSQLiteResolution(t *testing.T) {
 	if _, err := db.Exec(sqliteResolveDDL); err != nil {
 		t.Fatalf("ddl: %v", err)
 	}
-	db.Close()
+	_ = db.Close()
 
 	s, err := store.Initialize(filepath.Join(dir, store.DatabaseFilename))
 	if err != nil {
 		t.Fatalf("store init: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 
 	insert := func(path string, content []byte, lang model.Language) {
 		res, err := extract.ExtractFile(path, content, lang)
@@ -119,7 +119,7 @@ func TestResolutionParitySqliteSmall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("store init: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 
 	content, err := os.ReadFile(filepath.Join(fixtureDir, "app.db"))
 	if err != nil {

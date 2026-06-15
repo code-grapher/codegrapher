@@ -54,7 +54,7 @@ directory — the recordsets the CLI uploads to the server.`,
 			if err != nil {
 				return fmt.Errorf("coverage failed: %w", err)
 			}
-			defer reg.Close()
+			defer func() { _ = reg.Close() }()
 
 			opts := coverage.Options{Ref: ref, Root: projectPath}
 			ing := coverage.NewIngestor()
@@ -66,7 +66,7 @@ directory — the recordsets the CLI uploads to the server.`,
 					return fmt.Errorf("coverage: open profile: %w", err)
 				}
 				sum, err := ing.Ingest(context.Background(), s, f, opts)
-				f.Close()
+				_ = f.Close()
 				if err != nil {
 					return fmt.Errorf("coverage: ingest: %w", err)
 				}
@@ -135,7 +135,7 @@ func writeCoverageRecordsets(stores map[scope.Scope]*store.Store, outDir string)
 	if err != nil {
 		return err
 	}
-	defer fcFile.Close()
+	defer func() { _ = fcFile.Close() }()
 	if err := coverage.EncodeFileCoverage(fcFile, fileRecs); err != nil {
 		return err
 	}
@@ -144,6 +144,6 @@ func writeCoverageRecordsets(stores map[scope.Scope]*store.Store, outDir string)
 	if err != nil {
 		return err
 	}
-	defer ncFile.Close()
+	defer func() { _ = ncFile.Close() }()
 	return coverage.EncodeNodeCoverage(ncFile, nodeRecs)
 }
