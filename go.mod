@@ -7,7 +7,7 @@ require (
 	github.com/ingr-io/ingr-go v0.0.2
 	github.com/klauspost/compress v1.18.6
 	github.com/odvcencio/gotreesitter v0.20.2
-	github.com/specscore/specscore-cli v0.0.0-00010101000000-000000000000
+	github.com/specscore/specscore-cli v0.10.2-0.20260615070407-a2eb217cb769
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/mod v0.37.0
 	golang.org/x/tools v0.46.0
@@ -31,5 +31,3 @@ require (
 )
 
 replace github.com/odvcencio/gotreesitter => github.com/trakhimenok/gotreesitter v0.20.3-0.20260611095614-14527fe8bf96
-
-replace github.com/specscore/specscore-cli => /Users/alexandertrakhimenok/projects/specscore/specscore-cli
