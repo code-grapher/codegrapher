@@ -17,7 +17,7 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781433124800
+      "updatedAt": 1781550498915
     },
     "score": 88.58454543345673
   },
@@ -40,7 +40,7 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781433124800
+      "updatedAt": 1781550498915
     },
     "score": 88.56602272109001
   },
@@ -63,7 +63,7 @@
       "isStatic": true,
       "isAbstract": false,
       "returnType": "instancetype",
-      "updatedAt": 1781433124800
+      "updatedAt": 1781550498915
     },
     "score": 31.58226550748266
   },
@@ -86,7 +86,7 @@
       "isStatic": true,
       "isAbstract": false,
       "returnType": "instancetype",
-      "updatedAt": 1781433124800
+      "updatedAt": 1781550498915
     },
     "score": 31.58226550748266
   },
@@ -109,7 +109,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "double",
-      "updatedAt": 1781433124800
+      "updatedAt": 1781550498915
     },
     "score": 10.504353725263883
   },
@@ -132,7 +132,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "NSString *",
-      "updatedAt": 1781433124800
+      "updatedAt": 1781550498915
     },
     "score": 10.504353725263883
   },
@@ -155,7 +155,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "double",
-      "updatedAt": 1781433124800
+      "updatedAt": 1781550498915
     },
     "score": 10.504353725263883
   },
@@ -178,7 +178,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "NSString *",
-      "updatedAt": 1781433124800
+      "updatedAt": 1781550498915
     },
     "score": 10.504353725263883
   },
@@ -202,7 +202,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "double",
-      "updatedAt": 1781433124800
+      "updatedAt": 1781550498915
     },
     "score": 10.210601635071331
   }

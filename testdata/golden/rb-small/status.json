@@ -1,13 +1,13 @@
 {
   "initialized": true,
   "version": "0.9.9",
-  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/ruby/testdata/fixtures/rb-small",
-  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/ruby/testdata/fixtures/rb-small/.codegraph",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/rb-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/rb-small/.codegraph",
   "lastIndexed": "",
   "fileCount": 2,
   "nodeCount": 24,
   "edgeCount": 30,
-  "dbSizeBytes": 147456,
+  "dbSizeBytes": 167936,
   "backend": "node-sqlite",
   "journalMode": "wal",
   "nodesByKind": {

@@ -253,10 +253,9 @@ func testParity(t *testing.T, fixture string) {
 		if err != nil || info.IsDir() {
 			return err
 		}
-		lang := extract.DetectLanguage(path)
-		if lang != model.LangUnknown {
-			sourceFiles = append(sourceFiles, path)
-		}
+		// Every non-gitignored file is indexed; unknown-language files become
+		// bare file-level nodes (whole-repo-file-nodes change).
+		sourceFiles = append(sourceFiles, path)
 		return nil
 	})
 	if err != nil {
@@ -281,6 +280,10 @@ func testParity(t *testing.T, fixture string) {
 		}
 
 		lang := extract.DetectLanguageContent(absPath, content)
+		if lang == model.LangUnknown {
+			// Bare file-level node, no parse, mirroring the production indexer.
+			content = nil
+		}
 		result, err := extract.ExtractFile(relPath, content, lang)
 		if err != nil {
 			t.Fatalf("extract %s: %v", relPath, err)

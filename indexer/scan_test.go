@@ -49,8 +49,10 @@ func TestScanDirectoryWalkNonGit(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "vendor", "v.go"), "package v\n")
 	writeFile(t, filepath.Join(dir, "dist", "out.js"), "x\n")
 
+	// Admission is decoupled from language detection: README.md is admitted as
+	// a bare-node candidate; node_modules/dist/vendor stay default-ignored.
 	got := ScanDirectory(dir)
-	want := []string{"src/a.go", "src/b.ts"}
+	want := []string{"README.md", "src/a.go", "src/b.ts"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ScanDirectory = %v, want %v", got, want)
 	}
@@ -63,8 +65,9 @@ func TestScanDirectoryGitignoreNegationOverridesDefault(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "secret", "s.go"), "package s\n")
 	writeFile(t, filepath.Join(dir, "main.go"), "package main\n")
 
+	// .gitignore itself is a non-gitignored file, so it is now admitted.
 	got := ScanDirectory(dir)
-	want := []string{"main.go", "vendor/v.go"}
+	want := []string{".gitignore", "main.go", "vendor/v.go"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ScanDirectory = %v, want %v", got, want)
 	}
@@ -76,8 +79,9 @@ func TestScanDirectoryNestedGitignore(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "pkg", "gen.go"), "package p\n")
 	writeFile(t, filepath.Join(dir, "pkg", "real.go"), "package p\n")
 
+	// The nested .gitignore is itself admitted; gen.go stays ignored by it.
 	got := ScanDirectory(dir)
-	want := []string{"pkg/real.go"}
+	want := []string{"pkg/.gitignore", "pkg/real.go"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ScanDirectory = %v, want %v", got, want)
 	}
@@ -111,8 +115,35 @@ func TestScanDirectoryGitRepo(t *testing.T) {
 	// Untracked file appears too.
 	writeFile(t, filepath.Join(dir, "untracked.ts"), "export {}\n")
 
+	// .gitignore is tracked and non-gitignored, so it is admitted too.
 	got := ScanDirectory(dir)
-	want := []string{"src/a.go", "untracked.ts"}
+	want := []string{".gitignore", "src/a.go", "untracked.ts"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ScanDirectory = %v, want %v", got, want)
+	}
+}
+
+// TestScanDirectoryGitignoredFileExcluded covers the whole-repo-file-nodes AC
+// "gitignored file produces no node": admission is decoupled from language
+// detection (a tracked unknown-language file is admitted), while a file matched
+// by .gitignore is still excluded from the scan entirely.
+func TestScanDirectoryGitignoredFileExcluded(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	// Tracked, non-gitignored, unknown-language file: must be admitted now that
+	// admission is decoupled from DetectLanguage.
+	writeFile(t, filepath.Join(dir, "notes.txt"), "hello\n")
+	// File matched by .gitignore: must produce no node of any kind.
+	writeFile(t, filepath.Join(dir, "secret.txt"), "ssh\n")
+	writeFile(t, filepath.Join(dir, ".gitignore"), "secret.txt\n")
+	mustGit(t, dir, "init")
+	mustGit(t, dir, "add", "-A")
+
+	got := ScanDirectory(dir)
+	want := []string{".gitignore", "notes.txt"}
+	sort.Strings(got)
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ScanDirectory = %v, want %v", got, want)
 	}

@@ -16,7 +16,7 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781428927445
+      "updatedAt": 1781550496737
     },
     "score": 91.22793879807544
   },
@@ -39,7 +39,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "Double",
-      "updatedAt": 1781428927445
+      "updatedAt": 1781550496737
     },
     "score": 12.617143946662981
   },
@@ -62,7 +62,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "String",
-      "updatedAt": 1781428927445
+      "updatedAt": 1781550496737
     },
     "score": 12.617143946662981
   },
@@ -84,7 +84,7 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781428927445
+      "updatedAt": 1781550496737
     },
     "score": 5.617143946662981
   }

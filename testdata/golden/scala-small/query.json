@@ -16,7 +16,7 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781427809501
+      "updatedAt": 1781550495063
     },
     "score": 87.89832418130598
   },
@@ -37,7 +37,7 @@
       "isAsync": false,
       "isStatic": true,
       "isAbstract": false,
-      "updatedAt": 1781427809501
+      "updatedAt": 1781550495063
     },
     "score": 87.89832418130598
   },
@@ -59,7 +59,7 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781427809500
+      "updatedAt": 1781550495059
     },
     "score": 67.86784283225107
   },
@@ -80,7 +80,7 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781427809501
+      "updatedAt": 1781550495063
     },
     "score": 24.83291007864648
   },
@@ -103,7 +103,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "Circle",
-      "updatedAt": 1781427809501
+      "updatedAt": 1781550495063
     },
     "score": 9.64247908496958
   },
@@ -126,7 +126,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "Double",
-      "updatedAt": 1781427809501
+      "updatedAt": 1781550495063
     },
     "score": 9.595990665083383
   },
@@ -149,7 +149,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "Double",
-      "updatedAt": 1781427809501
+      "updatedAt": 1781550495063
     },
     "score": 2.5959906650833826
   },
@@ -172,7 +172,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "Double",
-      "updatedAt": 1781427809501
+      "updatedAt": 1781550495063
     },
     "score": 2.5444991856445274
   },
@@ -194,7 +194,7 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781427809500
+      "updatedAt": 1781550495059
     },
     "score": -11.858893847972732
   },
@@ -216,7 +216,7 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781427809500
+      "updatedAt": 1781550495059
     },
     "score": -11.923069609066928
   }

@@ -121,8 +121,10 @@ func TestDebounceCoalesces(t *testing.T) {
 	w.Stop()
 }
 
-// TestFilterNonSourceFile verifies that non-source files do not trigger a sync.
-func TestFilterNonSourceFile(t *testing.T) {
+// TestAdmitUnknownLanguageFile verifies that a non-gitignored file with an
+// unknown language is admitted (triggers a sync) so it becomes a bare
+// file-level node, per the whole-repo-file-nodes change.
+func TestAdmitUnknownLanguageFile(t *testing.T) {
 	dir := t.TempDir()
 	var calls atomic.Int32
 	syncFn := func() (watch.SyncResult, error) {
@@ -135,9 +137,9 @@ func TestFilterNonSourceFile(t *testing.T) {
 
 	watch.EmitEventForTests(dir, "README.md")
 
-	time.Sleep(300 * time.Millisecond)
-	if calls.Load() != 0 {
-		t.Errorf("sync should not be called for non-source file, got %d calls", calls.Load())
+	waitFor(t, func() bool { return calls.Load() > 0 }, 2*time.Second)
+	if calls.Load() == 0 {
+		t.Errorf("sync should be called for unknown-language file, got %d calls", calls.Load())
 	}
 	w.Stop()
 }

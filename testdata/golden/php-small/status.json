@@ -1,13 +1,13 @@
 {
   "initialized": true,
   "version": "0.9.9",
-  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/php/testdata/fixtures/php-small",
-  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/php/testdata/fixtures/php-small/.codegraph",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/php-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/php-small/.codegraph",
   "lastIndexed": "",
   "fileCount": 2,
   "nodeCount": 28,
   "edgeCount": 33,
-  "dbSizeBytes": 147456,
+  "dbSizeBytes": 167936,
   "backend": "node-sqlite",
   "journalMode": "wal",
   "nodesByKind": {

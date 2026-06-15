@@ -532,16 +532,13 @@ func toRelPOSIX(root, abs string) string {
 	return filepath.ToSlash(rel)
 }
 
-// defaultIsSourceFile is the built-in is-source-file predicate. Matches the
-// Go and TypeScript/JavaScript extensions that the port indexes.
+// defaultIsSourceFile is the built-in admission predicate for the watcher.
+// Admission is decoupled from language detection: every path that survives the
+// watcher's always-ignored and .gitignore checks (applied before this predicate
+// in handleChange) is admitted, so unknown-language files become bare
+// file-level nodes rather than being dropped.
 func defaultIsSourceFile(rel string) bool {
-	if i := strings.LastIndexByte(rel, '.'); i >= 0 {
-		switch strings.ToLower(rel[i:]) {
-		case ".go", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs":
-			return true
-		}
-	}
-	return false
+	return true
 }
 
 // Test registry: maps project root → live watcher for IngestEventForTests.

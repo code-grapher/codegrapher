@@ -241,36 +241,18 @@ func buildDefaultIgnore(rootDir string) *ignoreMatcher {
 // at all levels); otherwise it walks the filesystem applying the built-in
 // default ignores plus .gitignore files. Mirrors scanDirectory in
 // src/extraction/index.ts. The result is sorted for determinism.
+// ScanDirectory returns every non-gitignored file under rootDir. Admission is
+// decoupled from language detection: every file that .gitignore filtering keeps
+// is indexed. Recognized languages get full symbol extraction; unknown-language
+// files (including SpecScore artifacts and binaries) become bare file-level
+// nodes rather than vanishing.
 func ScanDirectory(rootDir string) []string {
 	files := gitVisibleFiles(rootDir)
 	if files == nil {
 		files = scanDirectoryWalk(rootDir)
 	}
-	out := files[:0]
-	for _, f := range files {
-		if IsSourceFile(f) || isSpecScoreArtifact(rootDir, f) {
-			out = append(out, f)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-// isSpecScoreArtifact reports whether a project-relative path is a SpecScore
-// artifact (.md under a spec/ tree carrying the SpecScore frontmatter).
-// SpecScore files carry no source extension, so they are invisible to the
-// path-only IsSourceFile/DetectLanguage filter and must be admitted to the
-// scan by a content sniff — mirroring how .db files survive the scan and are
-// confirmed by their header at extraction time.
-func isSpecScoreArtifact(rootDir, relPath string) bool {
-	if filepath.Ext(relPath) != ".md" {
-		return false
-	}
-	content, err := os.ReadFile(filepath.Join(rootDir, relPath))
-	if err != nil {
-		return false
-	}
-	return extract.DetectSpecScore(relPath, content)
+	sort.Strings(files)
+	return files
 }
 
 // gitVisibleFiles returns all files visible to git (tracked + untracked, not
@@ -435,7 +417,7 @@ func scanDirectoryWalk(rootDir string) []string {
 				if !ignored(fullPath, true, active) {
 					walk(fullPath, active)
 				}
-			} else if !ignored(fullPath, false, active) && (IsSourceFile(relPath) || isSpecScoreArtifact(rootDir, relPath)) {
+			} else if !ignored(fullPath, false, active) {
 				files = append(files, relPath)
 			}
 		}

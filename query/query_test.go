@@ -35,19 +35,23 @@ func buildStore(t *testing.T, fixtureDir string) *store.Store {
 		if err != nil || info.IsDir() {
 			return err
 		}
-		lang := extract.DetectLanguage(path)
-		if lang == model.LangUnknown {
-			return nil
-		}
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
 		relPath, err := filepath.Rel(fixtureDir, path)
 		if err != nil {
 			return err
 		}
 		relPath = filepath.ToSlash(relPath)
+
+		// Mirror the production indexer: unknown-language files get a single
+		// bare file-level node (no parse, no symbols) rather than being
+		// skipped (whole-repo-file-nodes change).
+		lang := extract.DetectLanguage(path)
+		var content []byte
+		if lang != model.LangUnknown {
+			content, err = os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+		}
 
 		result, err := extract.ExtractFile(relPath, content, lang)
 		if err != nil {

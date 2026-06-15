@@ -5,7 +5,7 @@
     "content": [
       {
         "type": "text",
-        "text": "## CodeGraph Status\n\n**Files indexed:** 2\n**Total nodes:** 24\n**Total edges:** 30\n**Database size:** 0.14 MB\n**Backend:** node:sqlite (Node built-in) \u2014 full WAL + FTS5\n**Journal mode:** wal (concurrent reads safe)\n\n### Nodes by Kind:\n- class: 2\n- constant: 2\n- field: 3\n- file: 2\n- function: 2\n- import: 1\n- method: 6\n- module: 2\n- property: 2\n- variable: 2\n\n### Languages:\n- ruby: 2"
+        "text": "## CodeGraph Status\n\n**Files indexed:** 2\n**Total nodes:** 24\n**Total edges:** 30\n**Database size:** 0.16 MB\n**Backend:** node:sqlite (Node built-in) \u2014 full WAL + FTS5\n**Journal mode:** wal (concurrent reads safe)\n\n### Nodes by Kind:\n- class: 2\n- constant: 2\n- field: 3\n- file: 2\n- function: 2\n- import: 1\n- method: 6\n- module: 2\n- property: 2\n- variable: 2\n\n### Languages:\n- ruby: 2"
       }
     ]
   }

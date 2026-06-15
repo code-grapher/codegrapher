@@ -1,13 +1,13 @@
 {
   "initialized": true,
   "version": "0.9.9",
-  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/cpp/testdata/fixtures/cpp-small",
-  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/cpp/testdata/fixtures/cpp-small/.codegraph",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/cpp-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/cpp-small/.codegraph",
   "lastIndexed": "",
   "fileCount": 3,
   "nodeCount": 32,
   "edgeCount": 37,
-  "dbSizeBytes": 159744,
+  "dbSizeBytes": 180224,
   "backend": "node-sqlite",
   "journalMode": "wal",
   "nodesByKind": {

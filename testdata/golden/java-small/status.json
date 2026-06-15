@@ -1,13 +1,13 @@
 {
   "initialized": true,
   "version": "0.9.9",
-  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/java/testdata/fixtures/java-small",
-  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/java/testdata/fixtures/java-small/.codegraph",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/java-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/java-small/.codegraph",
   "lastIndexed": "",
   "fileCount": 5,
   "nodeCount": 31,
   "edgeCount": 31,
-  "dbSizeBytes": 155648,
+  "dbSizeBytes": 176128,
   "backend": "node-sqlite",
   "journalMode": "wal",
   "nodesByKind": {

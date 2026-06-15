@@ -71,6 +71,18 @@ func ExtractFile(path string, content []byte, lang model.Language) (model.Extrac
 		lang:     lang,
 	}
 
+	// Unknown-language files get a single bare file-level node and nothing
+	// else: no tree-sitter parse, no symbol nodes, edges, or unresolved refs.
+	// Detection never assigns LangUnknown to a parseable language, so this is
+	// the catch-all for unrecognized extensions and binary files.
+	if lang == model.LangUnknown {
+		e.emitFileNode(nil)
+		return model.ExtractionResult{
+			Nodes:      e.nodes,
+			DurationMs: time.Since(start).Milliseconds(),
+		}, nil
+	}
+
 	// Parse the file with tree-sitter for TS/JS; Go uses go/parser directly
 	// (ADR-003: go/parser is the primary Go scanner; walkGo is the test oracle only).
 	var tree *tsparse.Tree

@@ -1,13 +1,13 @@
 {
   "initialized": true,
   "version": "0.9.9",
-  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/kotlin/testdata/fixtures/kt-small",
-  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/kotlin/testdata/fixtures/kt-small/.codegraph",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/kt-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/kt-small/.codegraph",
   "lastIndexed": "",
   "fileCount": 5,
   "nodeCount": 35,
   "edgeCount": 40,
-  "dbSizeBytes": 155648,
+  "dbSizeBytes": 176128,
   "backend": "node-sqlite",
   "journalMode": "wal",
   "nodesByKind": {

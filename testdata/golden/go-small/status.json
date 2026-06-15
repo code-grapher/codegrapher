@@ -1,13 +1,13 @@
 {
   "initialized": true,
   "version": "0.9.9",
-  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/testdata/fixtures/go-small",
-  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/testdata/fixtures/go-small/.codegraph",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/go-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/go-small/.codegraph",
   "lastIndexed": "",
   "fileCount": 4,
   "nodeCount": 30,
   "edgeCount": 51,
-  "dbSizeBytes": 163840,
+  "dbSizeBytes": 184320,
   "backend": "node-sqlite",
   "journalMode": "wal",
   "nodesByKind": {

@@ -17,7 +17,7 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781423264936
+      "updatedAt": 1781550492826
     },
     "score": 90.13445387012757
   },
@@ -40,7 +40,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "Dog",
-      "updatedAt": 1781423264933
+      "updatedAt": 1781550492826
     },
     "score": 21.35574866508076
   },
@@ -63,7 +63,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "string",
-      "updatedAt": 1781423264936
+      "updatedAt": 1781550492826
     },
     "score": 11.775487217264613
   },
@@ -86,7 +86,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "string",
-      "updatedAt": 1781423264936
+      "updatedAt": 1781550492826
     },
     "score": 11.775487217264613
   },
@@ -109,7 +109,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "Task\u003cstring\u003e",
-      "updatedAt": 1781423264936
+      "updatedAt": 1781550492826
     },
     "score": 11.744706074307002
   },
@@ -132,7 +132,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "int",
-      "updatedAt": 1781423264936
+      "updatedAt": 1781550492826
     },
     "score": 4.7754872172646134
   },
@@ -155,7 +155,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "Color",
-      "updatedAt": 1781423264936
+      "updatedAt": 1781550492826
     },
     "score": 4.7754872172646134
   },
@@ -178,7 +178,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "string",
-      "updatedAt": 1781423264936
+      "updatedAt": 1781550492826
     },
     "score": 4.7754872172646134
   }

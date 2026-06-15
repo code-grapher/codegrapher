@@ -17,7 +17,7 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781435456917
+      "updatedAt": 1781550500196
     },
     "score": 88.65665821005304
   },
@@ -39,7 +39,7 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781435456917
+      "updatedAt": 1781550500196
     },
     "score": 10.500837376885237
   },
@@ -62,7 +62,7 @@
       "isStatic": false,
       "isAbstract": false,
       "returnType": "float",
-      "updatedAt": 1781435456917
+      "updatedAt": 1781550500196
     },
     "score": 3.553488678024373
   },
@@ -84,7 +84,7 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781435456917
+      "updatedAt": 1781550500196
     },
     "score": 3.5439579418594125
   },
@@ -106,7 +106,7 @@
       "isAsync": false,
       "isStatic": false,
       "isAbstract": false,
-      "updatedAt": 1781435456916
+      "updatedAt": 1781550500196
     },
     "score": 2.391250482952091
   }

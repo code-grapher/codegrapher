@@ -309,7 +309,14 @@ func extractOne(rootDir, relPath string) extractJob {
 	}
 	job.size = fi.Size()
 	job.mtimeMs = statMtimeMs(fi)
-	if job.size > MaxFileSize {
+
+	// The size cap only guards parsing of recognized languages. A file whose
+	// extension is unrecognized can still be a content-detected language (only
+	// SpecScore .md artifacts qualify), so the cap is bypassed solely for the
+	// pure-unknown case — a large binary then gets a bare file-level node with
+	// no parse. Recognized-by-extension files keep the cap as before.
+	pathLang := extract.DetectLanguage(relPath)
+	if pathLang != model.LangUnknown && job.size > MaxFileSize {
 		job.tooLarge = true
 		return job
 	}
@@ -323,6 +330,16 @@ func extractOne(rootDir, relPath string) extractJob {
 
 	lang := extract.DetectLanguageContent(relPath, content)
 	job.lang = lang
+
+	// Unknown-language files (unrecognized extension or undetectable content)
+	// get exactly one bare file-level node: no tree-sitter parse, no symbols,
+	// edges, or unresolved references. The hash still comes from the content
+	// already read above; no content blob is stored.
+	if lang == model.LangUnknown {
+		job.result, _ = extract.ExtractFile(relPath, nil, model.LangUnknown)
+		return job
+	}
+
 	res, err := extract.ExtractFile(relPath, content, lang)
 	if err != nil {
 		res.Errors = append(res.Errors, model.ExtractionError{

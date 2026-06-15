@@ -1,13 +1,13 @@
 {
   "initialized": true,
   "version": "0.9.9",
-  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/c/testdata/fixtures/c-small",
-  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/c/testdata/fixtures/c-small/.codegraph",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/c-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/c-small/.codegraph",
   "lastIndexed": "",
   "fileCount": 3,
   "nodeCount": 19,
   "edgeCount": 26,
-  "dbSizeBytes": 147456,
+  "dbSizeBytes": 167936,
   "backend": "node-sqlite",
   "journalMode": "wal",
   "nodesByKind": {

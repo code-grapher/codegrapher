@@ -1,13 +1,13 @@
 {
   "initialized": true,
   "version": "0.9.9",
-  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/rust/testdata/fixtures/rs-small",
-  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/rust/testdata/fixtures/rs-small/.codegraph",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/rs-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/rs-small/.codegraph",
   "lastIndexed": "",
   "fileCount": 2,
   "nodeCount": 22,
   "edgeCount": 35,
-  "dbSizeBytes": 147456,
+  "dbSizeBytes": 167936,
   "backend": "node-sqlite",
   "journalMode": "wal",
   "nodesByKind": {

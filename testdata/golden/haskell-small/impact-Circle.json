@@ -6,13 +6,13 @@
   "affected": [
     {
       "name": "Circle",
-      "kind": "enum_member",
+      "kind": "struct",
       "filePath": "Shape.hs",
       "startLine": 7
     },
     {
       "name": "Circle",
-      "kind": "struct",
+      "kind": "enum_member",
       "filePath": "Shape.hs",
       "startLine": 7
     },

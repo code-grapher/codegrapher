@@ -1,18 +1,18 @@
 {
   "initialized": true,
   "version": "0.9.9",
-  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/substring-fix/testdata/fixtures/ts-small",
-  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/substring-fix/testdata/fixtures/ts-small/.codegraph",
+  "projectPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/ts-small",
+  "indexPath": "/Users/alexandertrakhimenok/projects/code-grapher/codegrapher/.claude/worktrees/specscore/testdata/fixtures/ts-small/.codegraph",
   "lastIndexed": "",
-  "fileCount": 6,
-  "nodeCount": 31,
+  "fileCount": 7,
+  "nodeCount": 32,
   "edgeCount": 49,
-  "dbSizeBytes": 589824,
+  "dbSizeBytes": 839680,
   "backend": "node-sqlite",
   "journalMode": "wal",
   "nodesByKind": {
     "class": 2,
-    "file": 6,
+    "file": 7,
     "function": 5,
     "import": 2,
     "interface": 1,
@@ -24,7 +24,8 @@
     "jsx",
     "package.json",
     "tsx",
-    "typescript"
+    "typescript",
+    "unknown"
   ],
   "pendingChanges": {
     "added": 0,
