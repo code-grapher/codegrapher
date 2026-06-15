@@ -29,7 +29,7 @@ func newIndexCmd() *cobra.Command {
 				printError(fmt.Sprintf("Failed to open index: %s", err))
 				os.Exit(1)
 			}
-			defer idx.Close()
+			defer func() { _ = idx.Close() }()
 
 			if force {
 				if err := idx.Store().Clear(); err != nil {

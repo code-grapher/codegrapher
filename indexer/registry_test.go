@@ -48,7 +48,7 @@ func TestRegistryStoreGetOrCreate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reg.Close()
+	defer func() { _ = reg.Close() }()
 
 	sc := scope.Scope{Language: model.LangGo, Version: "1.22"}
 	s1, err := reg.Store(sc)
@@ -78,7 +78,7 @@ func TestRegistryStores(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reg.Close()
+	defer func() { _ = reg.Close() }()
 
 	sc := scope.Scope{Language: model.LangGo, Version: "1.22"}
 	s, err := reg.Store(sc)
@@ -106,7 +106,7 @@ func TestOpenRegistryIgnoresNonScopeFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reg.Close()
+	defer func() { _ = reg.Close() }()
 	if got := reg.Scopes(); len(got) != 0 {
 		t.Errorf("Scopes() = %+v, want none", got)
 	}
@@ -145,14 +145,14 @@ func TestRegistryEnumeratesExistingScopes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	reg.Close()
+	_ = reg.Close()
 
 	// Re-open: the registry discovers both DBs on disk.
 	reg2, err := OpenRegistry(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reg2.Close()
+	defer func() { _ = reg2.Close() }()
 
 	got := reg2.Scopes()
 	if len(got) != len(want) {

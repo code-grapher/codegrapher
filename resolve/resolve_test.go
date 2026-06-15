@@ -66,7 +66,7 @@ func TestResolutionParityGoSmall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("store.Initialize: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 
 	// Extract all Go files from the fixture.
 	err = filepath.Walk(fixtureDir, func(path string, info os.FileInfo, err error) error {
@@ -193,7 +193,7 @@ func TestResolutionParityTsSmall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("store.Initialize: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 
 	err = filepath.Walk(fixtureDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {

@@ -102,13 +102,13 @@ func TestMigrations_FromV5(t *testing.T) {
 			t.Fatalf("downgrade %q: %v", stmt, err)
 		}
 	}
-	s.Close()
+	_ = s.Close()
 
 	reopened, err := Open(path, WithNowFunc(fixedNow))
 	if err != nil {
 		t.Fatalf("Open with v6 migration: %v", err)
 	}
-	defer reopened.Close()
+	defer func() { _ = reopened.Close() }()
 	v, _ := reopened.SchemaVersion()
 	if v != CurrentSchemaVersion {
 		t.Errorf("migrated version = %d, want %d", v, CurrentSchemaVersion)

@@ -287,7 +287,7 @@ type symbolRefKey struct {
 }
 
 func refKey(r SymbolRef) symbolRefKey {
-	return symbolRefKey{Name: r.Name, Kind: r.Kind, FilePath: r.FilePath, StartLine: r.StartLine}
+	return symbolRefKey(r)
 }
 
 // toSymbolRefs converts a slice of query.SymbolRef to cli.SymbolRef.

@@ -64,7 +64,7 @@ func (s *Store) SearchFTS(
 		// FTS query failed (syntax error, etc.) — return empty like the original.
 		return nil, nil //nolint:nilerr
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []model.SearchResult
 	for rows.Next() {
 		n, score, err := scanNodeWithScoreRow(rows)
@@ -126,7 +126,7 @@ func (s *Store) SearchLike(
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []model.SearchResult
 	for rows.Next() {
 		n, score, err := scanNodeWithScoreRow(rows)
@@ -168,12 +168,12 @@ func (s *Store) SearchFuzzy(
 	for rows.Next() {
 		var n string
 		if err := rows.Scan(&n); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return nil, err
 		}
 		allNames = append(allNames, n)
 	}
-	rows.Close()
+	_ = rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -323,7 +323,7 @@ func (s *Store) GetDependencyFilePaths(filePath string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []string
 	for rows.Next() {
 		var p string
@@ -349,7 +349,7 @@ func (s *Store) GetDependentFilePaths(filePath string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []string
 	for rows.Next() {
 		var p string

@@ -20,7 +20,7 @@ func newSyncProject(t *testing.T) (string, *Indexer) {
 	if err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	t.Cleanup(func() { idx.Close() })
+	t.Cleanup(func() { _ = idx.Close() })
 	if !res.Success {
 		t.Fatalf("Init result: %+v", res)
 	}
@@ -161,7 +161,7 @@ func TestSyncLockConflictReturnsZeroResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer other.Close()
+	defer func() { _ = other.Close() }()
 	if err := other.lock.Acquire(); err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func newGitSyncProject(t *testing.T) (string, *Indexer) {
 	if err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	t.Cleanup(func() { idx.Close() })
+	t.Cleanup(func() { _ = idx.Close() })
 	if !res.Success {
 		t.Fatalf("Init result: %+v", res)
 	}
@@ -305,7 +305,7 @@ func TestSyncResolvesCrossFileEdges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
 	mainNodes, err := idx.Store().GetNodesByName("main")
 	if err != nil || len(mainNodes) != 1 {

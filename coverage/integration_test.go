@@ -36,7 +36,7 @@ func TestIngest_AgainstIndexedFixture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("indexer.Init: %v", err)
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
 	goStores := idx.StoresFiltered([]string{"go-v1"})
 	if len(goStores) != 1 {

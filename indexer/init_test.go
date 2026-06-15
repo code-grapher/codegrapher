@@ -70,7 +70,7 @@ func TestInitIndexesProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
 	if !IsInitialized(dir) {
 		t.Fatal("project not initialized after Init")
@@ -128,7 +128,7 @@ func TestInitTwiceFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
 	if _, _, err := Init(dir, Options{}); err == nil ||
 		!strings.Contains(err.Error(), "already initialized") {
@@ -167,14 +167,14 @@ func TestIndexAllLockConflict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
 	// Simulate another live process holding the lock.
 	other, err := Open(dir, Options{})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer other.Close()
+	defer func() { _ = other.Close() }()
 	if err := other.lock.Acquire(); err != nil {
 		t.Fatalf("acquire lock: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestInitProgressCallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
 	want := []Phase{PhaseScanning, PhaseParsing, PhaseResolving}
 	if len(phases) != len(want) {

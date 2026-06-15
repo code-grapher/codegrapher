@@ -184,12 +184,12 @@ func copyFixture(t *testing.T, fixtureDir string) string {
 		if err != nil {
 			return err
 		}
-		defer src.Close()
+		defer func() { _ = src.Close() }()
 		out, err := os.Create(target)
 		if err != nil {
 			return err
 		}
-		defer out.Close()
+		defer func() { _ = out.Close() }()
 		_, err = io.Copy(out, src)
 		return err
 	})
@@ -246,9 +246,7 @@ func assertGoldenState(t *testing.T, stores []*store.Store, goldenDir, fixtureCo
 	// and interface-method→concrete-method calls).
 	allWant := loadJSON[goldenResEdge](t, filepath.Join(goldenDir, "resolution-edges.json"))
 	var wantRes []goldenResEdge
-	for _, e := range allWant {
-		wantRes = append(wantRes, e)
-	}
+	wantRes = append(wantRes, allWant...)
 	var gotRes []goldenResEdge
 	for _, e := range gotEdges {
 		if e.Kind == model.EdgeContains {
@@ -400,7 +398,7 @@ func TestGoldenInit(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Init: %v", err)
 			}
-			defer idx.Close()
+			defer func() { _ = idx.Close() }()
 			if !res.Success {
 				t.Fatalf("Init result not successful: %+v", res)
 			}
@@ -423,7 +421,7 @@ func TestGoldenSyncRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 	if !res.Success {
 		t.Fatalf("Init result: %+v", res)
 	}

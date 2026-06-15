@@ -40,7 +40,7 @@ func newServeCmd() *cobra.Command {
 			// Mirror upstream: --no-watch routes through the same env-var
 			// chokepoint the watcher honors.
 			if noWatch {
-				os.Setenv("CODEGRAPH_NO_WATCH", "1")
+				_ = os.Setenv("CODEGRAPH_NO_WATCH", "1")
 			}
 
 			if !mcpFlag {
@@ -69,7 +69,7 @@ func newServeCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to start server: %w", err)
 			}
-			defer idx.Close()
+			defer func() { _ = idx.Close() }()
 
 			backend := mcp.NewMultiBackend(idx.Stores(), projectPath)
 			server := mcp.NewServer(backend)

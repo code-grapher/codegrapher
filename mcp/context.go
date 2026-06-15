@@ -399,7 +399,7 @@ func findRelevantContext(b GraphBackend, queryStr string, opts FindOptions) (*Su
 					continue
 				}
 				prev := name[idx-1]
-				if !((prev >= 'a' && prev <= 'z') || (prev >= 'A' && prev <= 'Z')) {
+				if (prev < 'a' || prev > 'z') && (prev < 'A' || prev > 'Z') {
 					continue
 				}
 				if _, ok := searchIDSet[r.Node.ID]; ok {
