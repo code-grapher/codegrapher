@@ -127,7 +127,7 @@ func TestResolutionParityGoSmall(t *testing.T) {
 	//
 	// Actually the simplest approach: for each golden edge source, query outgoing.
 	// But we also want to catch extra edges. Instead, collect from all known node IDs.
-	allNodeIDs := collectAllNodeIDs(t, s, fixtureDir)
+	allNodeIDs := collectAllNodeIDs(t, fixtureDir)
 	for _, id := range allNodeIDs {
 		edges, err := s.GetOutgoingEdges(id, nil, "")
 		if err != nil {
@@ -238,7 +238,7 @@ func TestResolutionParityTsSmall(t *testing.T) {
 	t.Logf("resolved=%d unresolved=%d", stats.Resolved, stats.Unresolved)
 
 	gotEdges := map[string]model.Edge{}
-	allNodeIDs := collectAllNodeIDs(t, s, fixtureDir)
+	allNodeIDs := collectAllNodeIDs(t, fixtureDir)
 	for _, id := range allNodeIDs {
 		edges, err := s.GetOutgoingEdges(id, nil, "")
 		if err != nil {
@@ -279,7 +279,7 @@ func TestResolutionParityTsSmall(t *testing.T) {
 // collectAllNodeIDs returns all node IDs in the store by reading the extraction
 // golden, since the store doesn't have a "list all node IDs" method.
 // We use the fixture files to reconstruct them.
-func collectAllNodeIDs(t *testing.T, s *store.Store, fixtureDir string) []string {
+func collectAllNodeIDs(t *testing.T, fixtureDir string) []string {
 	t.Helper()
 	var ids []string
 	err := filepath.Walk(fixtureDir, func(path string, info os.FileInfo, err error) error {

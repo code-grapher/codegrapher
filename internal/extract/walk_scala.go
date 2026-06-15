@@ -751,8 +751,8 @@ func firstWord(s string) string {
 
 // firstLine returns the first line of s.
 func firstLine(s string) string {
-	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
-		return s[:idx]
+	if before, _, ok := strings.Cut(s, "\n"); ok {
+		return before
 	}
 	return s
 }

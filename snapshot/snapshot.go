@@ -21,6 +21,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -465,9 +466,7 @@ func writeINGR(path, title string, cols []ingr.ColDef, rows []recordRow) error {
 	records := make([]ingr.Record, 0, len(rows))
 	for _, row := range rows {
 		data := make(map[string]any, len(row.data)+1)
-		for k, v := range row.data {
-			data[k] = v
-		}
+		maps.Copy(data, row.data)
 		data["$ID"] = row.id
 		records = append(records, ingr.NewMapRecordEntry(row.id, data))
 	}

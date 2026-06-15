@@ -285,7 +285,7 @@ func (e *extractor) walkDartClassBody(body *tsparse.Node, className string) {
 		case "declaration":
 			e.extractDartDeclaration(c, className)
 		case "method_signature":
-			e.extractDartMethodSig(c, className)
+			e.extractDartMethodSig(c)
 		case "function_body":
 			// body following the previous method_signature: descend for calls
 			// using the most-recently-pushed member as caller.
@@ -371,7 +371,7 @@ func (e *extractor) extractDartMethodFromSig(decl, sig *tsparse.Node) {
 
 // extractDartMethodSig handles a method_signature class member (its body is the
 // following function_body sibling in the class body).
-func (e *extractor) extractDartMethodSig(node *tsparse.Node, className string) {
+func (e *extractor) extractDartMethodSig(node *tsparse.Node) {
 	decorators := dartAnnotations(node)
 	var sig *tsparse.Node
 	for i := 0; i < node.NamedChildCount(); i++ {
@@ -644,7 +644,7 @@ func (e *extractor) extractDartCallChain(node *tsparse.Node) {
 
 	// Scan named children for the [identifier, selector…] pattern at this level.
 	n := node.NamedChildCount()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		head := node.NamedChild(i)
 		if head == nil || head.Kind() != "identifier" {
 			continue

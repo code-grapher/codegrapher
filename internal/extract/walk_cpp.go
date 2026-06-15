@@ -206,11 +206,11 @@ func (e *extractor) extractCPPClassTpl(node *tsparse.Node, typeParams []string) 
 		case "access_specifier":
 			visibility = strings.TrimSpace(m.Text())
 		case "field_declaration":
-			e.extractCPPMember(m, nameNode.Text(), bases, visibility)
+			e.extractCPPMember(m, bases, visibility)
 		case "function_definition":
-			e.extractCPPMethod(m, nameNode.Text(), bases, visibility)
+			e.extractCPPMethod(m, bases, visibility)
 		case "declaration":
-			e.extractCPPMethodDecl(m, nameNode.Text(), bases, visibility)
+			e.extractCPPMethodDecl(m, bases, visibility)
 		case "template_declaration":
 			e.extractCPPTemplate(m)
 		case "using_declaration":
@@ -223,10 +223,10 @@ func (e *extractor) extractCPPClassTpl(node *tsparse.Node, typeParams []string) 
 // extractCPPMember handles a field_declaration inside a class body. When its
 // declarator is a function_declarator it is a method declaration; otherwise it
 // is a data member (KindField, or KindConstant for static const/constexpr).
-func (e *extractor) extractCPPMember(fd *tsparse.Node, className string, bases []string, visibility string) {
+func (e *extractor) extractCPPMember(fd *tsparse.Node, bases []string, visibility string) {
 	decl := fd.ChildByFieldName("declarator")
 	if cIsFunctionDeclarator(decl) {
-		e.extractCPPMethodDecl(fd, className, bases, visibility)
+		e.extractCPPMethodDecl(fd, bases, visibility)
 		return
 	}
 	// Data member(s). A field_declaration may declare several field_identifiers.
@@ -274,13 +274,13 @@ func (e *extractor) extractCPPMember(fd *tsparse.Node, className string, bases [
 // declaration whose declarator is a function_declarator) → KindMethod. Detects
 // pure-virtual (= 0 → isAbstract), constructors/destructors, override, and emits
 // an overrides ref when the method name matches a base-class method.
-func (e *extractor) extractCPPMethodDecl(node *tsparse.Node, className string, bases []string, visibility string) {
+func (e *extractor) extractCPPMethodDecl(node *tsparse.Node, bases []string, visibility string) {
 	decl := node.ChildByFieldName("declarator")
 	fdecl := cFunctionDeclarator(decl)
 	if fdecl == nil {
 		return
 	}
-	name := cppMethodName(fdecl, className)
+	name := cppMethodName(fdecl)
 	if name == "" {
 		return
 	}
@@ -303,13 +303,13 @@ func (e *extractor) extractCPPMethodDecl(node *tsparse.Node, className string, b
 
 // extractCPPMethod handles an inline method body (function_definition) inside a
 // class → KindMethod, then walks the body for calls.
-func (e *extractor) extractCPPMethod(node *tsparse.Node, className string, bases []string, visibility string) {
+func (e *extractor) extractCPPMethod(node *tsparse.Node, bases []string, visibility string) {
 	decl := node.ChildByFieldName("declarator")
 	fdecl := cFunctionDeclarator(decl)
 	if fdecl == nil {
 		return
 	}
-	name := cppMethodName(fdecl, className)
+	name := cppMethodName(fdecl)
 	if name == "" {
 		return
 	}
@@ -646,7 +646,7 @@ func cppBodyHasMethods(body *tsparse.Node) bool {
 // cppMethodName resolves a method's name from its function_declarator. Handles
 // plain identifiers, field_identifiers, constructors (identifier == className),
 // destructors (destructor_name → "~Name"), and operators (operator_name).
-func cppMethodName(fdecl *tsparse.Node, className string) string {
+func cppMethodName(fdecl *tsparse.Node) string {
 	inner := fdecl.ChildByFieldName("declarator")
 	if inner == nil {
 		return ""

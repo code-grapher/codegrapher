@@ -38,13 +38,7 @@ func boundedEditDistance(a, b string, maxDist int) int {
 				cost = 0
 			}
 			ins, del, sub := cur[j-1]+1, prev[j]+1, prev[j-1]+cost
-			cur[j] = ins
-			if del < cur[j] {
-				cur[j] = del
-			}
-			if sub < cur[j] {
-				cur[j] = sub
-			}
+			cur[j] = min(sub, min(del, ins))
 			if cur[j] < rowMin {
 				rowMin = cur[j]
 			}

@@ -153,7 +153,7 @@ func (e *extractor) extractObjCInterface(node *tsparse.Node) {
 	}
 
 	e.nodeStack = append(e.nodeStack, cn.ID)
-	e.extractObjCMembers(node, className)
+	e.extractObjCMembers(node)
 	e.nodeStack = e.nodeStack[:len(e.nodeStack)-1]
 }
 
@@ -211,7 +211,7 @@ func (e *extractor) extractObjCImplementation(node *tsparse.Node) {
 
 	// A category implementation @implementation X (Cat) attaches to X too.
 	if node.ChildByFieldName("category") != nil {
-		e.extractObjCImplMembers(node, className)
+		e.extractObjCImplMembers(node)
 		return
 	}
 
@@ -222,17 +222,17 @@ func (e *extractor) extractObjCImplementation(node *tsparse.Node) {
 	if cn == nil {
 		// A node with the same id already exists (interface+impl on the same
 		// line is impossible across files); still walk members for calls.
-		e.extractObjCImplMembers(node, className)
+		e.extractObjCImplMembers(node)
 		return
 	}
 	e.nodeStack = append(e.nodeStack, cn.ID)
-	e.extractObjCImplMembers(node, className)
+	e.extractObjCImplMembers(node)
 	e.nodeStack = e.nodeStack[:len(e.nodeStack)-1]
 }
 
 // extractObjCImplMembers walks an implementation's method_definition members
 // (wrapped in implementation_definition).
-func (e *extractor) extractObjCImplMembers(node *tsparse.Node, className string) {
+func (e *extractor) extractObjCImplMembers(node *tsparse.Node) {
 	for i := 0; i < node.NamedChildCount(); i++ {
 		m := node.NamedChild(i)
 		if m == nil {
@@ -283,7 +283,7 @@ func (e *extractor) extractObjCProtocol(node *tsparse.Node) {
 
 // extractObjCMembers walks an @interface body: instance variables, properties,
 // and method declarations.
-func (e *extractor) extractObjCMembers(node *tsparse.Node, className string) {
+func (e *extractor) extractObjCMembers(node *tsparse.Node) {
 	for i := 0; i < node.NamedChildCount(); i++ {
 		m := node.NamedChild(i)
 		if m == nil {

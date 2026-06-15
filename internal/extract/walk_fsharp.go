@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/specscore/codegrapher/internal/tsparse"
@@ -616,9 +617,9 @@ func (e *extractor) fsInsideType() bool {
 		return false
 	}
 	topID := e.nodeStack[len(e.nodeStack)-1]
-	for i := len(e.nodes) - 1; i >= 0; i-- {
-		if e.nodes[i].ID == topID {
-			switch e.nodes[i].Kind {
+	for _, v := range slices.Backward(e.nodes) {
+		if v.ID == topID {
+			switch v.Kind {
 			case model.KindClass, model.KindStruct, model.KindInterface, model.KindEnum:
 				return true
 			}

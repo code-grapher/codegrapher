@@ -26,7 +26,7 @@ Default input directory: <project-root>/codegraph/
 Use --in to override.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			projectPath := resolveArg(args, 0)
+			projectPath := resolveArg(args)
 
 			in := inDir
 			if in == "" {

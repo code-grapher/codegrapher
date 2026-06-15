@@ -188,10 +188,7 @@ func (s *Store) SearchFuzzy(
 	// Sort by dist ascending (stable).
 	sortCandidates(cands)
 
-	capSize := limit * 2
-	if capSize < 50 {
-		capSize = 50
-	}
+	capSize := max(limit*2, 50)
 	if len(cands) > capSize {
 		cands = cands[:capSize]
 	}
@@ -373,7 +370,7 @@ func buildFTSQuery(text string) string {
 	// Remove FTS5 special chars.
 	s = ftsSpecialCharsReplaced(s)
 	var terms []string
-	for _, t := range strings.Fields(s) {
+	for t := range strings.FieldsSeq(s) {
 		if t == "" {
 			continue
 		}
@@ -448,11 +445,4 @@ func sortCandidates(cands []fuzzyCandidate) {
 			cands[j], cands[j-1] = cands[j-1], cands[j]
 		}
 	}
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

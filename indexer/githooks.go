@@ -91,7 +91,7 @@ func hookMarkerBlock() string {
 func stripHookMarkerBlock(content string) string {
 	var kept []string
 	inBlock := false
-	for _, line := range strings.Split(content, "\n") {
+	for line := range strings.SplitSeq(content, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == hookMarkerBegin {
 			inBlock = true
@@ -111,7 +111,7 @@ func stripHookMarkerBlock(content string) string {
 // isEffectivelyEmptyHook reports whether a hook body is just a shebang and
 // blank lines (i.e. it only ever held our block).
 func isEffectivelyEmptyHook(content string) bool {
-	for _, line := range strings.Split(content, "\n") {
+	for line := range strings.SplitSeq(content, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed != "" && !strings.HasPrefix(trimmed, "#!") {
 			return false

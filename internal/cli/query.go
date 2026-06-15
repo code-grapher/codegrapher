@@ -25,7 +25,7 @@ func newQueryCmd() *cobra.Command {
 			search := args[0]
 			var projectPath string
 			if pathFlag != "" {
-				projectPath = resolveArg([]string{pathFlag}, 0)
+				projectPath = resolveArg([]string{pathFlag})
 			} else {
 				cwd, _ := os.Getwd()
 				projectPath = findNearestOrReturn(cwd)
@@ -74,7 +74,7 @@ func newQueryCmd() *cobra.Command {
 				n := r.Node
 				loc := fmt.Sprintf("%s:%d", n.FilePath, n.StartLine)
 				score := dim(fmt.Sprintf("(%d%%)", int(r.Score*100/100)))
-				fmt.Printf("%s %s %s\n", cyan(padRight(string(n.Kind), 12)), n.Name, score)
+				fmt.Printf("%s %s %s\n", cyan(padRight(string(n.Kind))), n.Name, score)
 				fmt.Println(dim("  " + loc))
 				if n.Signature != "" {
 					fmt.Println(dim("  " + n.Signature))
@@ -93,8 +93,8 @@ func newQueryCmd() *cobra.Command {
 	return cmd
 }
 
-func padRight(s string, n int) string {
-	for len(s) < n {
+func padRight(s string) string {
+	for len(s) < 12 {
 		s += " "
 	}
 	return s

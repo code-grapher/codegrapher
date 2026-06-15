@@ -18,7 +18,7 @@ func newUninitCmd() *cobra.Command {
 		Short: "Remove CodeGraph from a project (deletes .codegraph/ directory)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			projectPath := resolveArg(args, 0)
+			projectPath := resolveArg(args)
 
 			if !indexer.IsInitialized(projectPath) {
 				printWarn(fmt.Sprintf("CodeGraph is not initialized in %s", projectPath))

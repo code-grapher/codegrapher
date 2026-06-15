@@ -164,8 +164,8 @@ func detectGoVersion(projectRoot, filePath string) string {
 	if err != nil {
 		return ""
 	}
-	if strings.HasPrefix(f.Toolchain, "go") {
-		return strings.TrimPrefix(f.Toolchain, "go") // "go1.26.4" -> "1.26.4"
+	if after, ok := strings.CutPrefix(f.Toolchain, "go"); ok {
+		return after // "go1.26.4" -> "1.26.4"
 	}
 	return f.Go
 }

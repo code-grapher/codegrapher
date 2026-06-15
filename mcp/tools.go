@@ -190,7 +190,7 @@ func toolAllowlist() map[string]bool {
 		return nil
 	}
 	set := make(map[string]bool)
-	for _, s := range strings.Split(raw, ",") {
+	for s := range strings.SplitSeq(raw, ",") {
 		short := strings.TrimPrefix(strings.TrimSpace(s), "codegraph_")
 		if short != "" {
 			set[short] = true
@@ -352,7 +352,7 @@ func (h *toolHandlers) handleSearch(args map[string]any) toolResult {
 	if kind, ok := args["kind"].(string); ok && kind != "" {
 		kinds = []model.NodeKind{model.NodeKind(kind)}
 	}
-	limit := clamp(intArg(args, "limit", 10), 1, 100)
+	limit := clamp(intArg(args, "limit", 10), 100)
 
 	results, err := h.backend.SearchNodes(queryStr, kinds, limit)
 	if err != nil {
@@ -405,7 +405,7 @@ func (h *toolHandlers) handleCallers(args map[string]any) toolResult {
 	if errRes != nil {
 		return *errRes
 	}
-	limit := clamp(intArg(args, "limit", 20), 1, 100)
+	limit := clamp(intArg(args, "limit", 20), 100)
 
 	allMatches := h.findAllSymbols(symbol)
 	if len(allMatches.nodes) == 0 {
@@ -440,7 +440,7 @@ func (h *toolHandlers) handleCallees(args map[string]any) toolResult {
 	if errRes != nil {
 		return *errRes
 	}
-	limit := clamp(intArg(args, "limit", 20), 1, 100)
+	limit := clamp(intArg(args, "limit", 20), 100)
 
 	allMatches := h.findAllSymbols(symbol)
 	if len(allMatches.nodes) == 0 {
@@ -475,7 +475,7 @@ func (h *toolHandlers) handleImpact(args map[string]any) toolResult {
 	if errRes != nil {
 		return *errRes
 	}
-	depth := clamp(intArg(args, "depth", 2), 1, 10)
+	depth := clamp(intArg(args, "depth", 2), 10)
 
 	allMatches := h.findAllSymbols(symbol)
 	if len(allMatches.nodes) == 0 {
@@ -592,7 +592,7 @@ func matchesSymbol(node model.Node, symbol string) bool {
 		return false
 	}
 	var segments []string
-	for _, s := range strings.Split(node.FilePath, "/") {
+	for s := range strings.SplitSeq(node.FilePath, "/") {
 		if s != "" {
 			segments = append(segments, s)
 		}

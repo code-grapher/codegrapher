@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/specscore/codegrapher/internal/tsparse"
@@ -763,9 +764,9 @@ func (e *extractor) isInsideFunctionLike() bool {
 		return false
 	}
 	topID := e.nodeStack[len(e.nodeStack)-1]
-	for i := len(e.nodes) - 1; i >= 0; i-- {
-		if e.nodes[i].ID == topID {
-			return e.nodes[i].Kind == model.KindFunction || e.nodes[i].Kind == model.KindMethod
+	for _, v := range slices.Backward(e.nodes) {
+		if v.ID == topID {
+			return v.Kind == model.KindFunction || v.Kind == model.KindMethod
 		}
 	}
 	return false

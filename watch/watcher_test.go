@@ -107,7 +107,7 @@ func TestDebounceCoalesces(t *testing.T) {
 	_ = w.WaitUntilReady(time.Second)
 
 	// Five rapid-fire events within 200 ms debounce window.
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		watch.EmitEventForTests(dir, "src/file.ts")
 		time.Sleep(20 * time.Millisecond)
 	}

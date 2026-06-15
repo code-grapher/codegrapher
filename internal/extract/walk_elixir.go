@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/specscore/codegrapher/internal/tsparse"
@@ -569,8 +570,8 @@ func elixirLastSegment(name string) string {
 // nearestElixirModuleName returns the Name of the nearest KindModule on the node
 // stack (the enclosing module for a defstruct).
 func (e *extractor) nearestElixirModuleName() string {
-	for i := len(e.nodeStack) - 1; i >= 0; i-- {
-		id := e.nodeStack[i]
+	for _, id := range slices.Backward(e.nodeStack) {
+
 		for j := range e.nodes {
 			if e.nodes[j].ID == id && e.nodes[j].Kind == model.KindModule {
 				return e.nodes[j].Name

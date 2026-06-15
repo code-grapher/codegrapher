@@ -84,8 +84,8 @@ func buildJVMContext(filePath string, lang model.Language, s *store.Store) *jvmF
 			}
 		case model.KindImport:
 			fq := jvmImportFQN(n.Signature, n.Name)
-			if strings.HasSuffix(fq, ".*") {
-				ctx.wildcardPkgs[strings.TrimSuffix(fq, ".*")] = struct{}{}
+			if before, ok := strings.CutSuffix(fq, ".*"); ok {
+				ctx.wildcardPkgs[before] = struct{}{}
 			} else if simple := jvmSimpleName(fq); simple != "" {
 				ctx.explicit[simple] = struct{}{}
 			}

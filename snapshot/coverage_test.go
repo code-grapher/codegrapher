@@ -16,10 +16,10 @@ import (
 
 // ingestSampleCoverage indexes go-small, ingests a small profile into the scope
 // DB, and returns the project root + db path.
-func ingestSampleCoverage(t *testing.T) (root, dbPath string) {
+func ingestSampleCoverage(t *testing.T) (dbPath string) {
 	t.Helper()
 	fixture := goSmallFixture(t)
-	root, dbPath = indexFixture(t, fixture)
+	root, dbPath := indexFixture(t, fixture)
 
 	s, err := store.Open(dbPath)
 	if err != nil {
@@ -51,7 +51,7 @@ func ingestSampleCoverage(t *testing.T) (root, dbPath string) {
 	if err != nil {
 		t.Fatalf("ingest: %v", err)
 	}
-	return root, dbPath
+	return dbPath
 }
 
 func profLine(line int, hit bool) string {
@@ -66,7 +66,7 @@ func profLine(line int, hit bool) string {
 // the coverage recordsets must be byte-identical (run_at preserved) and the
 // rows must survive the round-trip.
 func TestCoverageRoundTrip(t *testing.T) {
-	_, dbPath := ingestSampleCoverage(t)
+	dbPath := ingestSampleCoverage(t)
 
 	outA := t.TempDir()
 	if err := snapshot.Export(dbPath, outA, ""); err != nil {
@@ -125,7 +125,7 @@ func TestCoverageRoundTrip(t *testing.T) {
 // TestCoverageDeterminism verifies two exports of the same coverage DB are
 // byte-identical.
 func TestCoverageDeterminism(t *testing.T) {
-	_, dbPath := ingestSampleCoverage(t)
+	dbPath := ingestSampleCoverage(t)
 	outA, outB := t.TempDir(), t.TempDir()
 	if err := snapshot.Export(dbPath, outA, ""); err != nil {
 		t.Fatal(err)

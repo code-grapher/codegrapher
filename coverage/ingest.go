@@ -209,7 +209,7 @@ func resolveRepoPath(profileName, modulePath string) string {
 		if name == modulePath {
 			return name
 		}
-		if rel := strings.TrimPrefix(name, modulePath+"/"); rel != name {
+		if rel, ok := strings.CutPrefix(name, modulePath+"/"); ok {
 			return rel
 		}
 	}

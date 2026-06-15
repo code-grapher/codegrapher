@@ -2,7 +2,6 @@ package mcp_test
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -182,7 +181,6 @@ func normalizeMCP(raw []byte) []byte {
 // asserts every captured golden response matches at full value.
 func TestMCPParityGoldens(t *testing.T) {
 	for _, fixture := range []string{"go-small", "ts-small"} {
-		fixture := fixture
 		t.Run(fixture, func(t *testing.T) {
 			fixtureDir, err := filepath.Abs(filepath.Join(repoRoot, "testdata", "fixtures", fixture))
 			if err != nil {
@@ -196,8 +194,7 @@ func TestMCPParityGoldens(t *testing.T) {
 
 			inR, inW := io.Pipe()
 			outR, outW := io.Pipe()
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 			serveErr := make(chan error, 1)
 			go func() {
 				serveErr <- server.Serve(ctx, inR, outW)
@@ -280,18 +277,9 @@ func summarizeDiff(want, got []byte) string {
 	for i < len(want) && i < len(got) && want[i] == got[i] {
 		i++
 	}
-	lo := i - 120
-	if lo < 0 {
-		lo = 0
-	}
-	hiW := i + 200
-	if hiW > len(want) {
-		hiW = len(want)
-	}
-	hiG := i + 200
-	if hiG > len(got) {
-		hiG = len(got)
-	}
+	lo := max(i-120, 0)
+	hiW := min(i+200, len(want))
+	hiG := min(i+200, len(got))
 	return fmt.Sprintf("%s\n--- first divergence at byte %d ---\nwant: …%s…\ngot:  …%s…",
 		want, i, want[lo:hiW], got[lo:hiG])
 }

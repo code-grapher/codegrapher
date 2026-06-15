@@ -128,7 +128,7 @@ func resolveRef(
 	case model.LangRuby:
 		return resolveRubyRef(ref, s, pyVarTypeCache)
 	case model.LangRust:
-		return resolveRustRef(ref, s, pyVarTypeCache)
+		return resolveRustRef(ref, s)
 	case model.LangPHP:
 		return resolvePHPRef(ref, s, pyVarTypeCache)
 	case model.LangC:
@@ -136,7 +136,7 @@ func resolveRef(
 	case model.LangScala:
 		return resolveScalaRef(ref, s, jvmCtxCache)
 	case model.LangSwift:
-		return resolveSwiftRef(ref, s, pyVarTypeCache)
+		return resolveSwiftRef(ref, s)
 	case model.LangCPP:
 		return resolveCPPRef(ref, s)
 	case model.LangDart:
@@ -1225,7 +1225,6 @@ func perlIsPackageName(name string) bool {
 func resolveRustRef(
 	ref model.UnresolvedReference,
 	s *store.Store,
-	varTypeCache map[string]map[string]string,
 ) *model.Edge {
 	name := ref.ReferenceName
 
@@ -1280,7 +1279,7 @@ func resolveRustRef(
 		// receiver to the bare method name), but guard anyway.
 		if dotIdx := strings.Index(name, "."); dotIdx > 0 {
 			method := name[dotIdx+1:]
-			return resolveRustMethodCall(ref, s, method, varTypeCache)
+			return resolveRustMethodCall(ref, s, method)
 		}
 		// Bare call: a free function, or a method name from x.method().
 		if edge := resolveRustBareThroughImport(ref, s); edge != nil {
@@ -1289,7 +1288,7 @@ func resolveRustRef(
 		if edge := resolveRustBareCall(ref, s); edge != nil {
 			return edge
 		}
-		return resolveRustMethodCall(ref, s, name, varTypeCache)
+		return resolveRustMethodCall(ref, s, name)
 	}
 
 	return resolveGenericRef(ref, s)
@@ -1434,7 +1433,6 @@ func resolveRustMethodCall(
 	ref model.UnresolvedReference,
 	s *store.Store,
 	method string,
-	varTypeCache map[string]map[string]string,
 ) *model.Edge {
 	candidates, err := s.GetNodesByName(method)
 	if err != nil || len(candidates) == 0 {
@@ -1853,11 +1851,11 @@ func csResolveAlias(name, refFilePath string, s *store.Store) string {
 		}
 		// signature: "using Alias = Full.Path.Type;"
 		sig := n.Signature
-		eq := strings.IndexByte(sig, '=')
-		if eq < 0 {
+		_, after, ok := strings.Cut(sig, "=")
+		if !ok {
 			continue
 		}
-		rhs := strings.TrimSpace(sig[eq+1:])
+		rhs := strings.TrimSpace(after)
 		rhs = strings.TrimSuffix(rhs, ";")
 		rhs = strings.TrimSpace(rhs)
 		if rhs == "" {
@@ -2010,7 +2008,6 @@ func resolveCSMethodCall(ref model.UnresolvedReference, s *store.Store, method s
 func resolveSwiftRef(
 	ref model.UnresolvedReference,
 	s *store.Store,
-	varTypeCache map[string]map[string]string,
 ) *model.Edge {
 	name := ref.ReferenceName
 
@@ -3020,7 +3017,7 @@ func resolveGoRef(
 	case model.EdgeInstantiates:
 		return resolveGoInstantiatesRef(ref, s, projectRoot, goModulePath, importCache)
 	case model.EdgeReferences:
-		return resolveGoReferencesRef(ref, s, projectRoot, goModulePath, importCache)
+		return resolveGoReferencesRef(ref, s)
 	case model.EdgeCalls:
 		return resolveGoCallsRef(ref, s, projectRoot, goModulePath, importCache)
 	default:
@@ -3130,9 +3127,6 @@ func resolveGoInstantiatesRef(
 func resolveGoReferencesRef(
 	ref model.UnresolvedReference,
 	s *store.Store,
-	projectRoot string,
-	goModulePath string,
-	importCache map[string][]importMapping,
 ) *model.Edge {
 	name := ref.ReferenceName
 	if goBuiltIns[name] {
@@ -4409,9 +4403,9 @@ func resolveHaskellRef(ref model.UnresolvedReference, s *store.Store) *model.Edg
 	switch ref.ReferenceKind {
 	case model.EdgeImplements:
 		typeName, className := name, name
-		if at := strings.Index(name, "@"); at >= 0 {
-			typeName = name[:at]
-			className = name[at+1:]
+		if before, after, ok := strings.Cut(name, "@"); ok {
+			typeName = before
+			className = after
 		}
 		class := resolveHaskellTypeByName(className, ref.FilePath, s, model.KindInterface)
 		if class == nil {
@@ -4845,8 +4839,8 @@ func parseGoImports(src string) []importMapping {
 	var result []importMapping
 	inBlock := false
 
-	lines := strings.Split(src, "\n")
-	for _, raw := range lines {
+	lines := strings.SplitSeq(src, "\n")
+	for raw := range lines {
 		line := strings.TrimSpace(raw)
 		if strings.HasPrefix(line, "import (") {
 			inBlock = true
@@ -4864,9 +4858,9 @@ func parseGoImports(src string) []importMapping {
 			// Single import: import "path"
 			trimmed := strings.TrimPrefix(line, "import ")
 			path = strings.Trim(trimmed, `"`+"`")
-		} else if strings.HasPrefix(line, "import ") {
+		} else if after, ok := strings.CutPrefix(line, "import "); ok {
 			// Aliased single import: import alias "path"
-			path, alias = parseImportSpec(strings.TrimPrefix(line, "import "))
+			path, alias = parseImportSpec(after)
 		}
 
 		if path == "" {

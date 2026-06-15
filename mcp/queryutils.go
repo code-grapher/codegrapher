@@ -264,7 +264,7 @@ func extractSymbolsFromQuery(query string) []string {
 	}
 	for _, m := range reSymDotted.FindAllStringSubmatch(query, -1) {
 		add(m[1])
-		for _, part := range strings.Split(m[1], ".") {
+		for part := range strings.SplitSeq(m[1], ".") {
 			if len(part) >= 2 {
 				add(part)
 			}
@@ -384,9 +384,9 @@ func lastQualifierPart(symbol string) string {
 }
 
 // clamp mirrors clamp in src/utils.ts.
-func clamp(value, min, max int) int {
-	if value < min {
-		return min
+func clamp(value, max int) int {
+	if value < 1 {
+		return 1
 	}
 	if value > max {
 		return max

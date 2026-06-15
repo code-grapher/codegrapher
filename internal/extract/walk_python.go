@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/specscore/codegrapher/internal/tsparse"
@@ -335,8 +336,8 @@ func (e *extractor) createPySelfField(name string, node *tsparse.Node) {
 	// the contains edge attribute to the class.
 	saved := e.nodeStack
 	idx := -1
-	for i := len(e.nodeStack) - 1; i >= 0; i-- {
-		if e.nodeStack[i] == classID {
+	for i, v := range slices.Backward(e.nodeStack) {
+		if v == classID {
 			idx = i
 			break
 		}
@@ -350,8 +351,8 @@ func (e *extractor) createPySelfField(name string, node *tsparse.Node) {
 
 // nearestPyClassID returns the ID of the nearest class-kind node on the stack.
 func (e *extractor) nearestPyClassID() string {
-	for i := len(e.nodeStack) - 1; i >= 0; i-- {
-		id := e.nodeStack[i]
+	for _, id := range slices.Backward(e.nodeStack) {
+
 		for _, n := range e.nodes {
 			if n.ID == id && n.Kind == model.KindClass {
 				return id

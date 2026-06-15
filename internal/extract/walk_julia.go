@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/specscore/codegrapher/internal/tsparse"
@@ -377,9 +378,9 @@ func (e *extractor) emitJuliaRef(fromID, name string, kind model.EdgeKind, at *t
 // contribute their body's calls). Empty when none exists.
 func (e *extractor) juliaExistingFuncID(name string) string {
 	want := e.buildQualifiedName(name)
-	for i := len(e.nodes) - 1; i >= 0; i-- {
-		if e.nodes[i].Kind == model.KindFunction && e.nodes[i].QualifiedName == want {
-			return e.nodes[i].ID
+	for _, v := range slices.Backward(e.nodes) {
+		if v.Kind == model.KindFunction && v.QualifiedName == want {
+			return v.ID
 		}
 	}
 	return ""

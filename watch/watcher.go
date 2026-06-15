@@ -497,8 +497,8 @@ func (fw *FileWatcher) IngestEventForTests(relPath string) {
 // directory that should never be watched, regardless of .gitignore.
 func (fw *FileWatcher) isAlwaysIgnored(rel string) bool {
 	top := rel
-	if i := strings.IndexByte(rel, '/'); i >= 0 {
-		top = rel[:i]
+	if before, _, ok := strings.Cut(rel, "/"); ok {
+		top = before
 	}
 	return isCodeGraphDataDir(top) || top == ".git" || rel == ".git" || strings.HasPrefix(rel, ".git/")
 }

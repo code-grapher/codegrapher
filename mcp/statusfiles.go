@@ -89,7 +89,7 @@ func (h *toolHandlers) handleFiles(args map[string]any) toolResult {
 	includeMetadata := args["includeMetadata"] != false
 	maxDepth := 0
 	if n, ok := args["maxDepth"].(float64); ok {
-		maxDepth = clamp(int(n), 1, 20)
+		maxDepth = clamp(int(n), 20)
 	}
 
 	allFiles, err := h.backend.GetFiles()

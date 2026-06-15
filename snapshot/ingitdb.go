@@ -412,12 +412,12 @@ func parseGitRemote(url, fallbackRepo string) (org, repo string, isGitHub bool) 
 	}
 
 	// SSH: git@github.com:org/repo
-	if strings.HasPrefix(url, "git@") {
-		url = strings.TrimPrefix(url, "git@")
-		colonIdx := strings.Index(url, ":")
-		if colonIdx >= 0 {
-			host := url[:colonIdx]
-			rest := url[colonIdx+1:]
+	if after, ok := strings.CutPrefix(url, "git@"); ok {
+		url = after
+		before, after, ok := strings.Cut(url, ":")
+		if ok {
+			host := before
+			rest := after
 			parts := strings.SplitN(rest, "/", 2)
 			if len(parts) == 2 {
 				return parts[0], parts[1], host == "github.com"

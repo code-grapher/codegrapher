@@ -92,11 +92,7 @@ func (e *extractor) extractCSNamespace(node *tsparse.Node) {
 		return
 	}
 
-	pushed := false
-	if ns != nil {
-		e.nodeStack = append(e.nodeStack, ns.ID)
-		pushed = true
-	}
+	e.nodeStack = append(e.nodeStack, ns.ID)
 
 	// file_scoped_namespace has no body field — its members are the following
 	// top-level siblings, handled by the root walk. The block-scoped form has a
@@ -107,9 +103,7 @@ func (e *extractor) extractCSNamespace(node *tsparse.Node) {
 				e.visitNodeCSharp(child)
 			}
 		}
-		if pushed {
-			e.nodeStack = e.nodeStack[:len(e.nodeStack)-1]
-		}
+		e.nodeStack = e.nodeStack[:len(e.nodeStack)-1]
 		return
 	}
 

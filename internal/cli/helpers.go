@@ -17,7 +17,7 @@ import (
 // An empty or whitespace-only input yields nil (meaning "all scopes").
 func splitCSV(csv string) []string {
 	var out []string
-	for _, p := range strings.Split(csv, ",") {
+	for p := range strings.SplitSeq(csv, ",") {
 		if p = strings.TrimSpace(p); p != "" {
 			out = append(out, p)
 		}
@@ -25,10 +25,10 @@ func splitCSV(csv string) []string {
 	return out
 }
 
-func resolveArg(args []string, idx int) string {
+func resolveArg(args []string) string {
 	var raw string
-	if idx < len(args) && args[idx] != "" {
-		raw = args[idx]
+	if len(args) > 0 && args[0] != "" {
+		raw = args[0]
 	} else {
 		raw, _ = os.Getwd()
 	}

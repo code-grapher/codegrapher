@@ -23,7 +23,7 @@ func newImpactCmd() *cobra.Command {
 			symbol := args[0]
 			var projectPath string
 			if pathFlag != "" {
-				projectPath = resolveArg([]string{pathFlag}, 0)
+				projectPath = resolveArg([]string{pathFlag})
 			} else {
 				cwd, _ := os.Getwd()
 				projectPath = findNearestOrReturn(cwd)
@@ -75,7 +75,7 @@ func newImpactCmd() *cobra.Command {
 			for _, file := range fileOrder {
 				fmt.Println(cyan(file))
 				for _, n := range byFile[file] {
-					fmt.Printf("  %s%s:%d\n", dim(padRight(string(n.Kind), 12)), n.Name, n.StartLine)
+					fmt.Printf("  %s%s:%d\n", dim(padRight(string(n.Kind))), n.Name, n.StartLine)
 				}
 				fmt.Println()
 			}

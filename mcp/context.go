@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"path"
+	"slices"
 	"sort"
 	"strings"
 
@@ -330,13 +331,7 @@ func findRelevantContext(b GraphBackend, queryStr string, opts FindOptions) (*Su
 				groupMatches := false
 				for _, term := range group {
 					inName := strings.Contains(nameLower, term)
-					inDir := false
-					for _, seg := range dirSegments {
-						if seg == term {
-							inDir = true
-							break
-						}
-					}
+					inDir := slices.Contains(dirSegments, term)
 					if inName || inDir {
 						groupMatches = true
 						break
@@ -557,13 +552,7 @@ func findRelevantContext(b GraphBackend, queryStr string, opts FindOptions) (*Su
 				dirSegs := strings.Split(strings.ToLower(path.Dir(r.Node.FilePath)), "/")
 				hits := 0
 				for _, t := range confTerms {
-					inDir := false
-					for _, seg := range dirSegs {
-						if seg == t {
-							inDir = true
-							break
-						}
-					}
+					inDir := slices.Contains(dirSegs, t)
 					if strings.Contains(nameLower, t) || inDir {
 						hits++
 						if hits >= 2 {

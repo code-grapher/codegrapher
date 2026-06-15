@@ -5,6 +5,7 @@ package extract
 import (
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/specscore/codegrapher/model"
@@ -165,12 +166,7 @@ func DetectSpecScore(filePath string, content []byte) bool {
 
 // hasSpecSegment reports whether filePath contains a `spec` path segment.
 func hasSpecSegment(filePath string) bool {
-	for _, seg := range strings.Split(filepath.ToSlash(filePath), "/") {
-		if seg == "spec" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Split(filepath.ToSlash(filePath), "/"), "spec")
 }
 
 // frontmatterHasSpecScoreFormat scans only the leading YAML frontmatter block

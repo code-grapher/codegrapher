@@ -4,6 +4,7 @@ import (
 	"math"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/specscore/codegrapher/model"
@@ -82,10 +83,8 @@ func NameMatchBonus(nodeName, query string) float64 {
 
 	// Exact token match: one of the space-separated query tokens equals the name.
 	if len(queryTokens) > 1 {
-		for _, t := range queryTokens {
-			if nameLower == t {
-				return 60
-			}
+		if slices.Contains(queryTokens, nameLower) {
+			return 60
 		}
 	}
 

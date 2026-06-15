@@ -75,10 +75,9 @@ func (e *extractor) fallbackFunc(d *ast.FuncDecl, src []byte, fset *token.FileSe
 	if isNew {
 		endPos := fset.Position(d.End())
 		endLine := endPos.Line
-		endCol := endPos.Column - 1 // go/token is 1-based; tree-sitter EndPoint.Column is 0-based exclusive
-		if endCol < 0 {
-			endCol = 0
-		}
+		endCol := max(
+			// go/token is 1-based; tree-sitter EndPoint.Column is 0-based exclusive
+			endPos.Column-1, 0)
 
 		var docstring string
 		if d.Doc != nil {
@@ -191,14 +190,8 @@ func (e *extractor) fallbackValueSpec(s *ast.ValueSpec, d *ast.GenDecl, src []by
 			}
 		}
 
-		startCol := fset.Position(name.Pos()).Column - 1
-		if startCol < 0 {
-			startCol = 0
-		}
-		endCol := fset.Position(s.End()).Column - 1
-		if endCol < 0 {
-			endCol = 0
-		}
+		startCol := max(fset.Position(name.Pos()).Column-1, 0)
+		endCol := max(fset.Position(s.End()).Column-1, 0)
 		node := model.Node{
 			ID:            id,
 			Kind:          kind,
@@ -264,14 +257,8 @@ func (e *extractor) fallbackTypeSpec(s *ast.TypeSpec, genDeclDoc *ast.CommentGro
 		docstring = strings.TrimSpace(genDeclDoc.Text())
 	}
 
-	startCol := fset.Position(s.Pos()).Column - 1
-	if startCol < 0 {
-		startCol = 0
-	}
-	endCol := fset.Position(s.End()).Column - 1
-	if endCol < 0 {
-		endCol = 0
-	}
+	startCol := max(fset.Position(s.Pos()).Column-1, 0)
+	endCol := max(fset.Position(s.End()).Column-1, 0)
 
 	id := model.GenerateNodeID(e.filePath, kind, name, startLine)
 	if existing[id] {
@@ -337,15 +324,9 @@ func (e *extractor) fallbackInterfaceMethods(ifaceType *ast.InterfaceType, iface
 		}
 		startPos := fset.Position(method.Pos())
 		startLine := startPos.Line
-		startCol := startPos.Column - 1
-		if startCol < 0 {
-			startCol = 0
-		}
+		startCol := max(startPos.Column-1, 0)
 		endPos := fset.Position(method.End())
-		endCol := endPos.Column - 1
-		if endCol < 0 {
-			endCol = 0
-		}
+		endCol := max(endPos.Column-1, 0)
 		mID := model.GenerateNodeID(e.filePath, model.KindMethod, mname, startLine)
 		if existing[mID] {
 			continue
@@ -395,14 +376,8 @@ func (e *extractor) fallbackImportSpec(s *ast.ImportSpec, fset *token.FileSet, e
 	}
 	sig = strings.TrimSpace(sig)
 
-	startCol := fset.Position(s.Pos()).Column - 1
-	if startCol < 0 {
-		startCol = 0
-	}
-	endCol := fset.Position(s.End()).Column - 1
-	if endCol < 0 {
-		endCol = 0
-	}
+	startCol := max(fset.Position(s.Pos()).Column-1, 0)
+	endCol := max(fset.Position(s.End()).Column-1, 0)
 
 	node := model.Node{
 		ID:            id,

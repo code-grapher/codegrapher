@@ -796,8 +796,8 @@ func swiftLastIdent(s string) string {
 // (Foo.Bar → Foo).
 func swiftFirstPathSegment(s string) string {
 	s = strings.TrimSpace(s)
-	if idx := strings.IndexByte(s, '.'); idx >= 0 {
-		return strings.TrimSpace(s[:idx])
+	if before, _, ok := strings.Cut(s, "."); ok {
+		return strings.TrimSpace(before)
 	}
 	return s
 }

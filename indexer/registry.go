@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -115,9 +116,7 @@ func (r *Registry) Stores() map[scope.Scope]*store.Store {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	out := make(map[scope.Scope]*store.Store, len(r.stores))
-	for sc, s := range r.stores {
-		out[sc] = s
-	}
+	maps.Copy(out, r.stores)
 	return out
 }
 

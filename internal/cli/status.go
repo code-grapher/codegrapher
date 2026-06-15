@@ -22,9 +22,9 @@ func newStatusCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var projectPath string
 			if pathFlag != "" {
-				projectPath = resolveArg([]string{pathFlag}, 0)
+				projectPath = resolveArg([]string{pathFlag})
 			} else {
-				projectPath = resolveArg(args, 0)
+				projectPath = resolveArg(args)
 			}
 			startPath := projectPath // for worktree mismatch detection
 

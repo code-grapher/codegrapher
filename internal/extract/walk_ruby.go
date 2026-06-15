@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/specscore/codegrapher/internal/tsparse"
@@ -208,8 +209,8 @@ func (e *extractor) createRubyField(name string, node *tsparse.Node) {
 	}
 	saved := e.nodeStack
 	idx := -1
-	for i := len(e.nodeStack) - 1; i >= 0; i-- {
-		if e.nodeStack[i] == classID {
+	for i, v := range slices.Backward(e.nodeStack) {
+		if v == classID {
 			idx = i
 			break
 		}
@@ -223,8 +224,8 @@ func (e *extractor) createRubyField(name string, node *tsparse.Node) {
 
 // nearestRubyClassID returns the ID of the nearest class-kind node on the stack.
 func (e *extractor) nearestRubyClassID() string {
-	for i := len(e.nodeStack) - 1; i >= 0; i-- {
-		id := e.nodeStack[i]
+	for _, id := range slices.Backward(e.nodeStack) {
+
 		for _, n := range e.nodes {
 			if n.ID == id && n.Kind == model.KindClass {
 				return id

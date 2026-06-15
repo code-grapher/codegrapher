@@ -204,7 +204,6 @@ func TestParityGoldens(t *testing.T) {
 	goldenBase := filepath.Join(root, "testdata", "golden")
 
 	for _, fix := range fixtures {
-		fix := fix
 		t.Run(fix.name, func(t *testing.T) {
 			// Copy fixture to a temp dir so init doesn't pollute the source tree.
 			tmpDir := t.TempDir()
@@ -251,7 +250,6 @@ func TestParityGoldens(t *testing.T) {
 
 			// --- callers / callees / impact per symbol ---
 			for _, sym := range fix.symbols {
-				sym := sym
 				t.Run("callers-"+sym, func(t *testing.T) {
 					got, err := runBinary(env, tmpDir, "callers", sym, "--json")
 					if err != nil {

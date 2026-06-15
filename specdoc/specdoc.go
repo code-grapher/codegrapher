@@ -256,8 +256,8 @@ func frontmatterFormat(data []byte) string {
 		if line == "---" {
 			return ""
 		}
-		if strings.HasPrefix(line, "format:") {
-			v := strings.TrimSpace(strings.TrimPrefix(line, "format:"))
+		if after, ok := strings.CutPrefix(line, "format:"); ok {
+			v := strings.TrimSpace(after)
 			return strings.Trim(v, `"'`)
 		}
 	}

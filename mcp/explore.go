@@ -163,9 +163,9 @@ func computeGraphRelevance(nodeIDs []string, edges []model.Edge, seedIDs map[str
 
 	const alpha = 0.25
 	s := append([]float64(nil), r...)
-	for iter := 0; iter < 25; iter++ {
+	for range 25 {
 		next := make([]float64, n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			si := s[i]
 			if si == 0 {
 				continue
@@ -180,7 +180,7 @@ func computeGraphRelevance(nodeIDs []string, edges []model.Edge, seedIDs map[str
 				next[j] += share
 			}
 		}
-		for i := 0; i < n; i++ {
+		for i := range n {
 			s[i] = (1-alpha)*next[i] + alpha*r[i]
 		}
 	}
@@ -640,7 +640,7 @@ func (h *toolHandlers) handleExplore(args map[string]any) toolResult {
 	} else {
 		budget = getExploreOutputBudget(int(^uint(0) >> 1))
 	}
-	maxFiles := clamp(intArg(args, "maxFiles", budget.defaultMaxFiles), 1, 20)
+	maxFiles := clamp(intArg(args, "maxFiles", budget.defaultMaxFiles), 20)
 
 	subgraph, err := findRelevantContext(h.backend, queryStr, FindOptions{
 		SearchLimit:    8,
@@ -856,7 +856,7 @@ func (h *toolHandlers) handleExplore(args map[string]any) toolResult {
 	}
 
 	var queryTerms []string
-	for _, t := range strings.Fields(strings.ToLower(queryStr)) {
+	for t := range strings.FieldsSeq(strings.ToLower(queryStr)) {
 		if len(t) >= 3 {
 			queryTerms = append(queryTerms, t)
 		}
@@ -1247,16 +1247,9 @@ func (h *toolHandlers) handleExplore(args map[string]any) toolResult {
 		}
 		var wholeFileMaxChars int
 		if isCentralFile {
-			rem := budget.maxOutputChars - totalChars - 200
-			if rem < 0 {
-				rem = 0
-			}
+			rem := max(budget.maxOutputChars-totalChars-200, 0)
 			capped := int(float64(budget.maxCharsPerFile)*1.5 + 0.5)
-			if rem < capped {
-				wholeFileMaxChars = rem
-			} else {
-				wholeFileMaxChars = capped
-			}
+			wholeFileMaxChars = min(rem, capped)
 		} else {
 			wholeFileMaxChars = budget.maxCharsPerFile * 3
 		}
@@ -1449,10 +1442,7 @@ func (h *toolHandlers) renderSkeleton(groupNodes []model.Node, fileLines []strin
 			continue
 		}
 		if _, ok := bodyIDs[n.ID]; ok {
-			end := n.EndLine
-			if end > len(fileLines) {
-				end = len(fileLines)
-			}
+			end := min(n.EndLine, len(fileLines))
 			body := strings.Join(fileLines[n.StartLine-1:end], "\n")
 			if withLineNumbers {
 				skel = append(skel, numberSourceLines(body, n.StartLine))
@@ -1462,7 +1452,7 @@ func (h *toolHandlers) renderSkeleton(groupNodes []model.Node, fileLines []strin
 			coveredUntil = end
 		} else {
 			lineNo := n.StartLine
-			for k := 0; k < 4; k++ {
+			for k := range 4 {
 				idx := n.StartLine - 1 + k
 				if idx < len(fileLines) && strings.Contains(fileLines[idx], n.Name) {
 					lineNo = n.StartLine + k
@@ -1629,14 +1619,8 @@ func (h *toolHandlers) renderClusters(filePath string, group *fileGroup, fileLin
 
 	const contextPadding = 3
 	buildSection := func(c cluster) string {
-		startIdx := c.start - 1 - contextPadding
-		if startIdx < 0 {
-			startIdx = 0
-		}
-		endIdx := c.end + contextPadding
-		if endIdx > len(fileLines) {
-			endIdx = len(fileLines)
-		}
+		startIdx := max(c.start-1-contextPadding, 0)
+		endIdx := min(c.end+contextPadding, len(fileLines))
 		slice := strings.Join(fileLines[startIdx:endIdx], "\n")
 		if withLineNumbers {
 			return numberSourceLines(slice, startIdx+1)

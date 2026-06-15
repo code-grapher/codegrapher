@@ -166,7 +166,6 @@ func TestExternalCorpus(t *testing.T) {
 	cacheDir := filepath.Join(repoRoot, "testdata", "external", "cache")
 
 	for _, repo := range manifest.Repos {
-		repo := repo
 		t.Run(repo.Name, func(t *testing.T) {
 			dest := filepath.Join(cacheDir, repo.Name)
 			if err := ensureClone(t, dest, repo.URL, repo.SHA); err != nil {

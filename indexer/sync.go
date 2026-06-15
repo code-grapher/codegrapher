@@ -373,7 +373,7 @@ func gitChangedFiles(rootDir string) (gitChanges, bool) {
 		return gitChanges{}, false
 	}
 	changes := gitChanges{}
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		if len(line) < 4 {
 			continue // minimum: "XY file"
 		}

@@ -227,7 +227,7 @@ func buildDefaultIgnore(rootDir string) *ignoreMatcher {
 	m.addPattern("cmake-build-*/")
 	m.addPattern("bazel-*/")
 	if data, err := os.ReadFile(filepath.Join(rootDir, ".gitignore")); err == nil {
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			m.addPattern(strings.TrimSuffix(line, "\r"))
 		}
 	}
@@ -301,7 +301,7 @@ func collectGitFiles(repoDir, prefix string, files map[string]bool) bool {
 	if err != nil {
 		return false
 	}
-	for _, rel := range strings.Split(tracked, "\x00") {
+	for rel := range strings.SplitSeq(tracked, "\x00") {
 		if rel != "" {
 			files[prefix+filepath.ToSlash(rel)] = true
 		}
@@ -310,7 +310,7 @@ func collectGitFiles(repoDir, prefix string, files map[string]bool) bool {
 	if err != nil {
 		return false
 	}
-	for _, rel := range strings.Split(untracked, "\x00") {
+	for rel := range strings.SplitSeq(untracked, "\x00") {
 		if rel == "" {
 			continue
 		}
@@ -381,7 +381,7 @@ func scanDirectoryWalk(rootDir string) []string {
 		if dir != rootDir {
 			if data, err := os.ReadFile(filepath.Join(dir, ".gitignore")); err == nil {
 				m := &ignoreMatcher{}
-				for _, line := range strings.Split(string(data), "\n") {
+				for line := range strings.SplitSeq(string(data), "\n") {
 					m.addPattern(strings.TrimSuffix(line, "\r"))
 				}
 				active = append(append([]scoped{}, matchers...), scoped{dir: dir, m: m})

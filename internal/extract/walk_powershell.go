@@ -134,7 +134,7 @@ func (e *extractor) extractPSClass(node *tsparse.Node) {
 		case "class_property_definition":
 			e.extractPSProperty(c)
 		case "class_method_definition":
-			e.extractPSMethod(c, className)
+			e.extractPSMethod(c)
 		}
 	}
 	e.nodeStack = e.nodeStack[:len(e.nodeStack)-1]
@@ -162,7 +162,7 @@ func (e *extractor) extractPSProperty(node *tsparse.Node) {
 // extractPSMethod handles a class_method_definition → KindMethod (a method named
 // like the class is the constructor, still a KindMethod). Its body is walked so
 // method-internal calls attribute to it.
-func (e *extractor) extractPSMethod(node *tsparse.Node, className string) {
+func (e *extractor) extractPSMethod(node *tsparse.Node) {
 	var nameNode *tsparse.Node
 	for i := 0; i < node.NamedChildCount(); i++ {
 		if c := node.NamedChild(i); c != nil && c.Kind() == "simple_name" {
@@ -523,14 +523,15 @@ func psModuleBasename(path string) string {
 
 // psFunctionSignature renders a function's header.
 func psFunctionSignature(node *tsparse.Node, name string) string {
-	sig := "function " + name
+	var sig strings.Builder
+	sig.WriteString("function " + name)
 	for i := 0; i < node.NamedChildCount(); i++ {
 		if c := node.NamedChild(i); c != nil && c.Kind() == "function_parameter_declaration" {
-			sig += c.Text()
+			sig.WriteString(c.Text())
 			break
 		}
 	}
-	return sig
+	return sig.String()
 }
 
 // psMethodSignature renders a method's header (return type + name + params).

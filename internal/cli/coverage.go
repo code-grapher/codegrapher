@@ -38,9 +38,9 @@ directory — the recordsets the CLI uploads to the server.`,
 
 			projectPath := root
 			if projectPath == "" {
-				projectPath = resolveArg(nil, 0)
+				projectPath = resolveArg(nil)
 			} else {
-				projectPath = resolveArg([]string{projectPath}, 0)
+				projectPath = resolveArg([]string{projectPath})
 			}
 
 			if !indexer.IsInitialized(projectPath) {

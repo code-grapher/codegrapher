@@ -17,7 +17,7 @@ func newInitCmd() *cobra.Command {
 		Short: "Initialize CodeGraph in a project directory and build the initial index",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			projectPath := resolveArg(args, 0)
+			projectPath := resolveArg(args)
 
 			if indexer.IsInitialized(projectPath) {
 				printWarn(fmt.Sprintf("Already initialized in %s", projectPath))

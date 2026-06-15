@@ -131,7 +131,7 @@ func scopeDense(t *testing.T, file string, fanCount int) *store.Store {
 		fnNode("hub:"+file, "Hub", file, model.LangGo),
 	}
 	var edges []model.Edge
-	for i := 0; i < fanCount; i++ {
+	for i := range fanCount {
 		id := fmt.Sprintf("leaf:%s:%d", file, i)
 		nodes = append(nodes, fnNode(id, fmt.Sprintf("Leaf%d", i), file, model.LangGo))
 		edges = append(edges, model.Edge{Source: "hub:" + file, Target: id, Kind: model.EdgeCalls})

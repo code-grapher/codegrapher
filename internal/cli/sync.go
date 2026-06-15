@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/specscore/codegrapher/indexer"
 	"github.com/spf13/cobra"
@@ -16,7 +17,7 @@ func newSyncCmd() *cobra.Command {
 		Short: "Sync changes since last index",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			projectPath := resolveArg(args, 0)
+			projectPath := resolveArg(args)
 
 			if !indexer.IsInitialized(projectPath) {
 				if !quiet {
@@ -79,12 +80,12 @@ func newSyncCmd() *cobra.Command {
 }
 
 func joinStrings(ss []string, sep string) string {
-	s := ""
+	var s strings.Builder
 	for i, v := range ss {
 		if i > 0 {
-			s += sep
+			s.WriteString(sep)
 		}
-		s += v
+		s.WriteString(v)
 	}
-	return s
+	return s.String()
 }

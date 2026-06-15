@@ -33,7 +33,7 @@ Use --out to override and --ref to set the git ref segment (default: the
 current branch, falling back to HEAD).`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			projectPath := resolveArg(args, 0)
+			projectPath := resolveArg(args)
 
 			if !indexer.IsInitialized(projectPath) {
 				return fmt.Errorf("no codegraph index found at %s — run 'codegrapher init' first", projectPath)

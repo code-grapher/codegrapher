@@ -57,9 +57,9 @@ func newServeCmd() *cobra.Command {
 						"(set CODEGRAPH_NO_DAEMON=1 to silence this notice)")
 			}
 
-			projectPath := resolveArg(nil, 0)
+			projectPath := resolveArg(nil)
 			if pathFlag != "" {
-				projectPath = resolveArg([]string{pathFlag}, 0)
+				projectPath = resolveArg([]string{pathFlag})
 			}
 			if !indexer.IsInitialized(projectPath) {
 				return fmt.Errorf("CodeGraph not initialized in %s. Run 'codegraph init' in that project first", projectPath)

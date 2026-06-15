@@ -579,14 +579,10 @@ func (b *StoreBackend) FindNodesByExactName(names []string, kinds []model.NodeKi
 	}
 
 	// Pass 2: per-name query with co-location scoring.
-	perNameLimit := (limit + len(names) - 1) / len(names) // ceil
-	if perNameLimit < 8 {
-		perNameLimit = 8
-	}
-	fetch := perNameLimit * 3
-	if fetch < 50 {
-		fetch = 50
-	}
+	perNameLimit := max(
+		// ceil
+		(limit+len(names)-1)/len(names), 8)
+	fetch := max(perNameLimit*3, 50)
 
 	var allResults []model.SearchResult
 	seenIDs := make(map[string]struct{})
@@ -771,14 +767,8 @@ func (b *StoreBackend) GetCode(nodeID string) (string, error) {
 		return "", nil
 	}
 	lines := strings.Split(string(data), "\n")
-	startIdx := n.StartLine - 1
-	if startIdx < 0 {
-		startIdx = 0
-	}
-	endIdx := n.EndLine
-	if endIdx > len(lines) {
-		endIdx = len(lines)
-	}
+	startIdx := max(n.StartLine-1, 0)
+	endIdx := min(n.EndLine, len(lines))
 	if endIdx <= startIdx {
 		return "", nil
 	}

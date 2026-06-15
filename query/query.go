@@ -1,6 +1,7 @@
 package query
 
 import (
+	"maps"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -155,7 +156,7 @@ func SearchNodes(s *store.Store, rawQuery string, opts SearchOptions) ([]model.S
 				maxScore = r.Score
 			}
 		}
-		for _, term := range strings.Fields(rawQuery) {
+		for term := range strings.FieldsSeq(rawQuery) {
 			if len(term) < 2 {
 				continue
 			}
@@ -420,9 +421,7 @@ func Impact(s *store.Store, symbol string, depth int) (*ImpactResult, error) {
 		if err != nil {
 			return nil, err
 		}
-		for id, n := range nodes {
-			mergedNodes[id] = n
-		}
+		maps.Copy(mergedNodes, nodes)
 		for _, e := range edges {
 			key := e.Source + "->" + e.Target + ":" + string(e.Kind)
 			if _, ok := seenEdges[key]; !ok {
@@ -438,9 +437,7 @@ func Impact(s *store.Store, symbol string, depth int) (*ImpactResult, error) {
 		if err != nil {
 			return nil, err
 		}
-		for id, n := range nodes {
-			mergedNodes[id] = n
-		}
+		maps.Copy(mergedNodes, nodes)
 		edgeCount = len(edges)
 	}
 

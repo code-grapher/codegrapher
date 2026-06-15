@@ -29,7 +29,7 @@ func newFilesCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var projectPath string
 			if pathFlag != "" {
-				projectPath = resolveArg([]string{pathFlag}, 0)
+				projectPath = resolveArg([]string{pathFlag})
 			} else {
 				cwd, _ := os.Getwd()
 				projectPath = findNearestOrReturn(cwd)

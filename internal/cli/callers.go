@@ -23,7 +23,7 @@ func newCallersCmd() *cobra.Command {
 			symbol := args[0]
 			var projectPath string
 			if pathFlag != "" {
-				projectPath = resolveArg([]string{pathFlag}, 0)
+				projectPath = resolveArg([]string{pathFlag})
 			} else {
 				cwd, _ := os.Getwd()
 				projectPath = findNearestOrReturn(cwd)
@@ -65,7 +65,7 @@ func newCallersCmd() *cobra.Command {
 			}
 			fmt.Println(bold(fmt.Sprintf("\nCallers of %q (%d):\n", symbol, len(result.Callers))))
 			for _, n := range result.Callers {
-				fmt.Printf("%s %s\n", cyan(padRight(string(n.Kind), 12)), n.Name)
+				fmt.Printf("%s %s\n", cyan(padRight(string(n.Kind))), n.Name)
 				fmt.Println(dim(fmt.Sprintf("  %s:%d", n.FilePath, n.StartLine)))
 				fmt.Println()
 			}
