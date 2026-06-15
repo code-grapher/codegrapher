@@ -32,13 +32,13 @@ Add a native SpecScore extractor following the established walk_*.go pattern: a 
 
 ## MVP Scope
 
-A thin vertical slice proving the model end-to-end on the codegrapher repo's own spec/ tree (and the SpecScore repo as an external fixture): a walk_specscore.go that handles Features and Ideas only, detected by path+frontmatter, emitting Feature/Idea nodes (slug, kind, status, grade) plus deep child nodes for Requirements and Acceptance Criteria with 'contains' edges, and resolving cross-file references (including Promotes To / Related Ideas) to 'references'/'promotes_to' edges. Deterministic self-goldens for the fixtures; the new kinds/edges/language registered in model. No Plans/Decisions/Tasks/Scenarios yet, no spec↔code binding.
+A thin vertical slice proving the model end-to-end on the codegrapher repo's own spec/ tree (and the SpecScore repo as an external fixture): a walk_specscore.go that handles Features, Ideas, and Plans, detected by path+frontmatter, emitting Feature/Idea/Plan nodes (slug, kind, status, grade) plus deep child nodes for Requirements and Acceptance Criteria (Features) and Tasks (Plans) with 'contains' edges, and resolving cross-file references — including Promotes To / Related Ideas ('promotes_to') and Plan Depends-On task ordering ('depends_on') — to 'references'/'promotes_to'/'depends_on' edges. Deterministic self-goldens for the fixtures; the new kinds/edges/language registered in model. No Decisions/Tasks-as-top-level/Scenarios yet, no spec↔code binding.
 
 ## Not Doing (and Why)
 
 - Spec↔code binding (specscore: annotations, Verifies: trailers) — deferred; MVP is spec-graph-internal only
 - A generic frontmatter-markdown extractor — speculative flexibility; SpecScore is the only schema asked for
-- Plans, Decisions, Tasks, Scenarios in the first slice — proven on Features+Ideas first, then fanned out
+- Decisions and Scenarios in the first slice — proven on Features, Ideas, and Plans first, then fanned out
 - Editing SpecScore artifacts or writing back to them — codegrapher is read-only intelligence
 - A new MCP verb or CLI subcommand dedicated to specs — reuse existing query/explore surfaces over the new nodes
 
@@ -63,4 +63,4 @@ A thin vertical slice proving the model end-to-end on the codegrapher repo's own
 
 - Markdown parsing approach under CGO_ENABLED=0: reuse gotreesitter's markdown grammar (consistent with other extractors) vs. a small pure-Go heading/frontmatter pass — decide at design time.
 - Whether REQ/AC node identity should use the artifact-local ID from the spec or a derived slug, for stable cross-references.
-- How aggressively to fan out beyond Features+Ideas once the MVP slice lands (Plans next, given their Depends-On graph value, vs. Decisions/Tasks/Scenarios).
+- How aggressively to fan out beyond the MVP's Features/Ideas/Plans once it lands — Decisions next vs. Scenarios, and whether Tasks deserve top-level nodes beyond the Plan-child Tasks already in MVP.
