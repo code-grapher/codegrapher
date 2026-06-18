@@ -1,10 +1,10 @@
 ---
 format: https://specscore.md/plan-specification
-status: Approved
+status: Implemented
 ---
 # Plan: Specscore Artifact Extraction
 
-**Status:** Completed
+**Status:** Implemented
 **Source:** idea:specscore-artifact-extraction
 **Date:** 2026-06-15
 **Owner:** alexandertrakhimenok
