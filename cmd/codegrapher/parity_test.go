@@ -255,25 +255,29 @@ func TestParityGoldens(t *testing.T) {
 					if err != nil {
 						t.Fatalf("callers %s: %v\n%s", sym, err, got)
 					}
-					assertGolden(t, filepath.Join(goldenDir, "callers-"+sym+".json"), got, false)
+					assertGolden(t, filepath.Join(goldenDir, goldenSymbolFilename("callers", sym)), got, false)
 				})
 				t.Run("callees-"+sym, func(t *testing.T) {
 					got, err := runBinary(env, tmpDir, "callees", sym, "--json")
 					if err != nil {
 						t.Fatalf("callees %s: %v\n%s", sym, err, got)
 					}
-					assertGolden(t, filepath.Join(goldenDir, "callees-"+sym+".json"), got, false)
+					assertGolden(t, filepath.Join(goldenDir, goldenSymbolFilename("callees", sym)), got, false)
 				})
 				t.Run("impact-"+sym, func(t *testing.T) {
 					got, err := runBinary(env, tmpDir, "impact", sym, "--json")
 					if err != nil {
 						t.Fatalf("impact %s: %v\n%s", sym, err, got)
 					}
-					assertGolden(t, filepath.Join(goldenDir, "impact-"+sym+".json"), got, false)
+					assertGolden(t, filepath.Join(goldenDir, goldenSymbolFilename("impact", sym)), got, false)
 				})
 			}
 		})
 	}
+}
+
+func goldenSymbolFilename(command, symbol string) string {
+	return command + "-" + strings.ReplaceAll(symbol, ":", "__") + ".json"
 }
 
 func assertGolden(t *testing.T, goldenPath string, got []byte, topLevelUnordered bool) {

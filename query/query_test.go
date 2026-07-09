@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/specscore/codegrapher/indexer"
@@ -473,7 +474,7 @@ func TestTsSmall_ImpactCacheLookup(t *testing.T) {
 func testCallers(t *testing.T, fixture, symbol string) {
 	t.Helper()
 	fixtureDir := filepath.Join(repoRoot, "testdata", "fixtures", fixture)
-	goldenPath := filepath.Join(repoRoot, "testdata", "golden", fixture, "callers-"+symbol+".json")
+	goldenPath := filepath.Join(repoRoot, "testdata", "golden", fixture, goldenSymbolFilename("callers", symbol))
 	s := buildStore(t, fixtureDir)
 
 	result, err := query.Callers(s, symbol)
@@ -496,7 +497,7 @@ func testCallers(t *testing.T, fixture, symbol string) {
 func testCallees(t *testing.T, fixture, symbol string) {
 	t.Helper()
 	fixtureDir := filepath.Join(repoRoot, "testdata", "fixtures", fixture)
-	goldenPath := filepath.Join(repoRoot, "testdata", "golden", fixture, "callees-"+symbol+".json")
+	goldenPath := filepath.Join(repoRoot, "testdata", "golden", fixture, goldenSymbolFilename("callees", symbol))
 	s := buildStore(t, fixtureDir)
 
 	result, err := query.Callees(s, symbol)
@@ -519,7 +520,7 @@ func testCallees(t *testing.T, fixture, symbol string) {
 func testImpact(t *testing.T, fixture, symbol string) {
 	t.Helper()
 	fixtureDir := filepath.Join(repoRoot, "testdata", "fixtures", fixture)
-	goldenPath := filepath.Join(repoRoot, "testdata", "golden", fixture, "impact-"+symbol+".json")
+	goldenPath := filepath.Join(repoRoot, "testdata", "golden", fixture, goldenSymbolFilename("impact", symbol))
 	s := buildStore(t, fixtureDir)
 
 	result, err := query.Impact(s, symbol, 2)
@@ -537,4 +538,8 @@ func testImpact(t *testing.T, fixture, symbol string) {
 	if diff != "" {
 		t.Fatalf("parity mismatch:\n%s", diff)
 	}
+}
+
+func goldenSymbolFilename(command, symbol string) string {
+	return command + "-" + strings.ReplaceAll(symbol, ":", "__") + ".json"
 }

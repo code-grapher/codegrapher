@@ -28,7 +28,7 @@ func TestDiff_GoldenAgainstItself(t *testing.T) {
 		{goldenPath(t, "go-small", "query.json"), false},
 		{goldenPath(t, "go-small", "files.json"), true},
 		{goldenPath(t, "go-small", "callers-Get.json"), false},
-		{goldenPath(t, "ts-small", "callees-Cache::lookup.json"), false},
+		{goldenPath(t, "ts-small", "callees-Cache____lookup.json"), false},
 		{goldenPath(t, "ts-small", "impact-describe.json"), false},
 	}
 	for _, f := range files {
