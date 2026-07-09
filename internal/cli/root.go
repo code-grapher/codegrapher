@@ -5,7 +5,7 @@ import (
 )
 
 // Version is the CLI version, stamped at build time via -ldflags.
-var Version = "0.1.3"
+var Version = "0.1.4"
 
 // NewRootCmd builds and returns the root Cobra command with all sub-commands
 // attached. It does NOT call Execute() — the caller does.
