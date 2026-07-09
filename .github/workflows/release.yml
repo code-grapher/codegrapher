@@ -121,17 +121,19 @@ jobs:
           set -euo pipefail
 
           tag="${GITHUB_REF_NAME}"
-          notes="Release ${tag}
+          cat > release-notes.md <<EOF
+          Release ${tag}
 
-This release is built by GitHub Actions from tag ${tag}.
+          This release is built by GitHub Actions from tag ${tag}.
 
-Install with:
+          Install with:
 
-\`\`\`sh
-go install github.com/specscore/codegrapher/cmd/codegrapher@latest
-\`\`\`"
+          \`\`\`sh
+          go install github.com/specscore/codegrapher/cmd/codegrapher@latest
+          \`\`\`
+          EOF
 
           gh release create "${tag}" dist/* \
             --title "${tag}" \
-            --notes "${notes}" \
+            --notes-file release-notes.md \
             --verify-tag
