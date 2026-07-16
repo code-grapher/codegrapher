@@ -22,7 +22,7 @@ jobs:
     # version-bump-and-tag on main. Defaults to CGO_ENABLED=0, which matches
     # codegrapher's single-static-binary / cross-compilation launch requirement
     # (no cgo_enabled override needed — the parser and SQLite driver are pure Go).
-    uses: strongo/go-ci-action/.github/workflows/workflow.yml@main
+    uses: strongo/cicd/.github/workflows/workflow.yml@main
 
     secrets:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
