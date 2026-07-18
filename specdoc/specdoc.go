@@ -98,7 +98,16 @@ func ParseContent(logicalPath string, content []byte) (*Doc, error) {
 		return nil, err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	rel := filepath.FromSlash(logicalPath)
+	// The logical path can be relative with leading "../" segments (callers pass
+	// paths like "../../spec/plans/x.md"). Joining that straight into a shallow
+	// temp dir — Linux's /tmp/xxx is only two components deep — escapes to an
+	// unwritable location such as /spec, so MkdirAll fails and the whole parse
+	// errors out. (macOS's deep /var/folders temp dir happened to stay writable,
+	// which is why this only reproduced on Linux CI.) Sanitize the path so the
+	// mirror is always created safely inside dir; the artifact Kind comes from
+	// the content and feature/plan slugs are re-derived from logicalPath below,
+	// so the mirror only needs to preserve the tail of the path.
+	rel := safeMirrorPath(filepath.FromSlash(logicalPath))
 	tmp := filepath.Join(dir, rel)
 	if err := os.MkdirAll(filepath.Dir(tmp), 0o755); err != nil {
 		return nil, err
@@ -122,6 +131,33 @@ func ParseContent(logicalPath string, content []byte) (*Doc, error) {
 
 // parse dispatches an artifact (already-read bytes + a real readable path) to the
 // matching specscore-cli parser.
+// safeMirrorPath strips any volume name, absolute root, and leading "." / ".."
+// segments so that filepath.Join(tempDir, safeMirrorPath(p)) always stays inside
+// tempDir — even when p is relative with leading "../" and tempDir is shallow
+// (e.g. Linux's /tmp/xxx). The preserved tail is all the artifact parsers and
+// slug derivation need.
+func safeMirrorPath(p string) string {
+	p = filepath.Clean(p)
+	if vol := filepath.VolumeName(p); vol != "" {
+		p = p[len(vol):]
+	}
+	sep := string(filepath.Separator)
+	for {
+		switch {
+		case p == "." || p == "..":
+			return "artifact"
+		case strings.HasPrefix(p, sep):
+			p = strings.TrimPrefix(p, sep)
+		case strings.HasPrefix(p, ".."+sep):
+			p = p[len(".."+sep):]
+		case strings.HasPrefix(p, "."+sep):
+			p = p[len("."+sep):]
+		default:
+			return p
+		}
+	}
+}
+
 func parse(path string, data []byte) (*Doc, error) {
 	switch frontmatterFormat(data) {
 	case formatFeature:
