@@ -1,0 +1,66 @@
+version: 2
+
+project_name: codegrapher
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: codegrapher
+    main: ./cmd/codegrapher
+    binary: codegrapher
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      # Windows on arm64 was never published by the prior manual matrix.
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    ldflags:
+      - -s -w
+      - -X github.com/specscore/codegrapher/internal/cli.Version={{ .Version }}
+
+archives:
+  - id: archive
+    ids: [codegrapher]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    # Stable, OS/arch-templated name (matches the prior manual archive naming).
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
+      - NOTICE
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  github:
+    owner: code-grapher
+    name: codegrapher
+
+# Homebrew cask (ecosystem standard; `brews:` is deprecated — see strongo/cicd
+# README "Packaging conventions"). GoReleaser auto-installs the codegrapher
+# binary from the archive. Published to the shared specscore tap (the module is
+# github.com/specscore/codegrapher), alongside the specscore cask:
+#   brew install --cask specscore/tap/codegrapher
+homebrew_casks:
+  - name: codegrapher
+    ids: [archive]
+    description: "codegrapher – a free Go tool that builds a graph of your codebase"
+    homepage: https://github.com/code-grapher/codegrapher
+    license: Apache-2.0
+    repository:
+      owner: specscore
+      name: homebrew-tap
+      # Cross-repo PAT with Contents:write on specscore/homebrew-tap, forwarded
+      # by the shared strongo/cicd release.yml as $GORELEASER_GITHUB_TOKEN.
+      token: "{{ .Env.GORELEASER_GITHUB_TOKEN }}"

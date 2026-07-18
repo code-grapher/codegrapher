@@ -1,121 +1,45 @@
 name: Release
 
+# Continuous delivery: every merge to `main` runs the shared strongo/cicd
+# release workflow, which bumps the version from conventional commits and
+# releases it in one run (GoReleaser against this repo's .goreleaser.yaml —
+# all-OS binaries to the GitHub release + a Homebrew cask). Pushing an explicit
+# `vX.Y.Z` tag also works and releases that exact version. A docs/chore-only
+# merge cuts no tag and publishes nothing.
+#
+# codegrapher is pre-1.0: allow_major_version_bump stays false, so a stray
+# `feat!:` is capped to a minor bump instead of jumping to v1.0.0. Cut v1.0.0
+# deliberately by pushing that tag.
+#
+# The Homebrew cask (see .goreleaser.yaml) publishes to specscore/homebrew-tap
+# and needs a GORELEASER_GITHUB_TOKEN secret with Contents:write on that tap;
+# until that secret is set the cask push fails (the GitHub release still ships).
+
 on:
   push:
+    branches:
+      - main
     tags:
-      - 'v*.*.*'
+      - 'v*'
+  workflow_dispatch:
+
+# One release at a time; a second push queues instead of racing the first.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: windows
-            goarch: amd64
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Build archive
-        env:
-          CGO_ENABLED: '0'
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: |
-          set -euo pipefail
-
-          tag="${GITHUB_REF_NAME}"
-          version="${tag#v}"
-          name="codegrapher_${tag}_${GOOS}_${GOARCH}"
-          mkdir -p "dist/${name}"
-
-          bin="codegrapher"
-          if [ "${GOOS}" = "windows" ]; then
-            bin="codegrapher.exe"
-          fi
-
-          go build \
-            -trimpath \
-            -ldflags "-s -w -X github.com/specscore/codegrapher/internal/cli.Version=${version}" \
-            -o "dist/${name}/${bin}" \
-            ./cmd/codegrapher
-
-          cp README.md LICENSE NOTICE "dist/${name}/"
-
-          (
-            cd dist
-            if [ "${GOOS}" = "windows" ]; then
-              zip -qr "${name}.zip" "${name}"
-              sha256sum "${name}.zip" > "${name}.zip.sha256"
-            else
-              tar -czf "${name}.tar.gz" "${name}"
-              sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256"
-            fi
-          )
-
-      - name: Upload archive
-        uses: actions/upload-artifact@v4
-        with:
-          name: codegrapher-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: |
-            dist/*.tar.gz
-            dist/*.tar.gz.sha256
-            dist/*.zip
-            dist/*.zip.sha256
-          if-no-files-found: error
-
-  publish:
-    name: Publish GitHub Release
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download archives
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-
-          tag="${GITHUB_REF_NAME}"
-          cat > release-notes.md <<EOF
-          Release ${tag}
-
-          This release is built by GitHub Actions from tag ${tag}.
-
-          Install with:
-
-          \`\`\`sh
-          go install github.com/specscore/codegrapher/cmd/codegrapher@latest
-          \`\`\`
-          EOF
-
-          gh release create "${tag}" dist/* \
-            --title "${tag}" \
-            --notes-file release-notes.md \
-            --verify-tag
+  release:
+    uses: strongo/cicd/.github/workflows/release.yml@v1
+    permissions:
+      contents: write
+    with:
+      # Pre-1.0: cap an accidental major (feat!:) to a minor bump.
+      allow_major_version_bump: false
+    secrets:
+      # Cross-repo PAT with Contents:write on specscore/homebrew-tap (the cask
+      # target), forwarded to GoReleaser as $GORELEASER_GITHUB_TOKEN.
+      GORELEASER_GITHUB_TOKEN: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
