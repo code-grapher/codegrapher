@@ -11,6 +11,7 @@ require (
 	github.com/odvcencio/gotreesitter v0.20.2
 	github.com/specscore/specscore-cli v0.10.2-0.20260615070407-a2eb217cb769
 	github.com/spf13/cobra v1.10.2
+	github.com/strongo/buildinfo v0.2.0
 	golang.org/x/mod v0.37.0
 	golang.org/x/tools v0.46.0
 	modernc.org/sqlite v1.52.0

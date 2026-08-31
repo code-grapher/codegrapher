@@ -2,14 +2,15 @@ package cli
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/strongo/buildinfo"
+	"github.com/strongo/buildinfo/cobracmd"
 )
-
-// Version is the CLI version, stamped at build time via -ldflags.
-var Version = "0.1.4"
 
 // NewRootCmd builds and returns the root Cobra command with all sub-commands
 // attached. It does NOT call Execute() — the caller does.
 func NewRootCmd() *cobra.Command {
+	info := buildinfo.Get("codegrapher")
+
 	root := &cobra.Command{
 		Use:   "codegrapher",
 		Short: "Code intelligence and knowledge graph for any codebase",
@@ -32,13 +33,13 @@ chains, analyse blast radius, and keep the index in sync.`,
 		newCalleesCmd(),
 		newImpactCmd(),
 		newUnlockCmd(),
-		newVersionCmd(),
 		newAffectedCmd(),
 		newServeCmd(),
 		newExportCmd(),
 		newImportCmd(),
 		newCoverageCmd(),
 	)
+	cobracmd.WireCobra(root, info)
 
 	return root
 }

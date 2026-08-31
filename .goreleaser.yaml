@@ -22,7 +22,9 @@ builds:
     mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
       - -s -w
-      - -X github.com/specscore/codegrapher/internal/cli.Version={{ .Version }}
+      - -X github.com/strongo/buildinfo.version={{.Version}}
+      - -X github.com/strongo/buildinfo.commit={{.FullCommit}}
+      - -X github.com/strongo/buildinfo.date={{.Date}}
 
 archives:
   - id: archive
