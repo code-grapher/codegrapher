@@ -42,6 +42,13 @@ jobs:
     with:
       # Pre-1.0: cap an accidental major (feat!:) to a minor bump.
       allow_major_version_bump: false
+      # Required whenever the MACOS_SIGN_* secrets below are set: it activates
+      # the draft -> macOS verify-and-promote -> publish gate, so a release is
+      # only promoted out of draft after codesign --verify --deep --strict has
+      # confirmed the published artifact satisfies its Designated Requirement.
+      # Without it the workflow refuses to publish at all, because an unverified
+      # signed binary is exactly what shipped dead (SIGKILL on launch) before.
+      require_notarized_macos: true
     secrets:
       # Cross-repo PAT with Contents:write on specscore/homebrew-tap (the cask
       # target), forwarded to GoReleaser as $GORELEASER_GITHUB_TOKEN.
