@@ -71,9 +71,20 @@ release:
 
 # Homebrew cask (ecosystem standard; `brews:` is deprecated — see strongo/cicd
 # README "Packaging conventions"). GoReleaser auto-installs the codegrapher
-# binary from the archive. Published to the shared specscore tap (the module is
-# github.com/specscore/codegrapher), alongside the specscore cask:
-#   brew install --cask specscore/tap/codegrapher
+# binary from the archive.
+#
+# Published to code-grapher's OWN tap:
+#   brew install code-grapher/tap/codegrapher
+#
+# It previously targeted specscore/homebrew-tap, a leftover from when this repo
+# lived at github.com/specscore/codegrapher before moving to the code-grapher
+# org. Every other product in the fleet publishes to its own org's tap, and
+# specscore/homebrew-tap holds only the specscore cask -- shipping codegrapher
+# there would have meant users tapping SpecScore to install an unrelated tool.
+#
+# NOTE: go.mod still declares module github.com/specscore/codegrapher, which
+# resolves only via GitHub's rename redirect. That is tracked separately; it is
+# deliberately NOT changed here so this fix stays a single-concern change.
 homebrew_casks:
   - name: codegrapher
     ids: [archive]
@@ -81,8 +92,11 @@ homebrew_casks:
     homepage: https://github.com/code-grapher/codegrapher
     license: Apache-2.0
     repository:
-      owner: specscore
+      owner: code-grapher
       name: homebrew-tap
-      # Cross-repo PAT with Contents:write on specscore/homebrew-tap, forwarded
-      # by the shared strongo/cicd release.yml as $GORELEASER_GITHUB_TOKEN.
+      # A PAT is required even for a tap in the same org: a workflow's built-in
+      # GITHUB_TOKEN is scoped to its OWN repository and cannot write to a
+      # sibling repo. Needs Contents:write on code-grapher/homebrew-tap, and is
+      # forwarded by the shared strongo/cicd release.yml as
+      # $GORELEASER_GITHUB_TOKEN.
       token: "{{ .Env.GORELEASER_GITHUB_TOKEN }}"
