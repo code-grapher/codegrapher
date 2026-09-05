@@ -39,8 +39,8 @@ github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qq
 github.com/rogpeppe/go-internal v1.16.0 h1:O9DK+vNMDVGLr2BeZqmpLeMjiMNkuXfcqntWbZV6S5g=
 github.com/rogpeppe/go-internal v1.16.0/go.mod h1:DrUVZyrJU+txYW5/1kwtXQSMFio52ZOxX7yM1VHvnxs=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
-github.com/specscore/specscore-cli v0.39.2-0.20260905065259-af5fdd40fe23 h1:xaKCeIIMkE58C0QNiR2sriHKIhU3JNkil2ZCXj0fgUQ=
-github.com/specscore/specscore-cli v0.39.2-0.20260905065259-af5fdd40fe23/go.mod h1:C+aNi9cGcu1EU57vFJbOxVrUPRsKjbBZEbH/IeHlOnc=
+github.com/specscore/specscore-cli v0.40.0 h1:wKig5ZOQJkRC87UhPtOd8SEcxlJw5ufxNptu1f+l1BQ=
+github.com/specscore/specscore-cli v0.40.0/go.mod h1:C+aNi9cGcu1EU57vFJbOxVrUPRsKjbBZEbH/IeHlOnc=
 github.com/spf13/cobra v1.10.2 h1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=
 github.com/spf13/cobra v1.10.2/go.mod h1:7C1pvHqHw5A4vrJfjNwvOdzYu0Gml16OCs2GRiTUUS4=
 github.com/spf13/pflag v1.0.9/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=

@@ -7,7 +7,7 @@ require (
 	github.com/ingr-io/ingr-go v0.0.2
 	github.com/klauspost/compress v1.19.1
 	github.com/odvcencio/gotreesitter v0.20.2
-	github.com/specscore/specscore-cli v0.39.2-0.20260905065259-af5fdd40fe23
+	github.com/specscore/specscore-cli v0.40.0
 	github.com/spf13/cobra v1.10.2
 	github.com/strongo/buildinfo v0.2.0
 	golang.org/x/mod v0.38.0
