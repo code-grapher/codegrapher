@@ -12,6 +12,7 @@ import (
 	"github.com/specscore/codegrapher/resolve"
 	"github.com/specscore/codegrapher/scope"
 	"github.com/specscore/codegrapher/store"
+	"github.com/specscore/codegrapher/trace"
 )
 
 // lockUnavailableMessage mirrors the error message the original returns when
@@ -148,6 +149,11 @@ func (idx *Indexer) indexAllLocked(opts Options) IndexResult {
 			_ = s.SetMetadata("indexed_with_version", PackageVersion)
 			_ = s.SetMetadata("indexed_with_extraction_version", strconv.Itoa(ExtractionVersion))
 		}
+		if err := idx.indexTrace(); err != nil {
+			result.Errors = append(result.Errors, model.ExtractionError{
+				Message: err.Error(), Severity: "warning", Code: "trace_index_error",
+			})
+		}
 
 		if after, err := idx.aggregateStats(); err == nil {
 			result.NodesCreated = after.NodeCount - before.NodeCount
@@ -157,6 +163,21 @@ func (idx *Indexer) indexAllLocked(opts Options) IndexResult {
 
 	result.DurationMs = now() - start
 	return result
+}
+
+const traceScopeVersion = "1"
+
+func (idx *Indexer) indexTrace() error {
+	projection, err := idx.reg.Store(scope.Scope{Language: model.Language("trace"), Version: traceScopeVersion})
+	if err != nil {
+		return fmt.Errorf("trace: open projection: %w", err)
+	}
+	if err := trace.Index(idx.root, idx.Stores(), projection); err != nil {
+		return err
+	}
+	_ = projection.SetMetadata("indexed_with_version", PackageVersion)
+	_ = projection.SetMetadata("indexed_with_extraction_version", strconv.Itoa(ExtractionVersion))
+	return nil
 }
 
 // resolveAll runs the full resolution pass with progress reporting.

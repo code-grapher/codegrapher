@@ -9,6 +9,8 @@ import (
 
 	"github.com/ingr-io/ingr-go/ingr"
 	"github.com/specscore/codegrapher/indexer"
+	"github.com/specscore/codegrapher/model"
+	"github.com/specscore/codegrapher/scope"
 	"github.com/specscore/codegrapher/snapshot"
 	"github.com/specscore/codegrapher/store"
 )
@@ -54,13 +56,54 @@ func indexFixture(t *testing.T, fixturePath string) (tmpDir string, dbPath strin
 	if err != nil {
 		t.Fatalf("indexer.Init: %v", err)
 	}
-	// Init writes per-scope databases; single-language fixtures produce exactly
-	// one. Return it for the legacy single-DB Export round-trip tests.
-	matches, err := filepath.Glob(filepath.Join(indexer.GetCodeGraphDir(tmpDir), "codegraph-*.db"))
-	if err != nil || len(matches) != 1 {
-		t.Fatalf("expected exactly one scope db, got %v (err %v)", matches, err)
+	// Init writes one Go scope plus the cross-scope trace projection. Select the
+	// Go scope explicitly for the legacy single-DB Export round-trip tests.
+	return tmpDir, goScopeDBPath(t, tmpDir)
+}
+
+func goScopeDBPath(t *testing.T, projectRoot string) string {
+	t.Helper()
+
+	goFile := filepath.Join(projectRoot, "internal", "store", "store.go")
+	goScope := scope.Scope{Language: model.LangGo, Version: scope.DetectVersion(projectRoot, goFile, model.LangGo)}
+	goDB := indexer.ScopedDatabasePath(projectRoot, goScope)
+	traceDB := indexer.ScopedDatabasePath(projectRoot, scope.Scope{Language: model.Language("trace"), Version: "1"})
+	if goDB == traceDB {
+		t.Fatalf("Go scope resolved to trace projection database: %s", goDB)
 	}
-	return tmpDir, matches[0]
+	if _, err := os.Stat(goDB); err != nil {
+		t.Fatalf("Go scope database %s: %v", goDB, err)
+	}
+	if _, err := os.Stat(traceDB); err != nil {
+		t.Fatalf("trace projection database %s: %v", traceDB, err)
+	}
+
+	goStore, err := store.Open(goDB)
+	if err != nil {
+		t.Fatalf("open Go scope database: %v", err)
+	}
+	goStats, err := goStore.GetStats()
+	_ = goStore.Close()
+	if err != nil {
+		t.Fatalf("read Go scope stats: %v", err)
+	}
+	if goStats.NodeCount == 0 || goStats.FileCount == 0 {
+		t.Fatalf("Go scope database is empty: %+v", goStats)
+	}
+
+	traceStore, err := store.Open(traceDB)
+	if err != nil {
+		t.Fatalf("open trace projection database: %v", err)
+	}
+	traceStats, err := traceStore.GetStats()
+	_ = traceStore.Close()
+	if err != nil {
+		t.Fatalf("read trace projection stats: %v", err)
+	}
+	if traceStats.NodeCount != 0 || traceStats.FileCount != 0 {
+		t.Fatalf("trace projection unexpectedly looks like a Go scope: %+v", traceStats)
+	}
+	return goDB
 }
 
 // TestDeterminism verifies that two exports of the same index are byte-identical.

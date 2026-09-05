@@ -220,11 +220,18 @@ func nodeScopeForFamilyKey(key string) (string, bool) {
 // convenience for single-scope projects and tests; multi-scope consumers must
 // use Stores.
 func (idx *Indexer) Store() *store.Store {
-	all := idx.Stores()
-	if len(all) == 0 {
-		return nil
+	scopes := idx.reg.Scopes()
+	sort.Slice(scopes, func(i, j int) bool { return scopes[i].Key() < scopes[j].Key() })
+	stores := idx.reg.Stores()
+	for _, sc := range scopes {
+		// The trace projection is a cross-scope side store and must not become
+		// the primary code store used by legacy single-store callers.
+		if sc.Language == model.Language("trace") {
+			continue
+		}
+		return stores[sc]
 	}
-	return all[0]
+	return nil
 }
 
 // ClearAll clears every scope store.
