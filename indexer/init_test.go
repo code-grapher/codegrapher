@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -134,6 +135,94 @@ func TestInitTwiceFails(t *testing.T) {
 		!strings.Contains(err.Error(), "already initialized") {
 		t.Fatalf("second Init err = %v, want already-initialized error", err)
 	}
+}
+
+func TestInitExcludesDataDirectoryInGitRepo(t *testing.T) {
+	repo := newGitRepo(t)
+	writeFile(t, filepath.Join(repo, "a.go"), "package a\n")
+	mustGit(t, repo, "config", "commit.gpgsign", "false")
+	mustGit(t, repo, "add", ".")
+	mustGit(t, repo, "commit", "-q", "-m", "init")
+
+	assertInitExcludesDataDirectory(t, repo)
+}
+
+func TestInitExcludesDataDirectoryInLinkedWorktree(t *testing.T) {
+	_, worktree := newWorktreePair(t)
+	assertInitExcludesDataDirectory(t, worktree)
+}
+
+func assertInitExcludesDataDirectory(t *testing.T, projectRoot string) {
+	t.Helper()
+	excludePath := gitExcludePath(t, projectRoot)
+	const userEntry = "user-local-entry"
+	if err := os.WriteFile(excludePath, []byte(userEntry), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	idx, _, err := Init(projectRoot, Options{})
+	if err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := idx.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	status := gitPath(t, projectRoot, "status", "--porcelain", "--untracked-files=all")
+	if status != "" {
+		t.Fatalf("git status = %q, want empty", status)
+	}
+	contents, err := os.ReadFile(excludePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(contents), userEntry) {
+		t.Fatalf("exclude file lost user entry: %q", contents)
+	}
+	if got := strings.Count(string(contents), ".codegraph/"); got != 1 {
+		t.Fatalf(".codegraph/ entries = %d, want 1: %q", got, contents)
+	}
+
+	if err := Uninit(projectRoot); err != nil {
+		t.Fatalf("Uninit: %v", err)
+	}
+	idx, _, err = Init(projectRoot, Options{})
+	if err != nil {
+		t.Fatalf("second Init: %v", err)
+	}
+	if err := idx.Close(); err != nil {
+		t.Fatal(err)
+	}
+	contents, err = os.ReadFile(excludePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(string(contents), ".codegraph/"); got != 1 {
+		t.Fatalf(".codegraph/ entries after second Init = %d, want 1: %q", got, contents)
+	}
+
+	if err := Uninit(projectRoot); err != nil {
+		t.Fatalf("final Uninit: %v", err)
+	}
+}
+
+func gitExcludePath(t *testing.T, dir string) string {
+	t.Helper()
+	path := gitPath(t, dir, "rev-parse", "--git-path", "info/exclude")
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(dir, path)
+}
+
+func gitPath(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git %s: %v", strings.Join(args, " "), err)
+	}
+	return strings.TrimSpace(string(output))
 }
 
 func TestUninit(t *testing.T) {

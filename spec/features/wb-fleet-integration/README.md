@@ -39,6 +39,12 @@ selected symbol or file. The `affected` command includes co-located Go test
 files and reports confidence evidence so WB can decide whether to run a narrow
 test set or a broader gate.
 
+Initialization keeps its local `.codegraph/` data directory out of Git status
+by adding `.codegraph/` to the Git exclude file resolved by
+`git rev-parse --git-path info/exclude`. It preserves existing user entries,
+does not edit tracked `.gitignore`, and applies the same way in linked
+worktrees.
+
 ## Acceptance Criteria
 
 - Given a queried worktree, when its base SHA differs from the graph's recorded
@@ -55,6 +61,10 @@ test set or a broader gate.
   payload.
 - Given an explorer result, when it is shared as a deep link, then it resolves
   the exact repository revision and graph context.
+- Given a Git worktree with user-maintained exclude entries, when CodeGrapher
+  initializes, then `.codegraph/` is ignored without modifying tracked
+  `.gitignore`, user entries remain intact, and repeated initialization does
+  not duplicate the exclude entry.
 
 ## Open Questions
 

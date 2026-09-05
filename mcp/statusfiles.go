@@ -97,7 +97,7 @@ func (h *toolHandlers) handleFiles(args map[string]any) toolResult {
 		return errorResult(fmt.Sprintf("Tool execution failed: %s", err))
 	}
 	if len(allFiles) == 0 {
-		return textResultOf("No files indexed. Run `codegraph index` first.")
+		return textResultOf("No files indexed. Run `codegrapher index` first.")
 	}
 
 	normalizedFilter := ""

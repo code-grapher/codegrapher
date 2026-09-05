@@ -12,7 +12,7 @@ status: Stable
 
 ## Summary
 
-Gate codegraph sync on the scanner version stored in the index: same version performs an additive sync, a changed or missing version escalates to a full reindex.
+Gate codegrapher sync on the scanner version stored in the index: same version performs an additive sync, a changed or missing version escalates to a full reindex.
 
 ## Problem
 
@@ -20,7 +20,7 @@ The CLI already embeds two version identifiers — the scanner release
 (`indexer.PackageVersion`) and the extraction format (`indexer.ExtractionVersion`)
 — and stamps both into index metadata on every index (`indexed_with_version`,
 `indexed_with_extraction_version`). It already supports both an additive update
-(`codegraph sync` → `Indexer.Sync`) and a full rebuild (`codegraph index --force`
+(`codegrapher sync` → `Indexer.Sync`) and a full rebuild (`codegrapher index --force`
 → `Store().Clear()` + full index).
 
 What is missing is the decision that ties them together. `Sync` performs
@@ -57,22 +57,25 @@ extraction version differs from the current constant, otherwise `false`. The
 parity-faked `BuiltWithVersion` / `BuiltWithExtractionVersion` /
 `CurrentExtractionVersion` fields are left exactly as they are, so the checked-in
 `testdata/golden/*/status.json` parity goldens stay unchanged.
+`index.builtWithVersion` deliberately reports the CodeGraph upstream engine
+version `0.9.9`, rather than the CodeGrapher CLI release, so it must not be
+interpreted as package provenance or used to decide whether to reindex.
 
 ## Acceptance Criteria
 
 - **AC-1 (additive on match):** Given an index built by the current scanner,
-  When `codegraph sync` runs after some source files change, Then only the
+  When `codegrapher sync` runs after some source files change, Then only the
   changed files are re-extracted and `SyncResult.FullReindex` is `false`.
 - **AC-2 (escalate on scanner-version change):** Given an index whose stored
   `indexed_with_version` differs from the current `PackageVersion`, When
-  `codegraph sync` runs, Then the index is fully cleared and rebuilt,
+  `codegrapher sync` runs, Then the index is fully cleared and rebuilt,
   `SyncResult.FullReindex` is `true`, and the stored version metadata is updated
   to the current values.
 - **AC-3 (escalate on extraction-version change):** Given an index whose stored
   `indexed_with_extraction_version` differs from the current `ExtractionVersion`,
-  When `codegraph sync` runs, Then a full reindex is performed (as in AC-2).
+  When `codegrapher sync` runs, Then a full reindex is performed (as in AC-2).
 - **AC-4 (escalate on missing metadata):** Given an index with no stored version
-  metadata (built before this feature), When `codegraph sync` runs, Then a full
+  metadata (built before this feature), When `codegrapher sync` runs, Then a full
   reindex is performed.
 - **AC-5 (status flag):** Given a stored version that matches the current scanner,
   When status is queried, Then `ReindexRecommended` is `false`; Given any

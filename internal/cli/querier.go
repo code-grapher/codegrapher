@@ -21,21 +21,21 @@ type SymbolRef struct {
 	StartLine int            `json:"startLine"`
 }
 
-// CallersResult is the JSON payload for `codegraph callers <symbol>`.
+// CallersResult is the JSON payload for `codegrapher callers <symbol>`.
 type CallersResult struct {
 	Symbol  string      `json:"symbol"`
 	Callers []SymbolRef `json:"callers"`
 	Note    string      `json:"note,omitempty"`
 }
 
-// CalleesResult is the JSON payload for `codegraph callees <symbol>`.
+// CalleesResult is the JSON payload for `codegrapher callees <symbol>`.
 type CalleesResult struct {
 	Symbol  string      `json:"symbol"`
 	Callees []SymbolRef `json:"callees"`
 	Note    string      `json:"note,omitempty"`
 }
 
-// ImpactResult is the JSON payload for `codegraph impact <symbol>`.
+// ImpactResult is the JSON payload for `codegrapher impact <symbol>`.
 type ImpactResult struct {
 	Symbol    string      `json:"symbol"`
 	Depth     int         `json:"depth"`
@@ -68,7 +68,7 @@ type IndexInfo struct {
 	ReindexRecommended         bool   `json:"reindexRecommended"`
 }
 
-// StatusResult is the JSON payload for `codegraph status`.
+// StatusResult is the JSON payload for `codegrapher status`.
 type StatusResult struct {
 	Initialized      bool                   `json:"initialized"`
 	Version          string                 `json:"version"`

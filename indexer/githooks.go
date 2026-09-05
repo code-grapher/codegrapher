@@ -7,8 +7,8 @@ package indexer
 // alternative, git hooks refresh the index after the operations that change
 // files on disk: commit, merge (covers `git pull`), and checkout.
 //
-// The hooks run `codegraph sync` in the background so they never block git,
-// and are guarded by `command -v codegraph` so they no-op cleanly when the
+// The hooks run `codegrapher sync` in the background so they never block git,
+// and are guarded by `command -v codegrapher` so they no-op cleanly when the
 // CLI isn't on PATH. The snippet is delimited by marker comments so install
 // is idempotent and removal preserves any user-authored hook content.
 
@@ -19,8 +19,11 @@ import (
 )
 
 const (
-	hookMarkerBegin = "# >>> codegraph sync hook >>>"
-	hookMarkerEnd   = "# <<< codegraph sync hook <<<"
+	hookMarkerBegin = "# >>> codegrapher sync hook >>>"
+	hookMarkerEnd   = "# <<< codegrapher sync hook <<<"
+
+	legacyHookMarkerBegin = "# >>> codegraph sync hook >>>"
+	legacyHookMarkerEnd   = "# <<< codegraph sync hook <<<"
 )
 
 // GitHookName is a git hook the sync snippet can be installed into.
@@ -78,9 +81,9 @@ func hookMarkerBlock() string {
 		hookMarkerBegin,
 		"# Keeps the CodeGraph index fresh while the live file watcher is off",
 		"# (e.g. WSL2 /mnt drives). Runs in the background so it never blocks git.",
-		"# Managed by codegraph; remove with `codegraph uninit` or delete this block.",
-		"if command -v codegraph >/dev/null 2>&1; then",
-		"  ( codegraph sync >/dev/null 2>&1 & ) >/dev/null 2>&1",
+		"# Managed by CodeGrapher; remove with `codegrapher uninit` or delete this block.",
+		"if command -v codegrapher >/dev/null 2>&1; then",
+		"  ( codegrapher sync >/dev/null 2>&1 & ) >/dev/null 2>&1",
 		"fi",
 		hookMarkerEnd,
 	}, "\n")
@@ -93,11 +96,11 @@ func stripHookMarkerBlock(content string) string {
 	inBlock := false
 	for line := range strings.SplitSeq(content, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == hookMarkerBegin {
+		if trimmed == hookMarkerBegin || trimmed == legacyHookMarkerBegin {
 			inBlock = true
 			continue
 		}
-		if trimmed == hookMarkerEnd {
+		if trimmed == hookMarkerEnd || trimmed == legacyHookMarkerEnd {
 			inBlock = false
 			continue
 		}
@@ -186,7 +189,7 @@ func RemoveGitSyncHook(projectRoot string, hooks []GitHookName) GitHookResult {
 			continue
 		}
 		original := string(data)
-		if !strings.Contains(original, hookMarkerBegin) {
+		if !hasHookMarker(original) {
 			continue
 		}
 		stripped := stripHookMarkerBlock(original)
@@ -217,9 +220,13 @@ func IsSyncHookInstalled(projectRoot string, hooks []GitHookName) bool {
 	}
 	for _, hook := range hooks {
 		data, err := os.ReadFile(filepath.Join(hooksDir, string(hook)))
-		if err == nil && strings.Contains(string(data), hookMarkerBegin) {
+		if err == nil && hasHookMarker(string(data)) {
 			return true
 		}
 	}
 	return false
+}
+
+func hasHookMarker(content string) bool {
+	return strings.Contains(content, hookMarkerBegin) || strings.Contains(content, legacyHookMarkerBegin)
 }

@@ -10,6 +10,7 @@ package indexer
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -125,11 +126,55 @@ func CreateDirectory(projectRoot string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
+	if err := ensureDataDirectoryGitExclude(projectRoot); err != nil {
+		return err
+	}
 	giPath := filepath.Join(dir, ".gitignore")
 	if _, err := os.Stat(giPath); os.IsNotExist(err) {
 		if err := os.WriteFile(giPath, []byte(dataDirGitignore), 0o644); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// ensureDataDirectoryGitExclude keeps the local index out of Git status without
+// modifying a repository's tracked .gitignore. Git resolves this path correctly
+// for both ordinary checkouts and linked worktrees.
+func ensureDataDirectoryGitExclude(projectRoot string) error {
+	output, err := exec.Command("git", "-C", projectRoot, "rev-parse", "--git-path", "info/exclude").Output()
+	if err != nil {
+		// Indexing non-Git directories remains supported.
+		return nil
+	}
+
+	excludePath := strings.TrimSpace(string(output))
+	if excludePath == "" {
+		return nil
+	}
+	if !filepath.IsAbs(excludePath) {
+		excludePath = filepath.Join(projectRoot, excludePath)
+	}
+	entry := filepath.ToSlash(CodeGraphDirName()) + "/"
+	contents, err := os.ReadFile(excludePath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read Git exclude file: %w", err)
+	}
+	for _, line := range strings.Split(string(contents), "\n") {
+		if strings.TrimSpace(line) == entry {
+			return nil
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
+		return fmt.Errorf("create Git exclude directory: %w", err)
+	}
+	if len(contents) > 0 && !strings.HasSuffix(string(contents), "\n") {
+		contents = append(contents, '\n')
+	}
+	contents = append(contents, entry...)
+	contents = append(contents, '\n')
+	if err := os.WriteFile(excludePath, contents, 0o644); err != nil {
+		return fmt.Errorf("write Git exclude file: %w", err)
 	}
 	return nil
 }

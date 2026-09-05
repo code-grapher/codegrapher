@@ -160,10 +160,10 @@ func (fl *FileLock) handleExistingLock() error {
 	isStale := lockAge >= StaleTimeout || (pidErr == nil && !fl.alive(pid))
 	if !isStale {
 		if pidErr != nil {
-			return fmt.Errorf("%w (lock file has no readable PID): if this is stale, run 'codegraph unlock' or delete %s",
+			return fmt.Errorf("%w (lock file has no readable PID): if this is stale, run 'codegrapher unlock' or delete %s",
 				ErrLockUnavailable, fl.path)
 		}
-		return fmt.Errorf("%w (PID %d): if this is stale, run 'codegraph unlock' or delete %s",
+		return fmt.Errorf("%w (PID %d): if this is stale, run 'codegrapher unlock' or delete %s",
 			ErrLockUnavailable, pid, fl.path)
 	}
 

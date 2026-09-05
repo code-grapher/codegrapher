@@ -43,8 +43,11 @@ func TestInstallGitSyncHookDefaults(t *testing.T) {
 
 	for _, hook := range DefaultSyncHooks {
 		body := readHook(t, repo, hook)
-		if !strings.Contains(body, "codegraph sync") {
+		if !strings.Contains(body, "command -v codegrapher") || !strings.Contains(body, "( codegrapher sync") {
 			t.Errorf("%s: missing sync invocation", hook)
+		}
+		if strings.Contains(body, "codegraph sync") {
+			t.Errorf("%s: legacy executable invocation remains", hook)
 		}
 		if !strings.Contains(body, hookMarkerBegin) || !strings.Contains(body, hookMarkerEnd) {
 			t.Errorf("%s: missing marker block", hook)
@@ -76,6 +79,32 @@ func TestInstallGitSyncHookIdempotent(t *testing.T) {
 	body := readHook(t, repo, HookPostCommit)
 	if n := strings.Count(body, hookMarkerBegin); n != 1 {
 		t.Errorf("marker block appears %d times, want 1", n)
+	}
+}
+
+func TestInstallGitSyncHookMigratesLegacyMarkerBlock(t *testing.T) {
+	repo := newGitRepo(t)
+	hookFile := filepath.Join(repo, ".git", "hooks", string(HookPostCommit))
+	legacy := strings.Join([]string{
+		"#!/bin/sh",
+		legacyHookMarkerBegin,
+		"if command -v codegraph >/dev/null 2>&1; then",
+		"  ( codegraph sync >/dev/null 2>&1 & ) >/dev/null 2>&1",
+		"fi",
+		legacyHookMarkerEnd,
+		"",
+	}, "\n")
+	if err := os.WriteFile(hookFile, []byte(legacy), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	InstallGitSyncHook(repo, []GitHookName{HookPostCommit})
+	body := readHook(t, repo, HookPostCommit)
+	if strings.Contains(body, legacyHookMarkerBegin) || strings.Contains(body, "codegraph sync") {
+		t.Fatalf("legacy hook block remains:\n%s", body)
+	}
+	if !strings.Contains(body, hookMarkerBegin) || !strings.Contains(body, "codegrapher sync") {
+		t.Fatalf("codegrapher hook block missing:\n%s", body)
 	}
 }
 

@@ -109,13 +109,13 @@ func TestWorktreeMismatchMessages(t *testing.T) {
 	m := WorktreeIndexMismatch{WorktreeRoot: "/work/tree", IndexRoot: "/main/tree"}
 
 	warning := WorktreeMismatchWarning(m)
-	for _, want := range []string{"/work/tree", "/main/tree", "codegraph init -i"} {
+	for _, want := range []string{"/work/tree", "/main/tree", "codegrapher init"} {
 		if !strings.Contains(warning, want) {
 			t.Errorf("warning missing %q:\n%s", want, warning)
 		}
 	}
 	notice := WorktreeMismatchNotice(m)
-	for _, want := range []string{"/work/tree", "/main/tree", "codegraph init -i"} {
+	for _, want := range []string{"/work/tree", "/main/tree", "codegrapher init"} {
 		if !strings.Contains(notice, want) {
 			t.Errorf("notice missing %q:\n%s", want, notice)
 		}

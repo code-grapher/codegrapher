@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newServeCmd implements `codegraph serve`, mirroring the upstream CLI
+// newServeCmd implements `codegrapher serve`, mirroring the upstream CLI
 // surface (src/bin/codegraph.ts): -p/--path, --mcp, --no-watch.
 //
 // Only direct (stdio) mode is implemented. Upstream defaults to a shared
@@ -34,7 +34,7 @@ func newServeCmd() *cobra.Command {
 			// shared daemon — unimplemented, fail with a clear message.
 			if envTruthy(os.Getenv("CODEGRAPH_DAEMON_INTERNAL")) {
 				return fmt.Errorf("daemon mode is not implemented in this build (KNOWN-BUGS gap C-1): " +
-					"unset CODEGRAPH_DAEMON_INTERNAL and run `codegraph serve --mcp` for direct stdio mode")
+					"unset CODEGRAPH_DAEMON_INTERNAL and run `codegrapher serve --mcp` for direct stdio mode")
 			}
 
 			// Mirror upstream: --no-watch routes through the same env-var
@@ -103,8 +103,8 @@ To use with Claude Code, add to your MCP configuration:
 
 {
   "mcpServers": {
-    "codegraph": {
-      "command": "codegraph",
+    "codegrapher": {
+	  "command": "codegrapher",
       "args": ["serve", "--mcp"]
     }
   }

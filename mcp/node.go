@@ -190,7 +190,7 @@ func (h *toolHandlers) handleFileView(fileArg string, offset, limit int, symbols
 	wantLower := strings.ToLower(normalize(fileArg))
 	allFiles, err := h.backend.GetFiles()
 	if err != nil || len(allFiles) == 0 {
-		return textResultOf("No files indexed. Run `codegraph index` first.")
+		return textResultOf("No files indexed. Run `codegrapher index` first.")
 	}
 
 	var resolved *FileInfo
