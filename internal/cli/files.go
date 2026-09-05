@@ -55,7 +55,7 @@ func newFilesCmd() *cobra.Command {
 			}
 
 			if len(files) == 0 {
-				printInfo("No files indexed. Run \"codegraph index\" first.")
+				printInfo("No files indexed. Run \"codegrapher index\" first.")
 				return nil
 			}
 
@@ -90,7 +90,7 @@ func newFilesCmd() *cobra.Command {
 				return nil
 			}
 
-			if jsonOut {
+			if wantsJSON(format, jsonOut) {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
 				return enc.Encode(files)
@@ -142,11 +142,11 @@ func newFilesCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "Output as JSON")
+	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "Output as JSON (shortcut for --format=json)")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
 	cmd.Flags().StringVar(&filterDir, "filter", "", "Filter to files under this directory")
 	cmd.Flags().StringVar(&pattern, "pattern", "", "Filter files matching this glob pattern")
-	cmd.Flags().StringVar(&format, "format", "tree", "Output format (tree, flat, grouped)")
+	cmd.Flags().StringVar(&format, "format", "tree", "Output format (tree, flat, grouped, json)")
 	cmd.Flags().IntVar(&maxDepth, "max-depth", 0, "Maximum directory depth for tree format (0 = unlimited)")
 	cmd.Flags().BoolVar(&noMetadata, "no-metadata", false, "Hide file metadata")
 	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")

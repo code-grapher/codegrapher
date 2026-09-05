@@ -35,7 +35,7 @@ the golden rebaseline necessarily comes last because it captures the new behavio
 
 **Verifies:** whole-repo-file-nodes#ac:gitignored-file-excluded
 **Depends-On:** —
-**Status:** done
+**Status:** complete
 
 Change the candidate-admission predicate so `ScanDirectory` admits every
 non-gitignored file, decoupled from `DetectLanguage`. Update both call sites
@@ -48,7 +48,7 @@ gitignored file still produces no node while a tracked file is admitted.
 
 **Verifies:** whole-repo-file-nodes#ac:unknown-extension-gets-node, whole-repo-file-nodes#ac:binary-file-gets-node, whole-repo-file-nodes#ac:recognized-source-unchanged
 **Depends-On:** 1
-**Status:** done
+**Status:** complete
 
 In the per-file index path, when `DetectLanguage` returns `LangUnknown`, emit
 exactly one file-level node (path, size, mtime, content hash, `Language = unknown`)
@@ -62,7 +62,7 @@ present).
 
 **Verifies:** whole-repo-file-nodes#ac:gates-green-after-rebaseline
 **Depends-On:** 2
-**Status:** done
+**Status:** complete
 
 Regenerate the affected self-goldens via the existing re-baseline scripts (never
 hand-edited) so they capture the new whole-repo file nodes, then confirm gofmt,

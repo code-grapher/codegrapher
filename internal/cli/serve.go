@@ -62,7 +62,7 @@ func newServeCmd() *cobra.Command {
 				projectPath = resolveArg([]string{pathFlag})
 			}
 			if !indexer.IsInitialized(projectPath) {
-				return fmt.Errorf("CodeGraph not initialized in %s. Run 'codegraph init' in that project first", projectPath)
+				return fmt.Errorf("CodeGraph not initialized in %s. Run 'codegrapher init' in that project first", projectPath)
 			}
 
 			idx, err := indexer.Open(projectPath, indexer.Options{})

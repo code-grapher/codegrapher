@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/specscore/codegrapher/indexer"
+	"github.com/spf13/cobra"
 )
 
 // resolveArg returns the first arg as an absolute path, or cwd if no args.
@@ -23,6 +24,17 @@ func splitCSV(csv string) []string {
 		}
 	}
 	return out
+}
+
+// addJSONOutputFlags makes --format=json the stable machine-output contract.
+// --json remains a short compatibility alias for existing scripts.
+func addJSONOutputFlags(cmd *cobra.Command, format *string, jsonOut *bool) {
+	cmd.Flags().StringVar(format, "format", "text", "Output format (text, json)")
+	cmd.Flags().BoolVarP(jsonOut, "json", "j", false, "Output as JSON (shortcut for --format=json)")
+}
+
+func wantsJSON(format string, jsonOut bool) bool {
+	return format == "json" || jsonOut
 }
 
 func resolveArg(args []string) string {

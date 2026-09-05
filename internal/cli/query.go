@@ -12,6 +12,7 @@ import (
 
 func newQueryCmd() *cobra.Command {
 	var jsonOut bool
+	var format string
 	var limit int
 	var kind string
 	var pathFlag string
@@ -55,7 +56,7 @@ func newQueryCmd() *cobra.Command {
 				os.Exit(1)
 			}
 
-			if jsonOut {
+			if wantsJSON(format, jsonOut) {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
 				if results == nil {
@@ -85,7 +86,7 @@ func newQueryCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "Output as JSON")
+	addJSONOutputFlags(cmd, &format, &jsonOut)
 	cmd.Flags().IntVarP(&limit, "limit", "l", 10, "Maximum results")
 	cmd.Flags().StringVarP(&kind, "kind", "k", "", "Filter by node kind")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")

@@ -24,7 +24,7 @@ Strictly linear, bottom-up: register the vocabulary first (Task 1) so every late
 
 **Source:** idea:specscore-artifact-extraction
 **Depends-On:** —
-**Status:** done
+**Status:** complete
 
 Add `Language "specscore"`, the SpecScore-native `NodeKind`s (`feature`, `idea`, `plan`, `requirement`, `acceptance_criterion`, `task`) and `EdgeKind`s (`promotes_to`, `supersedes`, `depends_on`) to `model/model.go`, including their entries in the runtime-iterable `NodeKinds`/edge lists and any kind-validation paths. Foundation for every later task.
 
@@ -32,7 +32,7 @@ Add `Language "specscore"`, the SpecScore-native `NodeKind`s (`feature`, `idea`,
 
 **Source:** idea:specscore-artifact-extraction
 **Depends-On:** 1
-**Status:** done
+**Status:** complete
 
 Add `github.com/specscore/specscore-cli` to `go.mod` and build a thin codegrapher-side adapter that calls its exported `pkg/feature` and `pkg/idea` parsers to turn an artifact's bytes into a structured doc (kind, slug, status, grade, child REQ/AC/Task headings, raw cross-references). No parsing logic is copied; any parse helper codegrapher needs that is not yet exported is exported upstream in `specscore-cli`. The CLI's full (cobra-based) dependency tree is accepted as-is; the only hard gate is that the `CGO_ENABLED=0` build stays green.
 
@@ -40,7 +40,7 @@ Add `github.com/specscore/specscore-cli` to `go.mod` and build a thin codegraphe
 
 **Source:** idea:specscore-artifact-extraction
 **Depends-On:** 1
-**Status:** done
+**Status:** complete
 
 Extend the detection layer so a `.md`/`README.md` under `spec/**` whose frontmatter carries `format: https://specscore.md/<kind>-specification` is classified as `LangSpecScore` and dispatched to the new extractor, without misclassifying ordinary repository markdown (READMEs, docs/). This is new content+path-aware detection beyond the current extension-only `DetectLanguage`.
 
@@ -48,7 +48,7 @@ Extend the detection layer so a `.md`/`README.md` under `spec/**` whose frontmat
 
 **Source:** idea:specscore-artifact-extraction
 **Depends-On:** 2, 3
-**Status:** done
+**Status:** complete
 
 Add `extractSpecScore` in `internal/extract` that, from the adapter's parsed doc, emits the artifact node (slug, kind, status, grade) plus deep child nodes — Requirements/Acceptance Criteria under Features, Tasks under Plans — joined by `contains` edges, and the `file`→artifact `contains` edge, mirroring the `extractGoMod` pattern. Child-node identity uses the artifact-local spec ID (e.g. the AC/REQ slug, `<feature-slug>#ac:<ac-slug>`) so SpecScore's own cross-reference IDs resolve directly in Task 5. Cross-file references are recorded but not yet resolved.
 
@@ -56,7 +56,7 @@ Add `extractSpecScore` in `internal/extract` that, from the adapter's parsed doc
 
 **Source:** idea:specscore-artifact-extraction
 **Depends-On:** 4
-**Status:** done
+**Status:** complete
 
 In the `resolve/` package, link the recorded references between artifact nodes: relative-link and Related Ideas references → `references`, Promotes To → `promotes_to`, Supersedes → `supersedes`, and Plan Depends-On task ordering → `depends_on`. Single-repo resolution only.
 
@@ -64,7 +64,7 @@ In the `resolve/` package, link the recorded references between artifact nodes: 
 
 **Source:** idea:specscore-artifact-extraction
 **Depends-On:** 5
-**Status:** done
+**Status:** complete
 
 Add fixtures (codegrapher's own `spec/` tree plus a small SpecScore sample), chosen so the goldens exercise all three new edge kinds (`promotes_to`, `supersedes`, `depends_on`) and the child-node kinds; generate deterministic self-goldens via the re-baseline script, and wire them into the binary golden-parity test. All gates green: `gofmt`, `go vet ./...`, `CGO_ENABLED=0 go build ./...`, `CGO_ENABLED=0 go test -count=1 ./...`.
 
