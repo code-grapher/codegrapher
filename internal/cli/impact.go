@@ -11,6 +11,7 @@ import (
 
 func newImpactCmd() *cobra.Command {
 	var jsonOut bool
+	var format string
 	var depth int
 	var pathFlag string
 	var scope string
@@ -48,7 +49,7 @@ func newImpactCmd() *cobra.Command {
 				os.Exit(1)
 			}
 
-			if jsonOut {
+			if wantsJSON(format, jsonOut) {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
 				return enc.Encode(result)
@@ -83,7 +84,7 @@ func newImpactCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "Output as JSON")
+	addJSONOutputFlags(cmd, &format, &jsonOut)
 	cmd.Flags().IntVarP(&depth, "depth", "d", 2, "Traversal depth")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
 	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")

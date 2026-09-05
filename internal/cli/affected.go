@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 
@@ -16,6 +17,7 @@ import (
 
 func newAffectedCmd() *cobra.Command {
 	var jsonOut bool
+	var format string
 	var quiet bool
 	var pathFlag string
 	var stdin bool
@@ -75,7 +77,7 @@ func newAffectedCmd() *cobra.Command {
 			}
 			sort.Strings(sortedTests)
 
-			if jsonOut {
+			if wantsJSON(format, jsonOut) {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
 				return enc.Encode(map[string]any{
@@ -103,7 +105,7 @@ func newAffectedCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "Output as JSON")
+	addJSONOutputFlags(cmd, &format, &jsonOut)
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Only output file paths")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
 	cmd.Flags().BoolVar(&stdin, "stdin", false, "Read file list from stdin (one per line)")
@@ -154,11 +156,22 @@ func findAffectedTests(s *store.Store, changedFiles []string, maxDepth int, filt
 
 	affectedTests := map[string]bool{}
 	allDependents := map[string]bool{}
+	allFiles, allFilesErr := s.GetAllFiles()
 
 	for _, file := range changedFiles {
 		if isTest(file) {
 			affectedTests[file] = true
 			continue
+		}
+		// Go tests commonly use the same package as the production file, so
+		// they have no import edge to traverse. Every co-located Go test is a
+		// direct candidate whenever a non-test Go file in that package changes.
+		if filepath.Ext(file) == ".go" && allFilesErr == nil {
+			for _, candidate := range allFiles {
+				if filepath.Dir(candidate.Path) == filepath.Dir(file) && isTest(candidate.Path) {
+					affectedTests[candidate.Path] = true
+				}
+			}
 		}
 		// BFS through files that import this file.
 		type item struct {

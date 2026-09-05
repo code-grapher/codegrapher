@@ -21,7 +21,7 @@ func newInitCmd() *cobra.Command {
 
 			if indexer.IsInitialized(projectPath) {
 				printWarn(fmt.Sprintf("Already initialized in %s", projectPath))
-				printInfo("Use \"codegraph index\" to re-index or \"codegraph sync\" to update")
+				printInfo("Use \"codegrapher index\" to re-index or \"codegrapher sync\" to update")
 				return nil
 			}
 

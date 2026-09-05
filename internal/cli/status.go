@@ -12,6 +12,7 @@ import (
 
 func newStatusCmd() *cobra.Command {
 	var jsonOut bool
+	var format string
 	var pathFlag string
 	var scope string
 
@@ -29,7 +30,7 @@ func newStatusCmd() *cobra.Command {
 			startPath := projectPath // for worktree mismatch detection
 
 			if !indexer.IsInitialized(projectPath) {
-				if jsonOut {
+				if wantsJSON(format, jsonOut) {
 					out := map[string]any{
 						"initialized": false,
 						"projectPath": projectPath,
@@ -42,7 +43,7 @@ func newStatusCmd() *cobra.Command {
 				printBold("\nCodeGraph Status\n")
 				printInfo(fmt.Sprintf("Project: %s", projectPath))
 				printWarn("Not initialized")
-				printInfo("Run \"codegraph init\" to initialize")
+				printInfo("Run \"codegrapher init\" to initialize")
 				return nil
 			}
 
@@ -77,7 +78,7 @@ func newStatusCmd() *cobra.Command {
 				}
 			}
 
-			if jsonOut {
+			if wantsJSON(format, jsonOut) {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
 				if err := enc.Encode(status); err != nil {
@@ -137,7 +138,7 @@ func newStatusCmd() *cobra.Command {
 				if status.PendingChanges.Removed > 0 {
 					fmt.Printf("  Removed:   %d files\n", status.PendingChanges.Removed)
 				}
-				printInfo("Run \"codegraph sync\" to update the index")
+				printInfo("Run \"codegrapher sync\" to update the index")
 			} else {
 				printSuccess("Index is up to date")
 			}
@@ -147,7 +148,7 @@ func newStatusCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "Output as JSON")
+	addJSONOutputFlags(cmd, &format, &jsonOut)
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
 	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
 	return cmd

@@ -11,6 +11,7 @@ import (
 
 func newCalleesCmd() *cobra.Command {
 	var jsonOut bool
+	var format string
 	var limit int
 	var pathFlag string
 	var scope string
@@ -52,7 +53,7 @@ func newCalleesCmd() *cobra.Command {
 				result.Callees = result.Callees[:limit]
 			}
 
-			if jsonOut {
+			if wantsJSON(format, jsonOut) {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
 				return enc.Encode(result)
@@ -72,7 +73,7 @@ func newCalleesCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "Output as JSON")
+	addJSONOutputFlags(cmd, &format, &jsonOut)
 	cmd.Flags().IntVarP(&limit, "limit", "l", 20, "Maximum results")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
 	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")

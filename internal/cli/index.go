@@ -20,7 +20,7 @@ func newIndexCmd() *cobra.Command {
 
 			if !indexer.IsInitialized(projectPath) {
 				printError(fmt.Sprintf("CodeGraph not initialized in %s", projectPath))
-				printInfo("Run \"codegraph init\" first")
+				printInfo("Run \"codegrapher init\" first")
 				os.Exit(1)
 			}
 

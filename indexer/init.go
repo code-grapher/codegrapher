@@ -309,6 +309,12 @@ func extractOne(rootDir, relPath string) extractJob {
 	}
 	job.size = fi.Size()
 	job.mtimeMs = statMtimeMs(fi)
+	if fi.IsDir() {
+		// Directory events can reach incremental indexing through external
+		// hooks or editors. They are not files and must never become a noisy
+		// "is a directory" read error.
+		return job
+	}
 
 	// The size cap only guards parsing of recognized languages. A file whose
 	// extension is unrecognized can still be a content-detected language (only
