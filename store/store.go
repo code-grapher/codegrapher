@@ -31,7 +31,7 @@ var schemaSQL string
 const DatabaseFilename = "codegraph.db"
 
 // CurrentSchemaVersion mirrors CURRENT_SCHEMA_VERSION in the original.
-const CurrentSchemaVersion = 7
+const CurrentSchemaVersion = 8
 
 // NowFunc returns the current time in Unix milliseconds. Injectable for tests.
 type NowFunc func() int64
@@ -270,6 +270,34 @@ var migrations = []migration{
 		CREATE INDEX IF NOT EXISTS idx_node_coverage_hash ON node_coverage(content_hash);`},
 	{7, "Add nodes.metadata — structured language-specific attributes (SQLite .db schema details)",
 		`ALTER TABLE nodes ADD COLUMN metadata TEXT;`},
+	{8, "Add cross-scope SpecScore trace projection", `
+		CREATE TABLE IF NOT EXISTS trace_nodes (
+			id TEXT PRIMARY KEY,
+			kind TEXT NOT NULL,
+			reference TEXT NOT NULL,
+			title TEXT,
+			path TEXT NOT NULL,
+			start_line INTEGER NOT NULL,
+			start_column INTEGER NOT NULL,
+			end_line INTEGER NOT NULL,
+			end_column INTEGER NOT NULL,
+			status TEXT
+		);
+		CREATE TABLE IF NOT EXISTS trace_edges (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			source_id TEXT NOT NULL,
+			target_id TEXT NOT NULL,
+			relation TEXT NOT NULL,
+			accepted INTEGER NOT NULL DEFAULT 0,
+			source_path TEXT NOT NULL,
+			source_line INTEGER NOT NULL,
+			source_column INTEGER NOT NULL,
+			target_reference TEXT NOT NULL,
+			FOREIGN KEY (source_id) REFERENCES trace_nodes(id) ON DELETE CASCADE
+		);
+		CREATE INDEX IF NOT EXISTS idx_trace_nodes_reference ON trace_nodes(reference);
+		CREATE INDEX IF NOT EXISTS idx_trace_edges_target ON trace_edges(target_id, relation, accepted);
+		CREATE INDEX IF NOT EXISTS idx_trace_edges_source ON trace_edges(source_id, relation);`},
 }
 
 func (s *Store) runMigrations(from int) error {

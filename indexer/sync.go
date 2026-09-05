@@ -117,6 +117,9 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 	}
 
 	idx.syncChangedFiles(filesToIndex, opts, &result)
+	// Keep the cross-scope trace projection aligned with the exact working tree
+	// revision even when only directives or spec files changed.
+	_ = idx.indexTrace()
 
 	if result.FilesAdded > 0 || result.FilesModified > 0 || result.FilesRemoved > 0 {
 		idx.runMaintenanceAll()
@@ -184,6 +187,7 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 	}
 
 	idx.syncChangedFiles(filesToIndex, opts, &result)
+	_ = idx.indexTrace()
 
 	if result.FilesAdded > 0 || result.FilesModified > 0 || result.FilesRemoved > 0 {
 		idx.runMaintenanceAll()

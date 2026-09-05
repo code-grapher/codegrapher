@@ -38,6 +38,7 @@ chains, analyse blast radius, and keep the index in sync.`,
 		newExportCmd(),
 		newImportCmd(),
 		newCoverageCmd(),
+		newTraceCmd(),
 	)
 	cobracmd.WireCobra(root, info)
 
