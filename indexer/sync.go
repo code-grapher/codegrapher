@@ -177,7 +177,8 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 			continue
 		}
 
-		if _, statErr := os.Stat(fullPath); statErr != nil {
+		fi, statErr := os.Stat(fullPath)
+		if statErr != nil {
 			// Gone from disk — drop it from the index if tracked.
 			if !os.IsNotExist(statErr) {
 				result.Errors = append(result.Errors, model.ExtractionError{Message: statErr.Error(), FilePath: filePath, Severity: "error", Code: "stat_error"})
@@ -193,12 +194,20 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 			}
 			continue
 		}
-		content, err := os.ReadFile(fullPath)
+		var hash string
+		if fi.Size() > MaxFileSize && IsSourceFile(filePath) {
+			hash, err = hashFile(fullPath)
+		} else {
+			content, readErr := os.ReadFile(fullPath)
+			err = readErr
+			if err == nil {
+				hash = HashContent(content)
+			}
+		}
 		if err != nil {
 			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), FilePath: filePath, Severity: "error", Code: "read_error"})
 			continue
 		}
-		hash := HashContent(content)
 
 		if rec == nil {
 			filesToIndex = append(filesToIndex, filePath)
@@ -438,6 +447,9 @@ func (idx *Indexer) changedFilesForRead() (ChangedFiles, error) {
 func (idx *Indexer) RefreshForRead(opts Options) (SyncResult, error) {
 	if idx.indexVersionStale() {
 		observedHead, gitRepo := gitHead(idx.root)
+		if err := idx.invalidateGitHead(); err != nil {
+			return SyncResult{}, err
+		}
 		result := idx.Sync(opts)
 		if result.FilesChecked == 0 && result.DurationMs == 0 {
 			return result, fmt.Errorf("index is locked; cannot safely rebuild symbol data")
@@ -470,6 +482,9 @@ func (idx *Indexer) RefreshForRead(opts Options) (SyncResult, error) {
 			}
 		}
 		return SyncResult{}, nil
+	}
+	if err := idx.invalidateGitHead(); err != nil {
+		return SyncResult{}, err
 	}
 	result := idx.SyncFiles(paths, opts)
 	if result.FilesChecked == 0 && result.DurationMs == 0 {
@@ -528,11 +543,21 @@ func (idx *Indexer) getChangedFilesByScan(forceHash bool) (ChangedFiles, error) 
 		if !forceHash && !gitDirty && fi.Size() == rec.Size && statMtimeMs(fi) == rec.ModifiedAt {
 			continue
 		}
-		content, err := os.ReadFile(filepath.Join(idx.root, filepath.FromSlash(filePath)))
+		full := filepath.Join(idx.root, filepath.FromSlash(filePath))
+		var hash string
+		if fi.Size() > MaxFileSize && IsSourceFile(filePath) {
+			hash, err = hashFile(full)
+		} else {
+			content, readErr := os.ReadFile(full)
+			err = readErr
+			if err == nil {
+				hash = HashContent(content)
+			}
+		}
 		if err != nil {
 			return ChangedFiles{}, err
 		}
-		if rec.ContentHash != HashContent(content) {
+		if rec.ContentHash != hash {
 			out.Modified = append(out.Modified, filePath)
 		}
 	}
@@ -602,13 +627,23 @@ func (idx *Indexer) gitChangedFilesSinceIndex() (ChangedFiles, bool) {
 	for path := range candidatePaths {
 		rec, indexed := records[path]
 		fullPath := filepath.Join(idx.root, filepath.FromSlash(path))
-		if _, err := os.Stat(fullPath); err != nil {
+		fi, err := os.Stat(fullPath)
+		if err != nil {
 			if indexed {
 				changes.removed[path] = struct{}{}
 			}
 			continue
 		}
-		content, err := os.ReadFile(fullPath)
+		var hash string
+		if fi.Size() > MaxFileSize && IsSourceFile(path) {
+			hash, err = hashFile(fullPath)
+		} else {
+			content, readErr := os.ReadFile(fullPath)
+			err = readErr
+			if err == nil {
+				hash = HashContent(content)
+			}
+		}
 		if err != nil {
 			// Preserve the candidate rather than claiming a fresh index when a
 			// file could not be inspected. SyncFiles will surface its read error.
@@ -621,7 +656,7 @@ func (idx *Indexer) gitChangedFilesSinceIndex() (ChangedFiles, bool) {
 		}
 		if !indexed {
 			changes.added[path] = struct{}{}
-		} else if rec.ContentHash != HashContent(content) {
+		} else if rec.ContentHash != hash {
 			changes.modified[path] = struct{}{}
 		}
 	}
@@ -682,6 +717,8 @@ func (idx *Indexer) markGitHead(head string) error {
 	}
 	return nil
 }
+
+func (idx *Indexer) invalidateGitHead() error { return idx.markGitHead("") }
 
 func (idx *Indexer) markGitHeadIfCurrent(observed string) error {
 	current, ok := gitHead(idx.root)
