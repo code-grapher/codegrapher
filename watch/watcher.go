@@ -201,8 +201,10 @@ type FileWatcher struct {
 	syncWG            sync.WaitGroup
 	observationWG     sync.WaitGroup
 	eventWG           sync.WaitGroup
+	timerWG           sync.WaitGroup
 	fatalCh           chan error
 	stopDone          chan struct{}
+	timerSeq          uint64
 
 	// fsnotify watcher (nil until Start is called).
 	fsw *fsnotify.Watcher
@@ -543,21 +545,32 @@ func (fw *FileWatcher) recordPendingLocked(rel string) {
 
 func (fw *FileWatcher) scheduleSyncLocked() {
 	if fw.timer != nil {
-		fw.timer.Reset(fw.debounce)
-		return
+		if fw.timer.Stop() {
+			fw.timerWG.Done()
+		}
 	}
-	fw.timer = time.AfterFunc(fw.debounce, fw.flush)
+	fw.timerSeq++
+	sequence := fw.timerSeq
+	fw.timerWG.Add(1)
+	fw.timer = time.AfterFunc(fw.debounce, func() {
+		defer fw.timerWG.Done()
+		fw.flush(sequence)
+	})
 }
 
 // flush runs after the debounce window closes.
-func (fw *FileWatcher) flush() {
+func (fw *FileWatcher) flush(sequence uint64) {
 	fw.mu.Lock()
+	if sequence != fw.timerSeq {
+		fw.mu.Unlock()
+		return
+	}
+	fw.timer = nil
 	if fw.syncing || fw.stopped {
 		fw.mu.Unlock()
 		return
 	}
 	fw.syncing = true
-	fw.timer = nil
 	fw.syncStarted = fw.opts.Now()
 	fw.operationSeq++
 	operationID := fw.operationSeq
@@ -701,9 +714,12 @@ func (fw *FileWatcher) Stop() {
 	}
 	fw.stopped = true
 	if fw.timer != nil {
-		fw.timer.Stop()
+		if fw.timer.Stop() {
+			fw.timerWG.Done()
+		}
 		fw.timer = nil
 	}
+	fw.timerSeq++
 	fsw := fw.fsw
 	fw.fsw = nil
 	stopDone := make(chan struct{})
@@ -717,6 +733,7 @@ func (fw *FileWatcher) Stop() {
 }
 
 func (fw *FileWatcher) finishStop(stopDone chan struct{}) {
+	fw.timerWG.Wait()
 	fw.syncWG.Wait()
 	fw.eventWG.Wait()
 	fw.observationWG.Wait()

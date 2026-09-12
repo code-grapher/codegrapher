@@ -383,6 +383,34 @@ func TestNativeEventObservationCanStopWatcherWithoutDeadlock(t *testing.T) {
 	w.StopAndWait()
 }
 
+func TestStopAndWaitJoinsExpiredDebounceBeforeRestart(t *testing.T) {
+	dir := t.TempDir()
+	var calls atomic.Int32
+	w := newInertWatcher(t, dir, func() (watch.SyncResult, error) {
+		calls.Add(1)
+		return watch.SyncResult{}, nil
+	}, watch.Options{DebounceMs: 1})
+
+	for i := range 25 {
+		if err := w.StartWithError(); err != nil {
+			t.Fatal(err)
+		}
+		w.IngestEventForTests(fmt.Sprintf("iteration-%d.go", i))
+		time.Sleep(time.Millisecond)
+		w.StopAndWait()
+		joinedCalls := calls.Load()
+
+		if err := w.StartWithError(); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(3 * time.Millisecond)
+		if got := calls.Load(); got != joinedCalls {
+			t.Fatalf("stale debounce ran after restart: calls=%d, want %d", got, joinedCalls)
+		}
+		w.StopAndWait()
+	}
+}
+
 func TestSyncCallbackCanStopWatcherWithoutDeadlock(t *testing.T) {
 	dir := t.TempDir()
 	stopped := make(chan struct{})

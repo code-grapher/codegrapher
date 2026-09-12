@@ -24,6 +24,9 @@ standalone foreground command and no diagnostic event/operation lifecycle.
 
 ### Current-state audit
 
+This subsection records the audited baseline before Phase 1 implementation;
+the Behavior and Phased delivery sections define the resulting/current contract.
+
 - Graph data is local to a filesystem checkout under `.codegraph/`, partitioned
   into scoped SQLite stores. The current identity model is the worktree path;
   commit-addressed snapshots and cross-worktree structural sharing do not yet

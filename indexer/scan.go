@@ -430,8 +430,10 @@ func collectGitFiles(repoDir, prefix string, files map[string]bool) bool {
 		// The cached list still contains paths deleted or renamed only in the
 		// working tree. Index the filesystem that queries will serve, not the
 		// stale index entry; otherwise a rebuild tries to read a missing file.
+		// Other stat failures remain candidates so extraction reports them
+		// instead of silently certifying an incomplete graph.
 		info, statErr := os.Lstat(filepath.Join(repoDir, filepath.FromSlash(rel)))
-		if statErr != nil || info.IsDir() {
+		if os.IsNotExist(statErr) || (statErr == nil && info.IsDir()) {
 			continue
 		}
 		files[prefix+filepath.ToSlash(rel)] = true
