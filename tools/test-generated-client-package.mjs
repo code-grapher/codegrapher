@@ -54,7 +54,8 @@ try {
     cwd: root,
     encoding: "utf8",
   }).trim();
-  const gitDependency = `git+${pathToFileURL(root).href}#${revision}&path:/clients/typescript`;
+  const gitDependency = process.env.CODEGRAPHER_CLIENT_GIT_URL
+    ?? `git+${pathToFileURL(root).href}#${revision}&path:/clients/typescript`;
   writeFileSync(
     join(consumer, "package.json"),
     '{"name":"generated-client-consumer","private":true,"type":"module"}\n',
@@ -63,7 +64,7 @@ try {
     join(consumer, "pnpm-workspace.yaml"),
     `allowBuilds:\n  '${packageJson.name}@${gitDependency}': true\n`,
   );
-  execFileSync("pnpm", ["add", "--prefer-offline", gitDependency], {
+  execFileSync("pnpm", ["add", "--prefer-offline", "--ignore-scripts", gitDependency], {
     cwd: consumer,
     stdio: "inherit",
   });
