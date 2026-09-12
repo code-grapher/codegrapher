@@ -24,7 +24,6 @@ type PathResult struct {
 	MaxHops          int           `json:"maxHops"`
 	MaxNodes         int           `json:"maxNodes"`
 	MaxEdges         int           `json:"maxEdges"`
-	IndexGeneration  string        `json:"indexGeneration,omitempty"`
 	VisitedNodes     int           `json:"visitedNodes"`
 	VisitedEdges     int           `json:"visitedEdges"`
 	Truncated        bool          `json:"truncated,omitempty"`
@@ -83,16 +82,12 @@ func newPathCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			generation, err := captureIndexGeneration(idx)
-			if err != nil {
-				return err
-			}
-			result, err := findCallPathWithLimits(idx, splitCSV(scope), args[0], args[1], maxHops, pathLimits{maxNodes: maxNodes, maxEdges: maxEdges}, sourceMode != "", fresh)
-			if err != nil {
-				return err
-			}
-			result.IndexGeneration = generation
-			if err := requireUnchangedIndexGeneration(idx, generation); err != nil {
+			var result PathResult
+			if err := idx.WithConsistentRead(func() error {
+				var readErr error
+				result, readErr = findCallPathWithLimits(idx, splitCSV(scope), args[0], args[1], maxHops, pathLimits{maxNodes: maxNodes, maxEdges: maxEdges}, sourceMode != "", fresh)
+				return readErr
+			}); err != nil {
 				return err
 			}
 			if wantsJSON(format, jsonOut) {

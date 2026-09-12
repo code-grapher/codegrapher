@@ -86,9 +86,9 @@ Input bytes and mapped-frame count are bounded. A runtime function name that
 contradicts the symbol containing its `file:line` is reported as `mismatch`,
 and a shifted line with a matching name in the same file is reported as
 `stale`; neither silently returns source.
-Each path and stack result includes an index generation fence. If an incremental
-index update completes while CodeGrapher is resolving relationships or reading
-source, the command fails rather than combining an old graph with new code.
+After refreshing, each command takes the index's short cross-process read lock
+while it resolves relationships and verifies source. If indexing is active it
+returns a busy/retry error rather than combining an old graph with new code.
 
 ## Snapshot / viewer
 

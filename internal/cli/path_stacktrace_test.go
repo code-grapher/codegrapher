@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/specscore/codegrapher/indexer"
 	"github.com/specscore/codegrapher/model"
@@ -180,6 +181,11 @@ func TestMapStacktraceNeverSilentlyAcceptsWrongNameOrOutOfRangeLocation(t *testi
 	if err != nil || len(result.Frames) != 1 || result.Frames[0].Status != "mismatch" {
 		t.Fatalf("wrong-receiver mapping = %+v, %v", result, err)
 	}
+	wrongColonReceiver := "at OtherType::Warm (" + path + ":24:1)"
+	result, err = mapStacktrace(idx, nil, wrongColonReceiver, false, NodeFreshness{})
+	if err != nil || len(result.Frames) != 1 || result.Frames[0].Status != "mismatch" {
+		t.Fatalf("wrong :: receiver mapping = %+v, %v", result, err)
+	}
 	stale := "example.com/go-small/internal/store.(*Cache).Warm(...)\n\t" + path + ":2 +0x1"
 	result, err = mapStacktrace(idx, nil, stale, true, NodeFreshness{})
 	if err != nil || len(result.Frames) != 1 || result.Frames[0].Status != "stale" || result.Frames[0].Source != "" {
@@ -218,26 +224,45 @@ func TestStacktraceFooterSkipsEmptyMismatchSourceAndTextShowsWeakerState(t *test
 	}
 }
 
-func TestIndexGenerationRejectsCompletedReindexDuringRead(t *testing.T) {
+func TestConsistentReadRejectsActiveWriterAfterFirstFileMutation(t *testing.T) {
 	root, idx := initFixture(t)
 	defer func() { _ = idx.Close() }()
-	before, err := captureIndexGeneration(idx)
+	writer, err := indexer.Open(root, indexer.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	file := filepath.Join(root, "internal/store/cache.go")
-	data, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatal(err)
+	defer func() { _ = writer.Close() }()
+	for _, relative := range []string{"internal/store/cache.go", "internal/store/store.go"} {
+		file := filepath.Join(root, relative)
+		data, readErr := os.ReadFile(file)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if writeErr := os.WriteFile(file, append(data, []byte("\n// writer mutation\n")...), 0o644); writeErr != nil {
+			t.Fatal(writeErr)
+		}
 	}
-	if err := os.WriteFile(file, append(data, []byte("\n// generation mutation\n")...), 0o644); err != nil {
-		t.Fatal(err)
+	paused, release, done := make(chan struct{}), make(chan struct{}), make(chan indexer.SyncResult, 1)
+	go func() {
+		result := writer.SyncFiles([]string{"internal/store/cache.go", "internal/store/store.go"}, indexer.Options{Workers: 1, OnProgress: func(p indexer.IndexProgress) {
+			if p.Phase == indexer.PhaseParsing && p.Current == 1 && p.CurrentFile == "internal/store/store.go" {
+				close(paused)
+				<-release
+			}
+		}})
+		done <- result
+	}()
+	select {
+	case <-paused:
+	case <-time.After(5 * time.Second):
+		t.Fatal("writer did not pause after first file mutation")
 	}
-	if sync := idx.SyncFiles([]string{"internal/store/cache.go"}, indexer.Options{}); len(sync.Errors) > 0 {
-		t.Fatalf("SyncFiles = %+v", sync)
+	if err := idx.WithConsistentRead(func() error { t.Fatal("reader entered while writer held index lock"); return nil }); err == nil || !strings.Contains(err.Error(), "index is busy") {
+		t.Fatalf("active writer read = %v", err)
 	}
-	if err := requireUnchangedIndexGeneration(idx, before); err == nil || !strings.Contains(err.Error(), "index changed during retrieval") {
-		t.Fatalf("generation fence = %v", err)
+	close(release)
+	if result := <-done; len(result.Errors) > 0 {
+		t.Fatalf("writer SyncFiles = %+v", result)
 	}
 }
 

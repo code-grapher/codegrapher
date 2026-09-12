@@ -111,9 +111,9 @@ source bodies. Runtime stack adjacency is not claimed to be a static graph
 edge. Use `--revision <deployed-git-sha>` when the trace must match a known
 checkout. A `mismatch` or `stale` frame is evidence to investigate, not a
 source-read instruction; CodeGrapher withholds source in those cases.
-Both commands reject an index generation change that completes during lookup,
-so retry rather than trusting a graph/source combination from different index
-snapshots.
+Both commands take a short consistent read lock after freshness checking. If
+an index writer is active, retry rather than trusting a graph/source
+combination from a partial update.
 
 Use relationship verbs when you need a wider or transitive answer:
 

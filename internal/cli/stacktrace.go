@@ -22,14 +22,13 @@ import (
 // It intentionally does not infer edges between frames: a stack is runtime
 // evidence and may cross reflection, generated code, or framework callbacks.
 type StackTraceResult struct {
-	Status          string            `json:"status"`
-	Hint            string            `json:"hint,omitempty"`
-	Freshness       NodeFreshness     `json:"freshness"`
-	Revision        string            `json:"revision,omitempty"`
-	IndexGeneration string            `json:"indexGeneration,omitempty"`
-	MaxFrames       int               `json:"maxFrames"`
-	Truncated       bool              `json:"truncated,omitempty"`
-	Frames          []StackTraceFrame `json:"frames"`
+	Status    string            `json:"status"`
+	Hint      string            `json:"hint,omitempty"`
+	Freshness NodeFreshness     `json:"freshness"`
+	Revision  string            `json:"revision,omitempty"`
+	MaxFrames int               `json:"maxFrames"`
+	Truncated bool              `json:"truncated,omitempty"`
+	Frames    []StackTraceFrame `json:"frames"`
 }
 
 type StackTraceFrame struct {
@@ -107,16 +106,12 @@ func newStacktraceCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			generation, err := captureIndexGeneration(idx)
-			if err != nil {
-				return err
-			}
-			result, err := mapStacktraceWithLimit(idx, splitCSV(scope), input, maxFrames, sourceMode != "", fresh)
-			if err != nil {
-				return err
-			}
-			result.IndexGeneration = generation
-			if err := requireUnchangedIndexGeneration(idx, generation); err != nil {
+			var result StackTraceResult
+			if err := idx.WithConsistentRead(func() error {
+				var readErr error
+				result, readErr = mapStacktraceWithLimit(idx, splitCSV(scope), input, maxFrames, sourceMode != "", fresh)
+				return readErr
+			}); err != nil {
 				return err
 			}
 			if expectedRevision != "" && result.Revision != expectedRevision {
@@ -489,6 +484,14 @@ func runtimeFunctionEvidence(raw string, node model.Node) runtimeEvidence {
 
 func stackTypeQualifier(raw string) (string, bool) {
 	raw = strings.TrimSuffix(strings.TrimSpace(raw), "(...)")
+	if separator := strings.LastIndex(raw, "::"); separator > 0 {
+		prefix := raw[:separator]
+		qualifier := prefix[strings.LastIndex(prefix, "::")+2:]
+		qualifier = strings.Trim(qualifier, "() *")
+		if qualifier != "" {
+			return qualifier, true
+		}
+	}
 	dot := strings.LastIndex(raw, ".")
 	if dot < 1 {
 		return "", false

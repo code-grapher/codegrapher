@@ -203,13 +203,6 @@ func (idx *Indexer) indexAllLocked(opts Options) IndexResult {
 			result.EdgesCreated = after.EdgeCount - before.EdgeCount
 		}
 	}
-	if result.Success {
-		if err := idx.bumpIndexGeneration(); err != nil {
-			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "generation_error"})
-			result.Success = false
-		}
-	}
-
 	result.DurationMs = now() - start
 	return result
 }

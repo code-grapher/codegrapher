@@ -155,11 +155,6 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 	if result.FilesAdded > 0 || result.FilesModified > 0 || result.FilesRemoved > 0 {
 		idx.runMaintenanceAll()
 	}
-	if !hasSevereError(result.Errors) {
-		if err := idx.bumpIndexGeneration(); err != nil {
-			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "generation_error"})
-		}
-	}
 	result.DurationMs = now() - start
 	return result
 }
@@ -267,12 +262,6 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 	if result.FilesAdded > 0 || result.FilesModified > 0 || result.FilesRemoved > 0 {
 		idx.runMaintenanceAll()
 	}
-	if !hasSevereError(result.Errors) {
-		if err := idx.bumpIndexGeneration(); err != nil {
-			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "generation_error"})
-		}
-	}
-
 	result.DurationMs = now() - start
 	return result
 }
