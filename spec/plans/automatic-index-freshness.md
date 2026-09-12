@@ -72,7 +72,9 @@ retry, and non-verbose/no-observer behavior with deterministic unit tests.
 Pass sorted exact dirty paths to `Indexer.SyncFiles`, retain them across real
 errors and lock contention, fail startup rather than accept partial native
 watch coverage, align watcher admission with scanner ignore rules, discover
-pre-populated/newly-unignored trees, and wait for active writes during stop.
+pre-populated/newly-unignored trees, keep callback-triggered `Stop`
+non-blocking, and use `StopAndWait` at the owning CLI boundary to join active
+writes and observations before the index is closed.
 
 ### Task 3: Add the foreground CLI command
 

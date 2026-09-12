@@ -235,6 +235,11 @@ func (o *watchOutput) stopped(projectPath string) {
 }
 
 func (o *watchOutput) writeMaterialUpdate(result watch.SyncResult, duration time.Duration) {
+	if result.FullReindex {
+		_, _ = fmt.Fprintf(o.stdout, "Rebuilt index from %d files (%d nodes) in %s\n",
+			result.FilesChecked, result.NodesUpdated, observationDuration(duration))
+		return
+	}
 	word := "files"
 	if result.FilesChanged == 1 {
 		word = "file"

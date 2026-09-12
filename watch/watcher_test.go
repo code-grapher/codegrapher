@@ -2,6 +2,7 @@ package watch_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -283,7 +284,7 @@ func TestNewWithPathsReceivesSortedDirtyBatch(t *testing.T) {
 }
 
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:graceful-cancellation
-func TestStopWaitsForActiveSync(t *testing.T) {
+func TestStopAndWaitWaitsForActiveSync(t *testing.T) {
 	dir := t.TempDir()
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -304,20 +305,82 @@ func TestStopWaitsForActiveSync(t *testing.T) {
 
 	stopped := make(chan struct{})
 	go func() {
-		w.Stop()
+		w.StopAndWait()
 		close(stopped)
 	}()
 	select {
 	case <-stopped:
-		t.Fatal("Stop returned while sync was active")
+		t.Fatal("StopAndWait returned while sync was active")
 	case <-time.After(50 * time.Millisecond):
 	}
 	close(release)
 	select {
 	case <-stopped:
 	case <-time.After(2 * time.Second):
-		t.Fatal("Stop did not return after sync completed")
+		t.Fatal("StopAndWait did not return after sync completed")
 	}
+}
+
+func TestOperationStartObservationCanStopWatcherWithoutDeadlock(t *testing.T) {
+	dir := t.TempDir()
+	stopped := make(chan struct{})
+	var calls atomic.Int32
+	var w *watch.FileWatcher
+	w = newInertWatcher(t, dir, func() (watch.SyncResult, error) {
+		calls.Add(1)
+		return watch.SyncResult{}, nil
+	}, watch.Options{
+		DebounceMs: 20,
+		OnObservation: func(observation watch.Observation) {
+			if observation.Kind == watch.ObservationOperationStarted {
+				w.Stop()
+				close(stopped)
+			}
+		},
+	})
+	if err := w.StartWithError(); err != nil {
+		t.Fatal(err)
+	}
+	w.IngestEventForTests("stop.go")
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("operation-start observation could not stop watcher")
+	}
+	w.StopAndWait()
+	if calls.Load() != 0 {
+		t.Fatalf("sync calls = %d, want 0 after operation-start stop", calls.Load())
+	}
+}
+
+func TestNativeEventObservationCanStopWatcherWithoutDeadlock(t *testing.T) {
+	dir := t.TempDir()
+	stopped := make(chan struct{})
+	var once sync.Once
+	var w *watch.FileWatcher
+	w = watch.New(dir, func() (watch.SyncResult, error) {
+		return watch.SyncResult{}, nil
+	}, watch.Options{
+		DebounceMs: 20,
+		OnObservation: func(observation watch.Observation) {
+			if observation.Kind == watch.ObservationEventReceived {
+				w.Stop()
+				once.Do(func() { close(stopped) })
+			}
+		},
+	})
+	if err := w.StartWithError(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "event.go"), []byte("package event\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("native-event observation could not stop watcher")
+	}
+	w.StopAndWait()
 }
 
 func TestSyncCallbackCanStopWatcherWithoutDeadlock(t *testing.T) {
@@ -342,6 +405,7 @@ func TestSyncCallbackCanStopWatcherWithoutDeadlock(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("callback-triggered Stop deadlocked")
 	}
+	w.StopAndWait()
 }
 
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:watch-coverage-is-complete-or-start-fails
@@ -690,6 +754,13 @@ func TestLockUnavailableReschedules(t *testing.T) {
 		t.Errorf("onSyncError should not be called at all, got %d", errorCallbacks.Load())
 	}
 	w.Stop()
+}
+
+func TestWrappedLockUnavailableIsRecognized(t *testing.T) {
+	err := fmt.Errorf("sync failed: %w", watch.NewLockUnavailableError("busy"))
+	if !watch.IsLockUnavailableError(err) {
+		t.Fatal("wrapped LockUnavailableError was not recognized")
+	}
 }
 
 // TestOnSyncComplete verifies the callback is invoked with the correct result.

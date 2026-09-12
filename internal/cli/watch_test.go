@@ -91,6 +91,25 @@ func TestWatchOutputDefaultSuppressesRawEventsAndNoOpCompletion(t *testing.T) {
 	}
 }
 
+func TestWatchOutputDefaultDescribesFullRebuildTruthfully(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	output := newWatchOutput(&stdout, &stderr, false)
+	output.observe(watch.Observation{
+		Kind: watch.ObservationOperationCompleted, Duration: 7 * time.Millisecond,
+		Result: watch.SyncResult{FilesChecked: 12, NodesUpdated: 31, FullReindex: true},
+	})
+	got := stdout.String()
+	if !strings.Contains(got, "Rebuilt index from 12 files (31 nodes) in 7ms") {
+		t.Fatalf("default full-rebuild output = %q", got)
+	}
+	if strings.Contains(got, "Updated 0 files") {
+		t.Fatalf("default full-rebuild output is misleading: %q", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestReconcilePathsForWatchSurfacesRealIndexerFailure(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644); err != nil {
@@ -238,6 +257,8 @@ func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(obsoleteDir, "old.go"), []byte("package obsolete\n\nfunc Obsolete() {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	runGitForWatchTest(t, dir, "init", "-q")
+	runGitForWatchTest(t, dir, "add", "go.mod", "main.go", "caller.go", "obsolete/old.go")
 	originalInfo, err := os.Stat(mainPath)
 	if err != nil {
 		t.Fatal(err)

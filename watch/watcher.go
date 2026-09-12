@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -111,11 +112,8 @@ func NewLockUnavailableError(msg string) *LockUnavailableError {
 // IsLockUnavailableError reports whether err is (or wraps) a
 // LockUnavailableError.
 func IsLockUnavailableError(err error) bool {
-	if err == nil {
-		return false
-	}
-	_, ok := err.(*LockUnavailableError)
-	return ok
+	var target *LockUnavailableError
+	return errors.As(err, &target)
 }
 
 // PendingFile is a source file the watcher observed since the last successful
@@ -187,7 +185,6 @@ type FileWatcher struct {
 	debounce time.Duration
 
 	mu                sync.Mutex
-	stopMu            sync.Mutex
 	pending           map[string]*pendingEntry
 	timer             *time.Timer
 	syncing           bool
@@ -205,6 +202,7 @@ type FileWatcher struct {
 	observationWG     sync.WaitGroup
 	eventWG           sync.WaitGroup
 	fatalCh           chan error
+	stopDone          chan struct{}
 
 	// fsnotify watcher (nil until Start is called).
 	fsw *fsnotify.Watcher
@@ -277,6 +275,18 @@ func (fw *FileWatcher) Start() bool {
 // StartWithError begins watching and returns the reason native watching could
 // not be established. Start is retained as the compatibility bool API.
 func (fw *FileWatcher) StartWithError() error {
+	// A watcher can be reused after a complete stop. If Stop initiated the
+	// asynchronous join (for example from inside a callback), wait outside the
+	// mutex before starting a new native event reader.
+	for {
+		fw.mu.Lock()
+		stopDone := fw.stopDone
+		fw.mu.Unlock()
+		if stopDone == nil {
+			break
+		}
+		<-stopDone
+	}
 	fw.mu.Lock()
 
 	if fw.ready || fw.inert {
@@ -601,6 +611,17 @@ func (fw *FileWatcher) flush() {
 		Debounce:        fw.debounce,
 		At:              startedAt,
 	})
+	fw.mu.Lock()
+	stopped := fw.stopped
+	if stopped {
+		fw.syncing = false
+	}
+	fw.mu.Unlock()
+	if stopped {
+		fw.syncWG.Done()
+		fw.observationWG.Done()
+		return
+	}
 
 	if fullReconcile {
 		paths = nil
@@ -669,26 +690,36 @@ func (fw *FileWatcher) flush() {
 	fw.observationWG.Done()
 }
 
-// Stop shuts down the watcher and clears state.
+// Stop signals the watcher to stop and returns without joining callbacks or
+// in-flight reconciliation. It is safe to call from observation and sync
+// callbacks. Use StopAndWait before closing callback-owned resources.
 func (fw *FileWatcher) Stop() {
-	fw.stopMu.Lock()
-	defer fw.stopMu.Unlock()
 	fw.mu.Lock()
+	if fw.stopped {
+		fw.mu.Unlock()
+		return
+	}
 	fw.stopped = true
 	if fw.timer != nil {
 		fw.timer.Stop()
 		fw.timer = nil
 	}
-	if fw.fsw != nil {
-		_ = fw.fsw.Close()
-		fw.fsw = nil
-	}
+	fsw := fw.fsw
+	fw.fsw = nil
+	stopDone := make(chan struct{})
+	fw.stopDone = stopDone
 	fw.mu.Unlock()
+	if fsw != nil {
+		_ = fsw.Close()
+	}
+	unregisterForTests(fw.root)
+	go fw.finishStop(stopDone)
+}
 
-	// Do not let callers close the index while an in-flight reconciliation is
-	// still writing to it.
+func (fw *FileWatcher) finishStop(stopDone chan struct{}) {
 	fw.syncWG.Wait()
 	fw.eventWG.Wait()
+	fw.observationWG.Wait()
 
 	fw.mu.Lock()
 	fw.watchedDirs = make(map[string]struct{})
@@ -704,8 +735,9 @@ func (fw *FileWatcher) Stop() {
 	fw.ready = false
 	fw.readyCh = make(chan struct{})
 	fw.fatalCh = make(chan error, 1)
+	close(stopDone)
+	fw.stopDone = nil
 	fw.mu.Unlock()
-	unregisterForTests(fw.root)
 }
 
 // FatalErrors reports native watcher failures that make complete coverage
@@ -718,21 +750,13 @@ func (fw *FileWatcher) FatalErrors() <-chan error {
 
 func (fw *FileWatcher) reportFatal(err error) {
 	fw.mu.Lock()
-	if fw.stopped {
-		fw.mu.Unlock()
-		return
-	}
-	fw.stopped = true
-	if fw.timer != nil {
-		fw.timer.Stop()
-		fw.timer = nil
-	}
 	fatalCh := fw.fatalCh
 	fw.mu.Unlock()
 	select {
 	case fatalCh <- err:
 	default:
 	}
+	fw.Stop()
 }
 
 // StopAndWait shuts down the watcher and waits for final observations and
@@ -740,7 +764,12 @@ func (fw *FileWatcher) reportFatal(err error) {
 // callback; callback code can safely use Stop instead.
 func (fw *FileWatcher) StopAndWait() {
 	fw.Stop()
-	fw.observationWG.Wait()
+	fw.mu.Lock()
+	stopDone := fw.stopDone
+	fw.mu.Unlock()
+	if stopDone != nil {
+		<-stopDone
+	}
 }
 
 // IsActive reports whether the watcher is currently running.

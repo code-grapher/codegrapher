@@ -424,9 +424,17 @@ func collectGitFiles(repoDir, prefix string, files map[string]bool) bool {
 		return false
 	}
 	for rel := range strings.SplitSeq(tracked, "\x00") {
-		if rel != "" {
-			files[prefix+filepath.ToSlash(rel)] = true
+		if rel == "" {
+			continue
 		}
+		// The cached list still contains paths deleted or renamed only in the
+		// working tree. Index the filesystem that queries will serve, not the
+		// stale index entry; otherwise a rebuild tries to read a missing file.
+		info, statErr := os.Lstat(filepath.Join(repoDir, filepath.FromSlash(rel)))
+		if statErr != nil || info.IsDir() {
+			continue
+		}
+		files[prefix+filepath.ToSlash(rel)] = true
 	}
 	untracked, err := gitOutput(repoDir, "ls-files", "-z", "-o", "--exclude-standard")
 	if err != nil {

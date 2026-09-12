@@ -199,8 +199,10 @@ store while keeping this boundary intact.
   whole-worktree reconciliation, then readiness. Events received during
   reconciliation remain queued for a path-aware follow-up, closing the
   scan-to-watch race.
-- Shutdown stops admission and timers, closes native watches, waits for any
-  active reconciliation and its observations, then closes the index.
+- Shutdown stops admission and timers and closes native watches immediately.
+  Library callbacks can safely request non-blocking `Stop`; owners use
+  `StopAndWait` to join active reconciliation, event reading, and observations
+  before closing the index.
 - A future daemon registration is keyed first by canonical worktree root plus
   repository/common-Git-dir identity. Registration is explicit or demand-led;
   path disappearance moves to a grace period, reappearance resumes with full

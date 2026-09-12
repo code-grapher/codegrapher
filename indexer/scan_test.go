@@ -188,6 +188,26 @@ func TestScanDirectoryGitRepo(t *testing.T) {
 	}
 }
 
+func TestScanDirectoryGitRepoSkipsMissingCachedPathAfterUnstagedRename(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	oldPath := filepath.Join(dir, "old.go")
+	writeFile(t, oldPath, "package sample\n")
+	mustGit(t, dir, "init")
+	mustGit(t, dir, "add", "old.go")
+	if err := os.Rename(oldPath, filepath.Join(dir, "new.go")); err != nil {
+		t.Fatal(err)
+	}
+
+	got := ScanDirectory(dir)
+	want := []string{"new.go"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ScanDirectory after unstaged rename = %v, want %v", got, want)
+	}
+}
+
 // TestScanDirectoryGitignoredFileExcluded covers the whole-repo-file-nodes AC
 // "gitignored file produces no node": admission is decoupled from language
 // detection (a tracked unknown-language file is admitted), while a file matched
