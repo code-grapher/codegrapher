@@ -19,8 +19,11 @@ func openDaemonLog(dir string) (*os.File, string, error) {
 		if err := os.Remove(previous); err != nil && !os.IsNotExist(err) {
 			return nil, "", fmt.Errorf("remove prior daemon log: %w", err)
 		}
-		if err := os.Rename(path, previous); err != nil {
-			return nil, "", fmt.Errorf("rotate daemon log: %w", err)
+		if err := copyLogGeneration(path, previous); err != nil {
+			return nil, "", fmt.Errorf("copy daemon log generation: %w", err)
+		}
+		if err := os.Truncate(path, 0); err != nil {
+			return nil, "", fmt.Errorf("truncate rotated daemon log: %w", err)
 		}
 	} else if err != nil && !os.IsNotExist(err) {
 		return nil, "", fmt.Errorf("inspect daemon log: %w", err)
@@ -38,6 +41,24 @@ func openDaemonLog(dir string) (*os.File, string, error) {
 		return nil, "", fmt.Errorf("protect daemon log ownership: %w", err)
 	}
 	return file, path, nil
+}
+
+func copyLogGeneration(sourcePath, destinationPath string) error {
+	source, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	destination, err := os.OpenFile(destinationPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		_ = source.Close()
+		return err
+	}
+	_, copyErr := io.Copy(destination, source)
+	closeErr := errors.Join(source.Close(), destination.Close())
+	if copyErr != nil || closeErr != nil {
+		return errors.Join(copyErr, closeErr)
+	}
+	return protectUserOnly(destinationPath)
 }
 
 type rotatingLogWriter struct {
@@ -88,21 +109,7 @@ func (w *rotatingLogWriter) rotateLocked() error {
 	if err := os.Remove(previous); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	source, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	destination, err := os.OpenFile(previous, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-	if err != nil {
-		_ = source.Close()
-		return err
-	}
-	_, copyErr := io.Copy(destination, source)
-	closeErr := errors.Join(source.Close(), destination.Close())
-	if copyErr != nil || closeErr != nil {
-		return errors.Join(copyErr, closeErr)
-	}
-	if err := protectUserOnly(previous); err != nil {
+	if err := copyLogGeneration(path, previous); err != nil {
 		return err
 	}
 	// Copy then truncate instead of rename so rotation also works on Windows
