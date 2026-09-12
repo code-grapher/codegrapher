@@ -11,6 +11,7 @@ import (
 
 func newSyncCmd() *cobra.Command {
 	var quiet bool
+	var initialize bool
 
 	cmd := &cobra.Command{
 		Use:   "sync [path]",
@@ -20,10 +21,36 @@ func newSyncCmd() *cobra.Command {
 			projectPath := resolveArg(args)
 
 			if !indexer.IsInitialized(projectPath) {
-				if !quiet {
-					printError(fmt.Sprintf("CodeGraph not initialized in %s", projectPath))
+				if !initialize {
+					if !quiet {
+						printError(fmt.Sprintf("CodeGraph not initialized in %s", projectPath))
+					}
+					os.Exit(1)
 				}
-				os.Exit(1)
+				opts := indexer.Options{}
+				if isTTY() && !quiet {
+					sp := newSpinner()
+					sp.start("Indexing…")
+					opts.OnProgress = func(p indexer.IndexProgress) {
+						sp.update(progressLabel(p))
+					}
+					defer sp.stop()
+				}
+				idx, result, err := indexer.Init(projectPath, opts)
+				if err != nil {
+					if !quiet {
+						printError(fmt.Sprintf("Failed to initialize index: %s", err))
+					}
+					os.Exit(1)
+				}
+				defer func() { _ = idx.Close() }()
+				if !quiet {
+					printIndexResult(result, projectPath)
+				}
+				if !result.Success {
+					os.Exit(1)
+				}
+				return nil
 			}
 
 			idx, err := indexer.Open(projectPath, indexer.Options{})
@@ -76,6 +103,7 @@ func newSyncCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress output (for git hooks)")
+	cmd.Flags().BoolVar(&initialize, "init", false, "Initialize and build the index when the repository is not initialized")
 	return cmd
 }
 
