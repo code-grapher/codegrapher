@@ -45,9 +45,7 @@ type WorktreeIndexMismatch struct {
 //
 // Returns nil — meaning "nothing to warn about" — when startPath isn't in a
 // git repo (or git is unavailable), the index already lives in startPath's
-// own working tree, or indexRoot isn't itself a working-tree root (an
-// unrelated parent dir that merely happens to contain a .codegraph/), which
-// keeps non-git and monorepo-subdir layouts from producing false warnings.
+// own working tree, or indexRoot is not inside a known Git working tree.
 func DetectWorktreeIndexMismatch(startPath, indexRoot string) *WorktreeIndexMismatch {
 	worktreeRoot := GitWorktreeRoot(startPath)
 	if worktreeRoot == "" {
@@ -55,12 +53,8 @@ func DetectWorktreeIndexMismatch(startPath, indexRoot string) *WorktreeIndexMism
 	}
 
 	resolvedIndexRoot := realpathOrAbs(indexRoot)
-	if worktreeRoot == resolvedIndexRoot {
-		return nil
-	}
-
-	// Only flag it when the index root is itself a real working-tree root.
-	if GitWorktreeRoot(resolvedIndexRoot) != resolvedIndexRoot {
+	indexWorktreeRoot := GitWorktreeRoot(resolvedIndexRoot)
+	if indexWorktreeRoot == "" || indexWorktreeRoot == worktreeRoot {
 		return nil
 	}
 

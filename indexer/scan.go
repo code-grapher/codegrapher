@@ -238,10 +238,13 @@ func buildDefaultIgnore(rootDir string) *ignoreMatcher {
 // PathFilter applies the same built-in and layered .gitignore admission rules
 // as the filesystem scanner. It is safe for concurrent watcher callbacks.
 type PathFilter struct {
-	root   string
-	mu     sync.Mutex
-	base   *ignoreMatcher
-	nested map[string]*ignoreMatcher
+	root        string
+	mu          sync.Mutex
+	base        *ignoreMatcher
+	nested      map[string]*ignoreMatcher
+	git         bool
+	visible     map[string]struct{}
+	visibleDirs map[string]struct{}
 }
 
 // NewPathFilter creates a watcher-friendly path filter for rootDir.
@@ -250,10 +253,31 @@ func NewPathFilter(rootDir string) *PathFilter {
 	if err != nil {
 		abs = rootDir
 	}
-	return &PathFilter{
-		root:   abs,
-		base:   buildDefaultIgnore(abs),
-		nested: make(map[string]*ignoreMatcher),
+	f := &PathFilter{root: abs}
+	f.refreshLocked()
+	return f
+}
+
+// Refresh reloads Git and ignore admission state after an ignore file or
+// repository revision changes.
+func (f *PathFilter) Refresh() {
+	f.mu.Lock()
+	f.refreshLocked()
+	f.mu.Unlock()
+}
+
+func (f *PathFilter) refreshLocked() {
+	f.base = buildDefaultIgnore(f.root)
+	f.nested = make(map[string]*ignoreMatcher)
+	f.visible = make(map[string]struct{})
+	f.visibleDirs = make(map[string]struct{})
+	files := gitVisibleFiles(f.root)
+	f.git = files != nil
+	for _, file := range files {
+		f.visible[file] = struct{}{}
+		for dir := filepath.ToSlash(filepath.Dir(file)); dir != "." && dir != ""; dir = filepath.ToSlash(filepath.Dir(dir)) {
+			f.visibleDirs[dir] = struct{}{}
+		}
 	}
 }
 
@@ -270,13 +294,24 @@ func (f *PathFilter) IsIgnored(relPath string) bool {
 		return false
 	}
 	if filepath.Base(relPath) == ".gitignore" {
-		dir := filepath.ToSlash(filepath.Dir(relPath))
-		if dir == "." {
-			f.base = buildDefaultIgnore(f.root)
-		} else {
-			delete(f.nested, dir)
-		}
+		f.refreshLocked()
 		return false
+	}
+	if f.git {
+		if isDir {
+			if _, ok := f.visibleDirs[relPath]; ok {
+				return false
+			}
+		} else if _, ok := f.visible[relPath]; ok {
+			return false
+		}
+		if f.base.Ignored(relPath, isDir) {
+			return true
+		}
+		// Unknown paths were created after the snapshot. Ask Git so nested
+		// patterns, info/exclude, global excludes, and tracked-file semantics
+		// exactly match --exclude-standard.
+		return exec.Command("git", "-C", f.root, "check-ignore", "-q", "--", filepath.FromSlash(relPath)).Run() == nil
 	}
 	if f.base.Ignored(relPath, isDir) {
 		return true
@@ -302,6 +337,23 @@ func (f *PathFilter) IsIgnored(relPath string) bool {
 		}
 	}
 	return false
+}
+
+// isIgnoredSyncPath performs exact admission for a small dirty-path batch
+// without building the watcher's whole-repository visibility snapshot.
+func isIgnoredSyncPath(root, relPath string) bool {
+	isDir := strings.HasSuffix(relPath, "/")
+	relPath = filepath.ToSlash(filepath.Clean(strings.TrimSuffix(relPath, "/")))
+	if relPath == "." || relPath == "" || strings.HasPrefix(relPath, "../") {
+		return false
+	}
+	if buildDefaultIgnore(root).Ignored(relPath, isDir) {
+		return true
+	}
+	if IsGitRepo(root) {
+		return exec.Command("git", "-C", root, "check-ignore", "-q", "--", filepath.FromSlash(relPath)).Run() == nil
+	}
+	return NewPathFilter(root).IsIgnored(relPath)
 }
 
 // --- scanning ----------------------------------------------------------------

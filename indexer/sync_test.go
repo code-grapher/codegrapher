@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	graphlock "github.com/specscore/codegrapher/lock"
 	"github.com/specscore/codegrapher/model"
 	"github.com/specscore/codegrapher/scope"
 	"github.com/specscore/codegrapher/trace"
@@ -245,6 +246,15 @@ func TestSyncLockConflictReturnsExplicitSignal(t *testing.T) {
 	res, refreshErr := idx.RefreshForRead(Options{})
 	if refreshErr == nil || !strings.Contains(refreshErr.Error(), "locked") || !res.LockUnavailable {
 		t.Fatalf("RefreshForRead = %+v, %v; want explicit lock error", res, refreshErr)
+	}
+}
+
+func TestSyncUnexpectedLockIOErrorIsNotClassifiedAsContention(t *testing.T) {
+	dir, idx := newSyncProject(t)
+	idx.lock = graphlock.New(filepath.Join(dir, "missing-parent", "codegraph.lock"))
+	res := idx.Sync(Options{})
+	if res.LockUnavailable || len(res.Errors) != 1 || res.Errors[0].Code != "lock_error" {
+		t.Fatalf("SyncResult = %+v, want visible lock I/O error", res)
 	}
 }
 
@@ -529,6 +539,32 @@ func TestSyncFilesMissingDirectoryHintRemovesTrackedDescendants(t *testing.T) {
 			if nodes, getErr := store.GetNodesByName(name); getErr != nil || len(nodes) != 0 {
 				t.Fatalf("%s remains after directory removal: nodes=%+v err=%v", name, nodes, getErr)
 			}
+		}
+	}
+}
+
+func TestSyncFilesDoesNotAdmitGitExcludedNewPath(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	mustGit(t, dir, "init")
+	writeFile(t, filepath.Join(dir, "main.go"), "package main\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, filepath.Join(dir, ".git", "info", "exclude"), "private/\n")
+	writeFile(t, filepath.Join(dir, "private", "hidden.go"), "package private\nfunc Hidden() {}\n")
+
+	res := idx.SyncFiles([]string{"private/hidden.go"}, Options{})
+	if res.FilesAdded != 0 || len(res.Errors) != 0 {
+		t.Fatalf("excluded sync = %+v", res)
+	}
+	for _, graphStore := range idx.Stores() {
+		if nodes, getErr := graphStore.GetNodesByName("Hidden"); getErr != nil || len(nodes) != 0 {
+			t.Fatalf("excluded symbol indexed: nodes=%+v err=%v", nodes, getErr)
 		}
 	}
 }

@@ -139,6 +139,9 @@ func TestObservationsDescribeCoalescedOperation(t *testing.T) {
 		}, nil
 	}, watch.Options{
 		DebounceMs: 50,
+		IsIgnored: func(path string) bool {
+			return path == "ignored.go"
+		},
 		OnObservation: func(observation watch.Observation) {
 			mu.Lock()
 			observations = append(observations, observation)
@@ -153,6 +156,7 @@ func TestObservationsDescribeCoalescedOperation(t *testing.T) {
 	w.IngestEventForTests("src/one.go")
 	w.IngestEventForTests("src/one.go")
 	w.IngestEventForTests("src/two.go")
+	w.IngestEventForTests("ignored.go")
 
 	waitFor(t, func() bool {
 		mu.Lock()
@@ -181,8 +185,8 @@ func TestObservationsDescribeCoalescedOperation(t *testing.T) {
 			completed = &got[i]
 		}
 	}
-	if received != 3 {
-		t.Fatalf("received observations = %d, want 3: %+v", received, got)
+	if received != 4 {
+		t.Fatalf("received observations = %d, want 4: %+v", received, got)
 	}
 	if started == nil || completed == nil {
 		t.Fatalf("missing operation lifecycle: %+v", got)
@@ -193,8 +197,14 @@ func TestObservationsDescribeCoalescedOperation(t *testing.T) {
 	if started.EventsReceived != 3 || started.DirtyPaths != 2 || started.CoalescedEvents != 1 {
 		t.Errorf("started stats = %+v", *started)
 	}
+	if started.IgnoredEvents != 1 || started.Debounce != 50*time.Millisecond || started.QueuedFor < 50*time.Millisecond {
+		t.Errorf("started timing/filter stats = %+v", *started)
+	}
 	if completed.Duration < 0 {
 		t.Errorf("completion duration = %v", completed.Duration)
+	}
+	if completed.TotalDuration < completed.Duration || completed.NoOp {
+		t.Errorf("completion total/no-op = %+v", *completed)
 	}
 	if completed.Result.FilesChecked != 7 || completed.Result.FilesAdded != 1 ||
 		completed.Result.FilesModified != 1 || completed.Result.NodesUpdated != 5 {
@@ -310,6 +320,30 @@ func TestStopWaitsForActiveSync(t *testing.T) {
 	}
 }
 
+func TestSyncCallbackCanStopWatcherWithoutDeadlock(t *testing.T) {
+	dir := t.TempDir()
+	stopped := make(chan struct{})
+	var w *watch.FileWatcher
+	w = newInertWatcher(t, dir, func() (watch.SyncResult, error) {
+		return watch.SyncResult{FilesChanged: 1}, nil
+	}, watch.Options{
+		DebounceMs: 20,
+		OnSyncComplete: func(watch.SyncResult) {
+			w.Stop()
+			close(stopped)
+		},
+	})
+	if err := w.StartWithError(); err != nil {
+		t.Fatal(err)
+	}
+	w.IngestEventForTests("stop.go")
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("callback-triggered Stop deadlocked")
+	}
+}
+
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:watch-coverage-is-complete-or-start-fails
 func TestStartFailsWhenDirectoryWatchCapWouldLeavePartialCoverage(t *testing.T) {
 	dir := t.TempDir()
@@ -366,6 +400,44 @@ func TestPopulatedDirectoryMoveSchedulesDirtyPathBatch(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("populated directory move did not schedule reconciliation")
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:watch-coverage-is-complete-or-start-fails
+func TestRuntimeDirectoryWatchCapFailsClosed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping real-watcher test in short mode")
+	}
+	watchedRoot := t.TempDir()
+	stagingRoot := t.TempDir()
+	incoming := filepath.Join(stagingRoot, "incoming")
+	if err := os.MkdirAll(filepath.Join(incoming, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(incoming, "nested", "deep.go"), []byte("package deep\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w := watch.New(watchedRoot, func() (watch.SyncResult, error) {
+		return watch.SyncResult{}, nil
+	}, watch.Options{DebounceMs: 50, MaxDirWatches: 2})
+	if err := w.StartWithError(); err != nil {
+		t.Skipf("watcher could not start: %v", err)
+	}
+	t.Cleanup(w.Stop)
+	fatalErrors := w.FatalErrors()
+	if err := os.Rename(incoming, filepath.Join(watchedRoot, "incoming")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-fatalErrors:
+		if err == nil || !strings.Contains(err.Error(), "directory-watch cap reached") {
+			t.Fatalf("fatal error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("runtime directory cap did not fail closed")
+	}
+	if w.IsActive() {
+		t.Fatal("watcher remained active after incomplete runtime coverage")
 	}
 }
 

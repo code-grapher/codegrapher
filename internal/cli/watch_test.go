@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -41,11 +43,13 @@ func TestWatchOutputVerboseIncludesEventLifecycleAndStats(t *testing.T) {
 	output.observe(watch.Observation{Kind: watch.ObservationEventReceived, At: at, Path: "src/app.go", Operation: "WRITE"})
 	output.observe(watch.Observation{
 		Kind: watch.ObservationOperationStarted, At: at, OperationID: 4,
-		EventsReceived: 3, DirtyPaths: 2, CoalescedEvents: 1,
+		EventsReceived: 3, DirtyPaths: 2, CoalescedEvents: 1, IgnoredEvents: 2,
+		QueuedFor: 25 * time.Millisecond, Debounce: 20 * time.Millisecond,
 	})
 	output.observe(watch.Observation{
-		Kind: watch.ObservationOperationCompleted, At: at, OperationID: 4,
-		EventsReceived: 3, DirtyPaths: 2, CoalescedEvents: 1, Duration: 14 * time.Millisecond,
+		Kind: watch.ObservationOperationCompleted, At: at, Operation: "reconcile", OperationID: 4,
+		EventsReceived: 3, DirtyPaths: 2, CoalescedEvents: 1, IgnoredEvents: 2,
+		Duration: 14 * time.Millisecond, TotalDuration: 39 * time.Millisecond,
 		Result: watch.SyncResult{FilesChecked: 8, FilesAdded: 1, FilesModified: 1, FilesRemoved: 0, NodesUpdated: 6},
 	})
 
@@ -53,8 +57,10 @@ func TestWatchOutputVerboseIncludesEventLifecycleAndStats(t *testing.T) {
 	for _, want := range []string{
 		"2026-09-12T09:30:00Z event received op=WRITE path=src/app.go",
 		"operation=4 started",
-		"operation=4 completed duration=14ms",
+		"operation=4 completed kind=reconcile duration=14ms",
 		"events=3 dirty_paths=2 coalesced=1",
+		"ignored=2 queued=25ms debounce=20ms",
+		"total=39ms no_op=false",
 		"checked=8 added=1 modified=1 removed=0 nodes_updated=6 full_reindex=false",
 	} {
 		if !strings.Contains(got, want) {
@@ -250,6 +256,11 @@ func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
 	cmd := newWatchCmd()
 	cmd.SetArgs([]string{dir, "--verbose"})
 	var stdout, stderr lockedBuffer
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("watch stdout:\n%s\nwatch stderr:\n%s", stdout.String(), stderr.String())
+		}
+	})
 	cmd.SetOut(&stdout)
 	cmd.SetErr(&stderr)
 	done := make(chan error, 1)
@@ -268,6 +279,14 @@ func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
 	waitForCLI(t, 8*time.Second, func() bool {
 		return strings.Contains(stdout.String(), "modified=1")
 	})
+	renamedMainPath := filepath.Join(dir, "target.go")
+	if err := os.Rename(mainPath, renamedMainPath); err != nil {
+		t.Fatal(err)
+	}
+	waitForCLI(t, 8*time.Second, func() bool {
+		got := stdout.String()
+		return strings.Contains(got, "kind=full_reconcile") && strings.Contains(got, "full_reindex=true")
+	})
 	if err := os.WriteFile(filepath.Join(dir, "added.go"), []byte("package main\n\nfunc Added() int { return 7 }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +297,7 @@ func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForCLI(t, 8*time.Second, func() bool {
-		return strings.Contains(stdout.String(), "removed=1")
+		return strings.Count(stdout.String(), "kind=full_reconcile") >= 4
 	})
 	cancel()
 	select {
@@ -328,7 +347,7 @@ func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
 			t.Fatal(fileErr)
 		}
 		for _, file := range files {
-			if file.Path == "main.go" {
+			if file.Path == "target.go" {
 				updatedHash = file.ContentHash == indexer.HashContent(updatedMain)
 			}
 		}
@@ -337,6 +356,49 @@ func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
 		t.Fatalf("unexpected graph added=%t target=%t obsolete=%t preserved_call=%t updated_hash=%t; stdout=%s stderr=%s",
 			foundAdded, foundTarget, foundObsolete, preservedCall, updatedHash, stdout.String(), stderr.String())
 	}
+
+	cleanDir := t.TempDir()
+	for rel, content := range map[string][]byte{
+		"go.mod":    []byte("module example.com/watchtest\n\ngo 1.22\n"),
+		"caller.go": []byte("package main\n\nfunc Caller() int { return Target() }\n"),
+		"target.go": updatedMain,
+		"added.go":  []byte("package main\n\nfunc Added() int { return 7 }\n"),
+	} {
+		if err := os.WriteFile(filepath.Join(cleanDir, rel), content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cleanIdx, _, err := indexer.Init(cleanDir, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cleanIdx.Close() }()
+	if got, want := graphFingerprint(t, idx), graphFingerprint(t, cleanIdx); !reflect.DeepEqual(got, want) {
+		t.Fatalf("watch graph differs from clean index\nwatch=%v\nclean=%v", got, want)
+	}
+}
+
+func graphFingerprint(t *testing.T, idx *indexer.Indexer) []string {
+	t.Helper()
+	var fingerprint []string
+	for _, graphStore := range idx.Stores() {
+		nodes, err := graphStore.AllNodes()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, node := range nodes {
+			fingerprint = append(fingerprint, fmt.Sprintf("node|%s|%s|%s|%s", node.ID, node.Kind, node.QualifiedName, node.FilePath))
+		}
+		edges, err := graphStore.AllEdges()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, edge := range edges {
+			fingerprint = append(fingerprint, fmt.Sprintf("edge|%s|%s|%s", edge.Source, edge.Kind, edge.Target))
+		}
+	}
+	sort.Strings(fingerprint)
+	return fingerprint
 }
 
 func waitForCLI(t *testing.T, timeout time.Duration, condition func() bool) {

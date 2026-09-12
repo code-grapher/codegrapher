@@ -1,12 +1,14 @@
 package indexer
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	graphlock "github.com/specscore/codegrapher/lock"
 	"github.com/specscore/codegrapher/model"
 	"github.com/specscore/codegrapher/store"
 )
@@ -24,7 +26,7 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 	defer idx.mu.Unlock()
 
 	if err := idx.lock.Acquire(); err != nil {
-		return SyncResult{LockUnavailable: true}
+		return syncLockFailure(err)
 	}
 	defer idx.lock.Release()
 	if err := idx.invalidateGitHead(); err != nil {
@@ -170,7 +172,7 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 	defer idx.mu.Unlock()
 
 	if err := idx.lock.Acquire(); err != nil {
-		return SyncResult{LockUnavailable: true}
+		return syncLockFailure(err)
 	}
 	defer idx.lock.Release()
 	if err := idx.invalidateGitHead(); err != nil {
@@ -211,6 +213,18 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 			} else {
 				result.FilesRemoved += len(removed)
 				result.ChangedFilePaths = append(result.ChangedFilePaths, removed...)
+			}
+			continue
+		}
+		if isIgnoredSyncPath(idx.root, filePath) {
+			if rec != nil {
+				deleted, deleteErr := idx.deleteFileEverywhere(filePath)
+				if deleteErr != nil {
+					result.Errors = append(result.Errors, model.ExtractionError{Message: deleteErr.Error(), FilePath: filePath, Severity: "error", Code: "delete_error"})
+				} else if deleted {
+					result.FilesRemoved++
+					result.ChangedFilePaths = append(result.ChangedFilePaths, filePath)
+				}
 			}
 			continue
 		}
@@ -285,7 +299,7 @@ func (idx *Indexer) Rebuild(opts Options) SyncResult {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	if err := idx.lock.Acquire(); err != nil {
-		return SyncResult{LockUnavailable: true}
+		return syncLockFailure(err)
 	}
 	defer idx.lock.Release()
 	if err := idx.invalidateGitHead(); err != nil {
@@ -294,6 +308,15 @@ func (idx *Indexer) Rebuild(opts Options) SyncResult {
 	now := opts.clock()
 	start := now()
 	return idx.fullRebuildLocked(opts, start, now)
+}
+
+func syncLockFailure(err error) SyncResult {
+	if errors.Is(err, graphlock.ErrLockUnavailable) {
+		return SyncResult{LockUnavailable: true}
+	}
+	return SyncResult{Errors: []model.ExtractionError{{
+		Message: err.Error(), Severity: "error", Code: "lock_error",
+	}}}
 }
 
 func (idx *Indexer) fullRebuildLocked(opts Options, start int64, now func() int64) SyncResult {

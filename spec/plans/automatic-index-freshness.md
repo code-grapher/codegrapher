@@ -96,10 +96,11 @@ structured indexer failures rather than treating them as successful batches.
 
 Add one command integration test using a real `fsnotify` watcher, a real
 initialized temporary Go repository, a same-size/same-mtime edit, an added
-file, content-hash/symbol/call-edge assertions, and context cancellation. Add
-one focused real-filesystem test for moving in a populated directory; keep
-both skipped under short mode and leave platform/event permutations to unit
-tests.
+file, in-tree file rename, directory rename-out, content-hash/symbol/call-edge
+assertions, clean-rebuild graph parity, and context cancellation. Add focused
+real-filesystem tests for moving in a populated directory and failing closed
+when a runtime directory-watch cap is reached; keep them skipped under short
+mode and leave platform/event permutations to unit tests.
 
 ### Task 5: Review, verify, and reconcile lifecycle state
 

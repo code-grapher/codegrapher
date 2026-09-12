@@ -121,6 +121,37 @@ func TestPathFilterReloadsChangedGitignore(t *testing.T) {
 	}
 }
 
+func TestGitPathFilterUsesExcludeStandardAndKeepsTrackedFiles(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	if output, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, output)
+	}
+	writeFile(t, filepath.Join(dir, "pkg", ".gitignore"), "tracked.go\n")
+	writeFile(t, filepath.Join(dir, "pkg", "tracked.go"), "package pkg\n")
+	if output, err := exec.Command("git", "-C", dir, "add", "pkg/.gitignore").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, output)
+	}
+	if output, err := exec.Command("git", "-C", dir, "add", "-f", "pkg/tracked.go").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, output)
+	}
+	writeFile(t, filepath.Join(dir, ".git", "info", "exclude"), "private/\n")
+	writeFile(t, filepath.Join(dir, "private", "hidden.go"), "package private\n")
+	filter := NewPathFilter(dir)
+
+	if filter.IsIgnored("pkg/tracked.go") {
+		t.Fatal("tracked file covered by nested .gitignore must remain admitted")
+	}
+	if !filter.IsIgnored("private/") || !filter.IsIgnored("private/hidden.go") {
+		t.Fatal(".git/info/exclude was not honored")
+	}
+	if filter.IsIgnored("new-visible.go") {
+		t.Fatal("unignored new path was rejected")
+	}
+}
+
 func TestScanDirectorySkipsCodeGraphDataDirs(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, ".codegraph", "x.go"), "package x\n")

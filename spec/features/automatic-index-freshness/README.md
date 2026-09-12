@@ -118,10 +118,11 @@ suppressed in normal mode.
 `codegrapher watch --verbose` MUST print timestamped native events with their
 operation and project-relative path, then clearly report each reconciliation
 operation starting and completing or failing. Completion MUST include elapsed
-time and useful batch statistics: accepted events, unique dirty paths,
-coalesced events, checked files, added/modified/removed files, updated nodes,
-and whether reconciliation escalated to a full reindex. Related lifecycle
-messages MUST carry a monotonically increasing operation identifier.
+time plus queued/debounce/total time and useful batch statistics: accepted and
+ignored events, unique dirty paths, coalesced events, no-op status, checked
+files, added/modified/removed files, updated nodes, and whether reconciliation
+escalated to a full reindex. Related lifecycle messages MUST carry a
+monotonically increasing operation identifier.
 
 The library MUST expose structured observations and leave terminal rendering
 to the CLI. Verbose observation MUST not alter reconciliation behavior or add
@@ -135,11 +136,14 @@ Native watcher errors and reconciliation failures MUST be visible. Failed or
 lock-blocked reconciliation MUST retain dirty paths and retry; the index MUST
 not be reported current until reconciliation succeeds.
 
-Rename remains a native event hint: authoritative sync determines whether it
-is a deletion, creation, or both. Event bursts MUST be debounced and
-deduplicated before one sync. Event-storm thresholds, overflow-triggered full
-reconciliation, and periodic safety reconciliation are later robustness work,
-not separate indexing paths.
+Rename remains a native event hint. Because an incremental old-path/new-path
+pair can lose incoming edges from unchanged callers, a native rename makes the
+batch ambiguous and escalates to an authoritative rebuild; directory removals
+without a rename hint remove all tracked descendants by prefix. Event bursts
+MUST be debounced and deduplicated before one sync. Event-storm thresholds,
+overflow-triggered full reconciliation, and periodic safety reconciliation are
+later robustness work, not separate indexing paths. Any native error or runtime
+watch-cap breach terminates watching instead of leaving partial coverage active.
 
 ### Target architecture
 
@@ -268,18 +272,16 @@ store while keeping this boundary intact.
 
 ### Phased delivery
 
-1. Foreground watcher, startup reconciliation, structured diagnostics, and a
-   bounded real-filesystem journey test.
-2. Explicit overflow/event-storm policy, reconciliation fallback, and
-   correctness comparison with a clean full index.
-3. One reusable daemon lifecycle using the same watcher/reconciler.
-4. Multi-repository/worktree registration, stale-path cleanup, and resource
-   controls.
-5. Cheapest measured same-repository/same-HEAD graph reuse.
-6. Optional generic lifecycle hints, with WB as one caller.
-7. Optional agent and Git hooks only where measurements show added value.
-8. Content-addressed parsed representation and snapshot/delta sharing only
-   after simpler reuse has been measured.
+| Phase | Deliverable | Depends on | Primary risk | Success criterion |
+|---|---|---|---|---|
+| 1 | Foreground watcher, exact-path reconciliation, rename-safe rebuilds, fail-closed native coverage, structured diagnostics, and bounded real-filesystem/clean-index parity tests. | Existing indexer, watcher, and released `node` command. | Native event ambiguity silently corrupts freshness. | CRUD/rename bursts converge to the same nodes/edges as a clean index; shutdown and failure tests pass under the race detector. |
+| 2 | Explicit overflow/event-storm thresholds, whole-worktree fallback, and fixed-fixture performance/idle baselines. | Phase 1 observations and production batch samples. | A threshold either rebuilds too often or misses uncertainty. | Forced overflow/storm tests converge; idle CPU/wakeups and one-file latency are recorded with regression bounds. |
+| 3 | One reusable local daemon owning the same watcher/reconciler, versioned control/status API, PID/liveness ownership, start/stop/status, and restart recovery. | Phases 1–2 correctness and measurements. | Duplicate owners, stale PID state, or version skew serve stale data. | One daemon survives client exits, rejects duplicate ownership, reconciles before ready after restart, and is released/installed/verified. |
+| 4 | Multi-repository/worktree registration, canonical identities, disappearance/move grace policy, cleanup, backoff, and watch/resource budgets. | Phase 3 daemon lifecycle. | Deleted or moved paths leak watches or collide by name. | Register/list/remove/reappear/restart tests preserve distinct worktrees and reclaim resources deterministically. |
+| 5 | Cheapest measured same-repository/same-HEAD reuse, initially copy/hard-link/reflink or immutable store reuse without overlay sharing. | Phase 4 identity plus duplicate-storage/open benchmarks. | Reuse crosses config/version/dirty-state boundaries. | Two clean same-HEAD worktrees reuse verified immutable data and remain isolated after one becomes dirty. |
+| 6 | Generic authenticated lifecycle-hint API carrying repo/worktree identity, paths, optional old/new HEAD, source, and request ID; WB is one optional caller. | Phase 4 registry and idempotency model. | Producer coupling or duplicate/out-of-order hints changes correctness. | Duplicate/reordered hints are harmless and disabling WB leaves watcher correctness unchanged. |
+| 7 | Optional agent and Git integration selected only from measured blind spots; existing hooks remain opt-in fallback. | Phase 2 measurements and Phase 6 hint API. | Shared hooks or agent wrappers add machine state without material freshness benefit. | Each enabled integration has a measured latency/correctness win and clean install/remove ownership. |
+| 8 | Content-addressed parsed representation, commit snapshots, worktree deltas, materialized query view, GC, migration, and corruption recovery. | Phase 5 proves simpler reuse is insufficient and supplies storage baselines. | Schema complexity or GC corrupts shared data and recovery. | Snapshot/delta parity, crash recovery, migration rollback, and multi-worktree isolation pass before default enablement. |
 
 ## Acceptance Criteria
 
@@ -315,8 +317,9 @@ the correct coalesced-event count.
 **When** a filesystem event triggers reconciliation
 
 **Then** terminal output identifies the received event, the operation start,
-the matching completion identifier, elapsed time, and batch/sync statistics
-without requiring exact timing values.
+the matching completion identifier, queued/debounce/reconciliation/total time,
+ignored/coalesced counts, no-op status, and batch/sync statistics without requiring
+exact timing values.
 
 ### AC: default-output-is-not-event-level
 

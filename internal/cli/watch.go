@@ -53,7 +53,7 @@ func newWatchCmd() *cobra.Command {
 			if err := watcher.StartWithError(); err != nil {
 				return fmt.Errorf("cannot watch %s: %w", projectPath, err)
 			}
-			defer watcher.Stop()
+			defer watcher.StopAndWait()
 
 			// Establish the native watch set first, then reconcile. Events arriving
 			// during startup remain pending for the normal debounced path, closing
@@ -61,21 +61,26 @@ func newWatchCmd() *cobra.Command {
 			started := time.Now()
 			const startupOperationID = 0
 			output.startupStarted(started, startupOperationID)
-			startupResult, err := reconcilePathsForWatch(idx, nil)
+			startupResult, err := reconcileStartupForWatch(idx)
 			if err != nil {
 				return fmt.Errorf("startup reconciliation: %w", err)
 			}
 			output.startupCompleted(time.Now(), startupOperationID, time.Since(started), startupResult)
 			if ctx.Err() != nil {
-				watcher.Stop()
+				watcher.StopAndWait()
 				return nil
 			}
 			output.watching(projectPath)
 
-			<-ctx.Done()
-			watcher.Stop()
-			output.stopped(projectPath)
-			return nil
+			select {
+			case <-ctx.Done():
+				watcher.StopAndWait()
+				output.stopped(projectPath)
+				return nil
+			case fatalErr := <-watcher.FatalErrors():
+				watcher.StopAndWait()
+				return fmt.Errorf("watch failed: %w", fatalErr)
+			}
 		},
 	}
 
@@ -98,12 +103,17 @@ func watchStartPath(args []string) string {
 }
 
 func reconcilePathsForWatch(idx *indexer.Indexer, paths []string) (watch.SyncResult, error) {
-	var result indexer.SyncResult
 	if paths == nil {
-		result = idx.Sync(indexer.Options{})
-	} else {
-		result = idx.SyncFiles(paths, indexer.Options{})
+		return mapReconcileResult(idx.Rebuild(indexer.Options{}))
 	}
+	return mapReconcileResult(idx.SyncFiles(paths, indexer.Options{}))
+}
+
+func reconcileStartupForWatch(idx *indexer.Indexer) (watch.SyncResult, error) {
+	return mapReconcileResult(idx.Sync(indexer.Options{}))
+}
+
+func mapReconcileResult(result indexer.SyncResult) (watch.SyncResult, error) {
 	mapped := watch.SyncResult{
 		FilesChanged:  result.FilesAdded + result.FilesModified + result.FilesRemoved,
 		FilesChecked:  result.FilesChecked,
@@ -155,16 +165,18 @@ func (o *watchOutput) observe(observation watch.Observation) {
 	case watch.ObservationOperationStarted:
 		if o.verbose {
 			_, _ = fmt.Fprintf(o.stdout,
-				"%s operation=%d started kind=%s events=%d dirty_paths=%d coalesced=%d\n",
+				"%s operation=%d started kind=%s events=%d dirty_paths=%d coalesced=%d ignored=%d queued=%s debounce=%s\n",
 				prefix, observation.OperationID, observation.Operation,
-				observation.EventsReceived, observation.DirtyPaths, observation.CoalescedEvents)
+				observation.EventsReceived, observation.DirtyPaths, observation.CoalescedEvents,
+				observation.IgnoredEvents, observationDuration(observation.QueuedFor), observationDuration(observation.Debounce))
 		}
 	case watch.ObservationOperationCompleted:
 		if o.verbose {
 			_, _ = fmt.Fprintf(o.stdout,
-				"%s operation=%d completed duration=%s events=%d dirty_paths=%d coalesced=%d checked=%d added=%d modified=%d removed=%d nodes_updated=%d full_reindex=%t\n",
-				prefix, observation.OperationID, observationDuration(observation.Duration),
-				observation.EventsReceived, observation.DirtyPaths, observation.CoalescedEvents,
+				"%s operation=%d completed kind=%s duration=%s total=%s no_op=%t events=%d dirty_paths=%d coalesced=%d ignored=%d checked=%d added=%d modified=%d removed=%d nodes_updated=%d full_reindex=%t\n",
+				prefix, observation.OperationID, observation.Operation, observationDuration(observation.Duration),
+				observationDuration(observation.TotalDuration), observation.NoOp,
+				observation.EventsReceived, observation.DirtyPaths, observation.CoalescedEvents, observation.IgnoredEvents,
 				observation.Result.FilesChecked, observation.Result.FilesAdded,
 				observation.Result.FilesModified, observation.Result.FilesRemoved,
 				observation.Result.NodesUpdated, observation.Result.FullReindex)
@@ -201,8 +213,9 @@ func (o *watchOutput) startupCompleted(at time.Time, operationID uint64, duratio
 	defer o.mu.Unlock()
 	if o.verbose {
 		_, _ = fmt.Fprintf(o.stdout,
-			"%s operation=%d completed kind=startup_reconcile duration=%s checked=%d added=%d modified=%d removed=%d nodes_updated=%d full_reindex=%t\n",
-			at.UTC().Format(time.RFC3339Nano), operationID, observationDuration(duration), result.FilesChecked,
+			"%s operation=%d completed kind=startup_reconcile duration=%s total=%s no_op=%t checked=%d added=%d modified=%d removed=%d nodes_updated=%d full_reindex=%t\n",
+			at.UTC().Format(time.RFC3339Nano), operationID, observationDuration(duration), observationDuration(duration),
+			result.FilesChanged == 0 && !result.FullReindex, result.FilesChecked,
 			result.FilesAdded, result.FilesModified, result.FilesRemoved, result.NodesUpdated, result.FullReindex)
 		return
 	}
