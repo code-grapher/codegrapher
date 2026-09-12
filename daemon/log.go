@@ -1,7 +1,9 @@
 package daemon
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -86,10 +88,26 @@ func (w *rotatingLogWriter) rotateLocked() error {
 	if err := os.Remove(previous); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	if err := os.Rename(path, previous); err != nil {
+	source, err := os.Open(path)
+	if err != nil {
 		return err
 	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	destination, err := os.OpenFile(previous, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		_ = source.Close()
+		return err
+	}
+	_, copyErr := io.Copy(destination, source)
+	closeErr := errors.Join(source.Close(), destination.Close())
+	if copyErr != nil || closeErr != nil {
+		return errors.Join(copyErr, closeErr)
+	}
+	if err := protectUserOnly(previous); err != nil {
+		return err
+	}
+	// Copy then truncate instead of rename so rotation also works on Windows
+	// while the process-level bootstrap stderr handle remains open.
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
