@@ -1,11 +1,11 @@
 ---
 format: https://specscore.md/plan-specification
-status: Approved
+status: Executing
 ---
 
 # Plan: Authenticated browser API
 
-**Status:** Approved
+**Status:** Executing
 **Source Feature:** live-daemon-api
 **Date:** 2026-09-12
 **Owner:** alex
@@ -49,7 +49,7 @@ provider release.
 
 **Verifies:** live-daemon-api#ac:contract-generated-from-typespec, live-daemon-api#ac:status-negotiates-api-compatibility, live-daemon-api#ac:repository-identity-is-stable-and-path-free, live-daemon-api#ac:symbol-search-and-graph-are-bounded
 **Depends-On:** —
-**Status:** planning
+**Status:** complete
 
 Define the `/codegrapher/v1/` service, status compatibility handshake, auth
 scheme, DTOs, exact paths, bounds, freshness enum, truncation envelope, and
@@ -63,7 +63,7 @@ import, endpoint override, and authenticated fetch usage.
 
 **Verifies:** live-daemon-api#ac:public-api-authenticates-and-confines-origin, live-daemon-api#ac:status-negotiates-api-compatibility, live-daemon-api#ac:repository-identity-is-stable-and-path-free, live-daemon-api#ac:tree-and-file-access-is-traversal-safe-and-bounded, live-daemon-api#ac:symbol-search-and-graph-are-bounded, live-daemon-api#ac:freshness-and-revision-are-truthful
 **Depends-On:** 1
-**Status:** planning
+**Status:** complete
 
 Build a public-API package over existing index stores and freshness status.
 Persist the opaque ID, compute the index revision, normalize and resolve paths
@@ -77,7 +77,7 @@ JSON errors.
 
 **Verifies:** live-daemon-api#ac:serve-capabilities-compose
 **Depends-On:** 2
-**Status:** planning
+**Status:** complete
 
 Replace the placeholder `--api` branch with the real server and make the default
 set API+watch+MCP. Preserve stdio exclusively for MCP; send human API/watch
@@ -88,7 +88,7 @@ one cancellation scope, propagate the first real failure, and join shutdown.
 
 **Verifies:** live-daemon-api#ac:daemon-separates-browser-and-control-credentials, live-daemon-api#ac:freshness-and-revision-are-truthful
 **Depends-On:** 2
-**Status:** planning
+**Status:** complete
 
 Generate and persist a separate browser credential in the private daemon state,
 bind the public listener, expose only its address in authenticated control
@@ -100,7 +100,7 @@ cleanup, and joined stop/restart behavior.
 
 **Verifies:** live-daemon-api#ac:real-server-browser-api-journey, live-daemon-api#ac:tree-and-file-access-is-traversal-safe-and-bounded, live-daemon-api#ac:symbol-search-and-graph-are-bounded, live-daemon-api#ac:daemon-separates-browser-and-control-credentials
 **Depends-On:** 3, 4
-**Status:** planning
+**Status:** complete
 
 Add focused handler/security/bounds tests and one real-browser journey over a
 temporary initialized repository and real listener. Serve a page from a
@@ -114,7 +114,7 @@ watcher/daemon lifecycle regressions.
 
 **Verifies:** live-daemon-api#ac:contract-generated-from-typespec, live-daemon-api#ac:public-api-authenticates-and-confines-origin, live-daemon-api#ac:status-negotiates-api-compatibility, live-daemon-api#ac:repository-identity-is-stable-and-path-free, live-daemon-api#ac:tree-and-file-access-is-traversal-safe-and-bounded, live-daemon-api#ac:symbol-search-and-graph-are-bounded, live-daemon-api#ac:freshness-and-revision-are-truthful, live-daemon-api#ac:serve-capabilities-compose, live-daemon-api#ac:daemon-separates-browser-and-control-credentials, live-daemon-api#ac:real-server-browser-api-journey
 **Depends-On:** 5
-**Status:** planning
+**Status:** in_progress
 
 Run focused tests, the required Go/CGO gates once, contract drift verification,
 SpecScore lint, and an independent adversarial review of the exact diff. Resolve

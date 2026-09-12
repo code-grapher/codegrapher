@@ -36,8 +36,7 @@ export interface Freshness {
 export enum FreshnessState {
   Ready = "ready",
   Updating = "updating",
-  Stale = "stale",
-  NotIndexed = "not-indexed"
+  Stale = "stale"
 }
 /**
  * An instant in coordinated universal time (UTC)"

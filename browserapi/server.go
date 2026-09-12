@@ -151,6 +151,9 @@ func (s *Server) security(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, x-ms-useragent, x-ms-client-request-id, traceparent")
 			w.Header().Set("Access-Control-Max-Age", "600")
+			if r.Header.Get("Access-Control-Request-Private-Network") == "true" {
+				w.Header().Set("Access-Control-Allow-Private-Network", "true")
+			}
 		}
 		if r.Method != http.MethodOptions {
 			provided := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -432,6 +435,9 @@ func dedupeSearch(values []SearchResult) []SearchResult {
 
 func boundedInt(raw string, defaultValue, maximum int) (int, bool) {
 	if raw == "" {
+		if defaultValue > maximum {
+			defaultValue = maximum
+		}
 		return defaultValue, true
 	}
 	value, err := strconv.Atoi(raw)

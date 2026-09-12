@@ -54,7 +54,8 @@ with wildcard origin.
 Authenticated `GET /codegrapher/v1/status` MUST report API version, CodeGrapher
 version, capabilities, limits, one-repository count, and aggregate freshness.
 This response is the compatibility handshake used to distinguish unreachable,
-unauthorized, unsupported API, not-indexed, updating, stale, and ready states.
+unauthorized, unsupported API, updating, stale, and ready states. The CLI rejects
+an uninitialized repository before opening this API.
 
 ### REQ: registered-repository-identity
 
@@ -122,7 +123,7 @@ claim the landed website gateway is wired until the consumer replaces its
 
 Errors MUST be JSON with a stable code, human message, and request ID. Authentication
   failure, forbidden origin, invalid path, repository/symbol/file not found,
-revision change, stale/not-ready index, and bounds violations MUST be distinct.
+revision change, stale indexed file, and bounds violations MUST be distinct.
 
 ## Dependencies
 
@@ -154,7 +155,7 @@ revision change, stale/not-ready index, and bounds violations MUST be distinct.
 
 **Requirements:** live-daemon-api#req:public-status-compatibility, live-daemon-api#req:public-dto-sanitization
 
-**Given** each freshness state and internal status containing local paths and raw errors
+**Given** ready, updating, and stale freshness plus internal status containing local paths and raw errors
 
 **When** the authenticated public status endpoint is read
 
@@ -194,7 +195,7 @@ revision change, stale/not-ready index, and bounds violations MUST be distinct.
 
 **Requirements:** live-daemon-api#req:truthful-freshness-and-revision, live-daemon-api#req:public-dto-sanitization
 
-**Given** ready, updating, stale, and not-indexed states plus an advertised revision
+**Given** ready, updating, and stale states plus an advertised revision
 
 **When** status/metadata are read and the indexed snapshot changes
 

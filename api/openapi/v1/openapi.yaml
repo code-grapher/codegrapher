@@ -767,7 +767,6 @@ components:
         - ready
         - updating
         - stale
-        - not-indexed
     GraphDirection:
       type: string
       enum:

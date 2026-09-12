@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/specscore/codegrapher/freshness"
 	"github.com/specscore/codegrapher/indexer"
@@ -25,8 +26,12 @@ func TestBrowserAPIAuthenticatedJourneyAndPathSafety(t *testing.T) {
 	assertError(t, unauthorized, http.StatusUnauthorized, "unauthorized")
 	forbidden := request(t, api, http.MethodGet, BasePath+"/status", testToken, "https://evil.example")
 	assertError(t, forbidden, http.StatusForbidden, "origin_forbidden")
-	preflight := request(t, api, http.MethodOptions, BasePath+"/status", "", "https://codegrapher.dev")
-	if preflight.Code != http.StatusNoContent || preflight.Header().Get("Access-Control-Allow-Origin") != "https://codegrapher.dev" {
+	preflightRequest := httptest.NewRequest(http.MethodOptions, BasePath+"/status", nil)
+	preflightRequest.Header.Set("Origin", "https://codegrapher.dev")
+	preflightRequest.Header.Set("Access-Control-Request-Private-Network", "true")
+	preflight := httptest.NewRecorder()
+	api.Handler().ServeHTTP(preflight, preflightRequest)
+	if preflight.Code != http.StatusNoContent || preflight.Header().Get("Access-Control-Allow-Origin") != "https://codegrapher.dev" || preflight.Header().Get("Access-Control-Allow-Private-Network") != "true" {
 		t.Fatalf("preflight = %d headers=%v", preflight.Code, preflight.Header())
 	}
 
@@ -37,7 +42,9 @@ func TestBrowserAPIAuthenticatedJourneyAndPathSafety(t *testing.T) {
 	var repositories struct {
 		Repositories []Repository `json:"repositories"`
 	}
-	decodeResponse(t, request(t, api, http.MethodGet, BasePath+"/repositories", testToken, ""), &repositories)
+	repositoriesResponse := request(t, api, http.MethodGet, BasePath+"/repositories", testToken, "")
+	assertNoInternalPath(t, repositoriesResponse, root)
+	decodeResponse(t, repositoriesResponse, &repositories)
 	if len(repositories.Repositories) != 1 || !validRepositoryID(repositories.Repositories[0].ID) || repositories.Repositories[0].Revision == "" {
 		t.Fatalf("repositories = %+v", repositories)
 	}
@@ -55,7 +62,7 @@ func TestBrowserAPIAuthenticatedJourneyAndPathSafety(t *testing.T) {
 		t.Fatalf("file = %+v", file)
 	}
 
-	for _, unsafe := range []string{"../secret", "/etc/passwd", "dir\\file", "C:%5Csecret", "./main.go"} {
+	for _, unsafe := range []string{"../secret", "/etc/passwd", "dir\\file", "C:%5Csecret", "./main.go", "main.go%00.txt"} {
 		response := request(t, api, http.MethodGet, base+"/files?path="+unsafe, testToken, "")
 		assertError(t, response, http.StatusBadRequest, "invalid_path")
 		if strings.Contains(response.Body.String(), root) {
@@ -64,18 +71,24 @@ func TestBrowserAPIAuthenticatedJourneyAndPathSafety(t *testing.T) {
 	}
 
 	var search SearchResponse
-	decodeResponse(t, request(t, api, http.MethodGet, base+"/search?query=Alpha&limit=5", testToken, ""), &search)
+	searchResponse := request(t, api, http.MethodGet, base+"/search?query=Alpha&limit=5", testToken, "")
+	assertNoInternalPath(t, searchResponse, root)
+	decodeResponse(t, searchResponse, &search)
 	if len(search.Results) == 0 || search.Results[0].Symbol.Name != "Alpha" {
 		t.Fatalf("search = %+v", search)
 	}
 	symbolID := search.Results[0].Symbol.ID
 	var symbol SymbolResponse
-	decodeResponse(t, request(t, api, http.MethodGet, base+"/symbols/"+symbolID, testToken, ""), &symbol)
+	symbolResponse := request(t, api, http.MethodGet, base+"/symbols/"+symbolID, testToken, "")
+	assertNoInternalPath(t, symbolResponse, root)
+	decodeResponse(t, symbolResponse, &symbol)
 	if symbol.Symbol.ID != symbolID {
 		t.Fatalf("symbol = %+v", symbol)
 	}
 	var graph GraphResponse
-	decodeResponse(t, request(t, api, http.MethodGet, base+"/symbols/"+symbolID+"/graph?direction=both&depth=1&maxNodes=10&maxEdges=10", testToken, ""), &graph)
+	graphResponse := request(t, api, http.MethodGet, base+"/symbols/"+symbolID+"/graph?direction=both&depth=1&maxNodes=10&maxEdges=10", testToken, "")
+	assertNoInternalPath(t, graphResponse, root)
+	decodeResponse(t, graphResponse, &graph)
 	if len(graph.Nodes) == 0 || graph.MaxNodes != 10 || graph.MaxEdges != 10 {
 		t.Fatalf("graph = %+v", graph)
 	}
@@ -152,6 +165,7 @@ func TestAPIErrorAndBoundedBranches(t *testing.T) {
 	assertError(t, request(t, api, http.MethodGet, base+"/files?path=missing.go", testToken, ""), http.StatusNotFound, "file_not_found")
 	assertError(t, request(t, api, http.MethodGet, base+"/symbols/missing", testToken, ""), http.StatusNotFound, "symbol_not_found")
 	assertError(t, request(t, api, http.MethodGet, base+"/search?query=", testToken, ""), http.StatusUnprocessableEntity, "invalid_query")
+	assertError(t, request(t, api, http.MethodGet, base+"/search?query="+strings.Repeat("a", 513), testToken, ""), http.StatusUnprocessableEntity, "invalid_query")
 	assertError(t, request(t, api, http.MethodGet, base+"/search?query=Alpha&limit=-1", testToken, ""), http.StatusUnprocessableEntity, "invalid_limit")
 
 	var search SearchResponse
@@ -167,6 +181,26 @@ func TestAPIErrorAndBoundedBranches(t *testing.T) {
 	decodeResponse(t, request(t, api, http.MethodGet, base+"/symbols/"+symbolID+"/graph?maxNodes=1", testToken, ""), &boundedGraph)
 	if len(boundedGraph.Nodes) != 1 || len(boundedGraph.Edges) != 0 || !boundedGraph.Truncated {
 		t.Fatalf("bounded graph broke referential limits: %+v", boundedGraph)
+	}
+	boundedAPI, err := New(api.idx, Config{Token: testToken, Limits: Limits{MaxTreeEntries: 1, MaxFileBytes: 8, MaxSearchResults: 1, MaxGraphDepth: 1, MaxGraphNodes: 1, MaxGraphEdges: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	boundedRevision, err := boundedAPI.Revision()
+	if err != nil {
+		t.Fatal(err)
+	}
+	boundedBase := BasePath + "/repositories/" + boundedAPI.RepositoryID() + "/revisions/" + boundedRevision
+	var boundedTree TreeResponse
+	decodeResponse(t, request(t, boundedAPI, http.MethodGet, boundedBase+"/tree", testToken, ""), &boundedTree)
+	if len(boundedTree.Entries) != 1 || !boundedTree.Truncated || boundedTree.Limit != 1 {
+		t.Fatalf("tree limit was not explicit: %+v", boundedTree)
+	}
+	assertError(t, request(t, boundedAPI, http.MethodGet, boundedBase+"/files?path=main.go", testToken, ""), http.StatusRequestEntityTooLarge, "file_too_large")
+	var boundedSearch SearchResponse
+	decodeResponse(t, request(t, boundedAPI, http.MethodGet, boundedBase+"/search?query=Alpha", testToken, ""), &boundedSearch)
+	if len(boundedSearch.Results) != 1 || !boundedSearch.Truncated || boundedSearch.Limit != 1 {
+		t.Fatalf("search limit was not explicit: %+v", boundedSearch)
 	}
 
 	escape := filepath.Join(filepath.Dir(root), "escape.txt")
@@ -187,6 +221,20 @@ func TestPublicAPIHelpers(t *testing.T) {
 	}
 	if validRepositoryID("repo_bad") || validRepositoryID("wrong_0123456789abcdef0123456789abcdef") {
 		t.Fatal("invalid repository identity accepted")
+	}
+	freshnessStates := []struct {
+		status freshness.Status
+		want   string
+	}{
+		{status: freshness.Status{IndexCurrent: true}, want: "ready"},
+		{status: freshness.Status{WatchReady: true}, want: "updating"},
+		{status: freshness.Status{LastError: "/private/repository: failed"}, want: "stale"},
+	}
+	for _, test := range freshnessStates {
+		got := publicFreshness(test.status, time.Time{})
+		if got.State != test.want || strings.Contains(got.LastError, "/private") {
+			t.Errorf("public freshness = %+v, want state %q without raw error", got, test.want)
+		}
 	}
 	remotes := map[string]string{
 		"git@github.com:code-grapher/codegrapher.git":         "github.com/code-grapher/codegrapher",
@@ -243,6 +291,9 @@ func newTestAPI(t *testing.T, state func() freshness.Status) (string, *Server) {
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(root, "helper.go"), []byte("package sample\n\nfunc AlphaHelper() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	idx, result, err := indexer.Init(root, indexer.Options{})
 	if err != nil || !result.Success {
 		t.Fatalf("init: %v %+v", err, result)
@@ -289,5 +340,12 @@ func assertError(t *testing.T, response *httptest.ResponseRecorder, status int, 
 	}
 	if body.Code != code || body.RequestID == "" {
 		t.Fatalf("error = %+v, want %s", body, code)
+	}
+}
+
+func assertNoInternalPath(t *testing.T, response *httptest.ResponseRecorder, root string) {
+	t.Helper()
+	if strings.Contains(response.Body.String(), root) {
+		t.Fatalf("response leaked repository root: %s", response.Body.String())
 	}
 }

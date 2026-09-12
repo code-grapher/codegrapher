@@ -19,7 +19,6 @@ enum FreshnessState {
   ready,
   updating,
   stale,
-  notIndexed: "not-indexed",
 }
 
 enum TreeEntryKind {
