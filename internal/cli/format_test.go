@@ -10,6 +10,7 @@ func TestMachineOutputCommandsAcceptFormatJSON(t *testing.T) {
 	for _, cmd := range []commandSpec{
 		{name: "status", cmd: newStatusCmd()},
 		{name: "query", cmd: newQueryCmd()},
+		{name: "node", cmd: newNodeCmd()},
 		{name: "callers", cmd: newCallersCmd()},
 		{name: "callees", cmd: newCalleesCmd()},
 		{name: "impact", cmd: newImpactCmd()},

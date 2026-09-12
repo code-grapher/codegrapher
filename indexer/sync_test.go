@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -326,6 +327,255 @@ func TestGitSyncUntrackedIdempotent(t *testing.T) {
 	}
 }
 
+func TestGetChangedFilesDetectsCleanCommittedRenameAgainstIndex(t *testing.T) {
+	dir, idx := newGitSyncProject(t)
+	old := filepath.Join(dir, "src", "index.ts")
+	new := filepath.Join(dir, "src", "renamed.ts")
+	if err := os.Rename(old, new); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, dir, "add", "-A")
+	mustGit(t, dir, "commit", "-m", "rename")
+	changes := idx.GetChangedFiles()
+	if !slices.Contains(changes.Removed, "src/index.ts") || !slices.Contains(changes.Added, "src/renamed.ts") {
+		t.Fatalf("clean committed rename changes = %+v", changes)
+	}
+}
+
+func TestGetChangedFilesFallsBackForCleanEmbeddedRepoRename(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	root := t.TempDir()
+	mustGit(t, root, "init")
+	inner := filepath.Join(root, "inner")
+	if err := os.MkdirAll(inner, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, inner, "init")
+	writeFile(t, filepath.Join(inner, "old.go"), "package inner\nfunc Old() {}\n")
+	mustGit(t, inner, "add", "-A")
+	mustGit(t, inner, "commit", "-m", "initial")
+	idx, result, err := Init(root, Options{})
+	if err != nil || !result.Success {
+		t.Fatalf("Init: %+v %v", result, err)
+	}
+	defer func() { _ = idx.Close() }()
+	if err := os.Rename(filepath.Join(inner, "old.go"), filepath.Join(inner, "new.go")); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, inner, "add", "-A")
+	mustGit(t, inner, "commit", "-m", "rename")
+	changes := idx.GetChangedFiles()
+	if !slices.Contains(changes.Removed, "inner/old.go") || !slices.Contains(changes.Added, "inner/new.go") {
+		t.Fatalf("embedded rename changes = %+v", changes)
+	}
+}
+
+func TestGetChangedFilesHashesSameMtimeNestedEmbeddedRepoEdit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	root := t.TempDir()
+	mustGit(t, root, "init")
+	inner := filepath.Join(root, "modules", "inner")
+	if err := os.MkdirAll(inner, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, inner, "init")
+	path := filepath.Join(inner, "same.go")
+	writeFile(t, path, "package inner\nfunc Old() {}\n")
+	mustGit(t, inner, "add", "-A")
+	mustGit(t, inner, "commit", "-m", "initial")
+	idx, result, err := Init(root, Options{})
+	if err != nil || !result.Success {
+		t.Fatalf("Init: %+v %v", result, err)
+	}
+	defer func() { _ = idx.Close() }()
+	rec, err := idx.fileRecord("modules/inner/same.go")
+	if err != nil || rec == nil {
+		t.Fatalf("record: %+v %v", rec, err)
+	}
+	writeFile(t, path, "package inner\nfunc New() {}\n")
+	tm := time.UnixMilli(rec.ModifiedAt)
+	if err := os.Chtimes(path, tm, tm); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, inner, "add", "-A")
+	mustGit(t, inner, "commit", "-m", "edit")
+	changes := idx.GetChangedFiles()
+	if !slices.Contains(changes.Modified, "modules/inner/same.go") {
+		t.Fatalf("nested same-mtime changes = %+v", changes)
+	}
+}
+
+func TestSyncFilesRemovesDeletedIndexedUnknownFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "notes.txt")
+	writeFile(t, path, "one")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	res := idx.SyncFiles([]string{"notes.txt"}, Options{})
+	if res.FilesRemoved != 1 {
+		t.Fatalf("deleted indexed unknown = %+v, want removed", res)
+	}
+}
+
+func TestSyncFilesMovesContentDetectedSpecScoreBetweenScopes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "spec", "features", "example", "README.md")
+	writeFile(t, path, "plain notes\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, path, "---\nformat: https://specscore.md/feature-specification\n---\n\n# Feature: Example\n")
+	if res := idx.SyncFiles([]string{"spec/features/example/README.md"}, Options{}); len(res.Errors) != 0 {
+		t.Fatalf("to specscore: %+v", res.Errors)
+	}
+	for _, s := range idx.Stores() {
+		rec, err := s.GetFileByPath("spec/features/example/README.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rec != nil && rec.Language != model.LangSpecScore {
+			t.Fatalf("old scope retained %q", rec.Language)
+		}
+	}
+	writeFile(t, path, "plain notes again\n")
+	if res := idx.SyncFiles([]string{"spec/features/example/README.md"}, Options{}); len(res.Errors) != 0 {
+		t.Fatalf("to unknown: %+v", res.Errors)
+	}
+	count := 0
+	for _, s := range idx.Stores() {
+		if rec, _ := s.GetFileByPath("spec/features/example/README.md"); rec != nil {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("scope transition left %d file records, want one", count)
+	}
+}
+
+func TestSyncFilesRebuildsWhenPackageManifestCanChangeScopes(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "package.json"), `{"devDependencies":{"typescript":"5.0.0"}}`)
+	writeFile(t, filepath.Join(dir, "src", "a.ts"), "export function A() {}")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, filepath.Join(dir, "package.json"), `{"devDependencies":{"typescript":"4.0.0"}}`)
+	res := idx.SyncFiles([]string{"package.json"}, Options{})
+	if !res.FullReindex || len(res.Errors) != 0 {
+		t.Fatalf("manifest sync = %+v, want successful rebuild", res)
+	}
+}
+
+func TestSyncRebuildsWhenPackageManifestCanChangeScopes(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "package.json"), `{"devDependencies":{"typescript":"5.0.0"}}`)
+	writeFile(t, filepath.Join(dir, "src", "a.ts"), "export function A() {}")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, filepath.Join(dir, "package.json"), `{"devDependencies":{"typescript":"4.0.0"}}`)
+	res := idx.Sync(Options{})
+	if !res.FullReindex || len(res.Errors) != 0 {
+		t.Fatalf("manifest full Sync = %+v, want successful rebuild", res)
+	}
+}
+
+func TestGetChangedFilesDetectsDeletedIndexedUntrackedFile(t *testing.T) {
+	dir, idx := newGitSyncProject(t)
+	path := filepath.Join(dir, "notes.txt")
+	writeFile(t, path, "one")
+	if res := idx.SyncFiles([]string{"notes.txt"}, Options{}); len(res.Errors) != 0 || res.FilesAdded != 1 {
+		t.Fatalf("index untracked file = %+v", res)
+	}
+	if err := idx.MarkCurrentGitHead(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	changes := idx.GetChangedFiles()
+	if !slices.Contains(changes.Removed, "notes.txt") {
+		t.Fatalf("deleted indexed untracked changes = %+v", changes)
+	}
+}
+
+func TestGetChangedFilesDetectsSpecScoreDirtyAndUntrackedFiles(t *testing.T) {
+	dir, idx := newGitSyncProject(t)
+	tracked := filepath.Join(dir, "spec", "features", "checkout", "README.md")
+	writeFile(t, tracked, `---
+format: https://specscore.md/feature-specification
+status: Draft
+---
+
+# Feature: Checkout
+`)
+	mustGit(t, dir, "add", "-A")
+	mustGit(t, dir, "commit", "-m", "add spec")
+
+	// This commit happened after indexing, so it must be discovered through
+	// the persisted git head rather than a repository scan.
+	changes := idx.GetChangedFiles()
+	if !slices.Contains(changes.Added, "spec/features/checkout/README.md") {
+		t.Fatalf("committed SpecScore file = %+v, want added README.md", changes)
+	}
+	if res := idx.SyncFiles(changes.Added, Options{}); len(res.Errors) != 0 {
+		t.Fatalf("index committed SpecScore file: %+v", res.Errors)
+	}
+	if err := idx.MarkCurrentGitHead(); err != nil {
+		t.Fatalf("mark refreshed git head: %v", err)
+	}
+
+	writeFile(t, tracked, `---
+format: https://specscore.md/feature-specification
+status: Implementing
+---
+
+# Feature: Checkout
+`)
+	untracked := filepath.Join(dir, "spec", "features", "returns", "README.md")
+	writeFile(t, untracked, `---
+format: https://specscore.md/feature-specification
+status: Draft
+---
+
+# Feature: Returns
+`)
+	changes = idx.GetChangedFiles()
+	if !slices.Contains(changes.Modified, "spec/features/checkout/README.md") || !slices.Contains(changes.Added, "spec/features/returns/README.md") {
+		t.Fatalf("dirty SpecScore changes = %+v", changes)
+	}
+}
+
+func TestGitChangedFilesPreservesSpaceInPath(t *testing.T) {
+	dir, _ := newGitSyncProject(t)
+	path := filepath.Join(dir, "src", "a quoted name.ts")
+	writeFile(t, path, "export function spaced() {}")
+	mustGit(t, dir, "add", "-A")
+	mustGit(t, dir, "commit", "-m", "add spaced path")
+	writeFile(t, path, "export function changed() {}")
+
+	changes, ok := gitChangedFiles(dir)
+	if !ok || !slices.Contains(changes.modified, "src/a quoted name.ts") {
+		t.Fatalf("git changes = %+v, ok=%v; want literal spaced path", changes, ok)
+	}
+}
+
 // --- SyncFiles -----------------------------------------------------------------
 
 func TestSyncFilesBoundedSet(t *testing.T) {
@@ -414,5 +664,323 @@ func TestSyncResolvesCrossFileEdges(t *testing.T) {
 	}
 	if n, _ := idx.Store().GetUnresolvedReferencesCount(); n != 0 {
 		t.Errorf("unresolved refs after sync = %d, want 0", n)
+	}
+}
+
+// A changed definition receives a new node ID when its source range changes.
+// Reindexing it must preserve edges from unchanged callers by re-resolving
+// their saved unresolved references after the old target is deleted.
+func TestSyncChangedCalleePreservesIncomingCallerEdges(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "lib.go"), "package main\n\nfunc Helper() {}\n")
+	writeFile(t, filepath.Join(dir, "main.go"), "package main\n\nfunc main() { Helper() }\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+
+	caller, err := idx.Store().GetNodesByName("main")
+	if err != nil || len(caller) != 1 {
+		t.Fatalf("caller: %v %d", err, len(caller))
+	}
+
+	// Prefixing a line changes the extracted callee ID without touching main.go.
+	writeFile(t, filepath.Join(dir, "lib.go"), "package main\n\n\nfunc Helper() {}\n")
+	res := idx.SyncFiles([]string{"lib.go"}, Options{})
+	if res.FilesModified != 1 {
+		t.Fatalf("SyncFiles result = %+v, want one modified file", res)
+	}
+
+	edges, err := idx.Store().GetOutgoingEdges(caller[0].ID, []model.EdgeKind{model.EdgeCalls}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(edges) != 1 {
+		t.Fatalf("caller edges after changed callee = %+v, want one call edge", edges)
+	}
+	target, err := idx.Store().GetNodeByID(edges[0].Target)
+	if err != nil || target == nil || target.Name != "Helper" {
+		t.Fatalf("edge target = %+v, %v; want Helper", target, err)
+	}
+}
+
+func TestSyncBodyOnlyCalleeEditPreservesSameIDIncomingEdge(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "callee.go"), "package main\n\nfunc Helper() { _ = 1 }\n")
+	writeFile(t, filepath.Join(dir, "caller.go"), "package main\n\nfunc main() { Helper() }\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	caller, err := idx.Store().GetNodesByName("main")
+	if err != nil || len(caller) != 1 {
+		t.Fatalf("caller: %v %d", err, len(caller))
+	}
+	writeFile(t, filepath.Join(dir, "callee.go"), "package main\n\nfunc Helper() { _ = 2 }\n")
+	res := idx.SyncFiles([]string{"callee.go"}, Options{})
+	if len(res.Errors) != 0 {
+		t.Fatalf("sync: %+v", res.Errors)
+	}
+	edges, err := idx.Store().GetOutgoingEdges(caller[0].ID, []model.EdgeKind{model.EdgeCalls}, "")
+	if err != nil || len(edges) != 1 {
+		t.Fatalf("caller edges = %+v, %v; want one", edges, err)
+	}
+	target, err := idx.Store().GetNodeByID(edges[0].Target)
+	if err != nil || target == nil || target.Name != "Helper" {
+		t.Fatalf("target = %+v, %v", target, err)
+	}
+}
+
+func TestSyncChangedCalleeFailureDoesNotRestoreDuplicateEdges(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "lib.go"), "package main\n\nfunc Helper() {}\n")
+	writeFile(t, filepath.Join(dir, "main.go"), "package main\n\nfunc main() { Helper() }\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	caller, err := idx.Store().GetNodesByName("main")
+	if err != nil || len(caller) != 1 {
+		t.Fatalf("caller: %v %d", err, len(caller))
+	}
+
+	// A policy-skipped replacement removes stale definition nodes and their
+	// callers' target edge; retries must not recreate stale graph data.
+	writeFile(t, filepath.Join(dir, "lib.go"), strings.Repeat("x", MaxFileSize+1))
+	for attempt := 0; attempt < 2; attempt++ {
+		res := idx.SyncFiles([]string{"lib.go"}, Options{})
+		if attempt == 0 && len(res.Errors) == 0 {
+			t.Fatalf("attempt %d errors = none, want extraction failure", attempt)
+		}
+		edges, err := idx.Store().GetOutgoingEdges(caller[0].ID, []model.EdgeKind{model.EdgeCalls}, "")
+		if err != nil || len(edges) != 0 {
+			t.Fatalf("attempt %d edges = %+v, %v; want no stale edge", attempt, edges, err)
+		}
+	}
+}
+
+func TestSyncMixedBatchPreservesSuccessfulCalleeRelationships(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "lib.go"), "package main\nfunc Helper() {}\n")
+	writeFile(t, filepath.Join(dir, "main.go"), "package main\nfunc main() { Helper() }\n")
+	writeFile(t, filepath.Join(dir, "bad.go"), "package main\nfunc Bad() {}\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	caller, _ := idx.Store().GetNodesByName("main")
+	writeFile(t, filepath.Join(dir, "lib.go"), "package main\n\nfunc Helper() {}\n")
+	writeFile(t, filepath.Join(dir, "bad.go"), strings.Repeat("x", MaxFileSize+1))
+	res := idx.SyncFiles([]string{"lib.go", "bad.go"}, Options{})
+	if len(res.Errors) == 0 {
+		t.Fatal("mixed sync should report failed file")
+	}
+	edges, err := idx.Store().GetOutgoingEdges(caller[0].ID, []model.EdgeKind{model.EdgeCalls}, "")
+	if err != nil || len(edges) != 1 {
+		t.Fatalf("successful callee edge = %+v, %v", edges, err)
+	}
+}
+
+func TestSyncMixedBatchResolvesSuccessfulCallerDespiteFailedFile(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "lib.go"), "package main\nfunc Helper() {}\nfunc Other() {}\n")
+	writeFile(t, filepath.Join(dir, "caller.go"), "package main\nfunc Caller() { Helper() }\n")
+	writeFile(t, filepath.Join(dir, "bad.go"), "package main\nfunc Bad() {}\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, filepath.Join(dir, "caller.go"), "package main\nfunc Caller() { Other() }\n")
+	writeFile(t, filepath.Join(dir, "bad.go"), strings.Repeat("x", MaxFileSize+1))
+	for attempt := 0; attempt < 2; attempt++ {
+		res := idx.SyncFiles([]string{"caller.go", "bad.go"}, Options{})
+		if attempt == 0 && len(res.Errors) == 0 {
+			t.Fatalf("attempt %d should report bad.go", attempt)
+		}
+		caller, err := idx.Store().GetNodesByName("Caller")
+		if err != nil || len(caller) != 1 {
+			t.Fatalf("caller: %v %d", err, len(caller))
+		}
+		edges, err := idx.Store().GetOutgoingEdges(caller[0].ID, []model.EdgeKind{model.EdgeCalls}, "")
+		if err != nil || len(edges) != 1 {
+			t.Fatalf("attempt %d edges = %+v, %v", attempt, edges, err)
+		}
+		target, err := idx.Store().GetNodeByID(edges[0].Target)
+		if err != nil || target == nil || target.Name != "Other" {
+			t.Fatalf("attempt %d target = %+v, %v", attempt, target, err)
+		}
+		if unresolved, err := idx.Store().GetUnresolvedReferencesCount(); err != nil || unresolved != 0 {
+			t.Fatalf("attempt %d unresolved = %d, %v", attempt, unresolved, err)
+		}
+	}
+}
+
+func TestRestoreIncomingEdgesKeepsSameQualifiedOverloadsDistinct(t *testing.T) {
+	_, idx := newSyncProject(t)
+	s := idx.Store()
+	oldInt := model.Node{ID: "method:old-int", Kind: model.KindMethod, Name: "Run", QualifiedName: "Service::Run", FilePath: "Service.cs", Language: model.LangCSharp, Signature: "Run(int value)", ReturnType: "void", StartLine: 1, EndLine: 2}
+	oldString := oldInt
+	oldString.ID, oldString.Signature = "method:old-string", "Run(string value)"
+	caller := model.Node{ID: "method:caller", Kind: model.KindMethod, Name: "Call", QualifiedName: "Caller::Call", FilePath: "Caller.cs", Language: model.LangCSharp, StartLine: 1, EndLine: 2}
+	if err := s.InsertNodes([]model.Node{oldInt, oldString, caller}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InsertEdges([]model.Edge{{Source: caller.ID, Target: oldInt.ID, Kind: model.EdgeCalls}, {Source: caller.ID, Target: oldString.ID, Kind: model.EdgeCalls}}); err != nil {
+		t.Fatal(err)
+	}
+	backups := []incomingEdgeBackup{
+		{store: s, target: oldInt, edge: model.Edge{Source: caller.ID, Target: oldInt.ID, Kind: model.EdgeCalls}},
+		{store: s, target: oldString, edge: model.Edge{Source: caller.ID, Target: oldString.ID, Kind: model.EdgeCalls}},
+	}
+	if err := s.DeleteNodesByFile("Service.cs"); err != nil {
+		t.Fatal(err)
+	}
+	newInt := oldInt
+	newInt.ID = "method:new-int"
+	newString := oldString
+	newString.ID = "method:new-string"
+	if err := s.InsertNodes([]model.Node{newInt, newString}); err != nil {
+		t.Fatal(err)
+	}
+	if err := idx.restoreIncomingEdges(backups); err != nil {
+		t.Fatal(err)
+	}
+	edges, err := s.GetOutgoingEdges(caller.ID, []model.EdgeKind{model.EdgeCalls}, "")
+	if err != nil || len(edges) != 2 {
+		t.Fatalf("restored overload edges = %+v, %v", edges, err)
+	}
+	got := map[string]bool{}
+	for _, edge := range edges {
+		got[edge.Target] = true
+	}
+	if !got[newInt.ID] || !got[newString.ID] {
+		t.Fatalf("overload targets = %v, want distinct int/string targets", got)
+	}
+}
+
+func TestSyncHashesSameSizeSameMillisecondFileChanges(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	writeFile(t, path, "package main\n\nfunc Old() {}\n")
+	mustGit(t, dir, "init")
+	mustGit(t, dir, "add", "main.go")
+	mustGit(t, dir, "commit", "-m", "initial")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	rec, err := idx.Store().GetFileByPath("main.go")
+	if err != nil || rec == nil {
+		t.Fatalf("file record: %v, %+v", err, rec)
+	}
+
+	writeFile(t, path, "package main\n\nfunc New() {}\n") // same byte length
+	oldTime := time.UnixMilli(rec.ModifiedAt)
+	if err := os.Chtimes(path, oldTime, oldTime); err != nil {
+		t.Fatal(err)
+	}
+	changes := idx.GetChangedFiles()
+	if !slices.Contains(changes.Modified, "main.go") {
+		t.Fatalf("same-size/same-millisecond changes = %+v, want main.go modified", changes)
+	}
+	res := idx.Sync(Options{})
+	if res.FilesModified != 1 || !hasNodeNamed(t, idx, "New") {
+		t.Fatalf("Sync result = %+v; New indexed = %v, want changed file indexed", res, hasNodeNamed(t, idx, "New"))
+	}
+}
+
+func TestGetChangedFilesHashesSameMtimeNonGitEdit(t *testing.T) {
+	dir, idx := newSyncProject(t)
+	path := filepath.Join(dir, "src", "index.ts")
+	rec, err := idx.fileRecord("src/index.ts")
+	if err != nil || rec == nil {
+		t.Fatalf("record: %+v %v", rec, err)
+	}
+	writeFile(t, path, "export function cello() { return 'world'; }")
+	tm := time.UnixMilli(rec.ModifiedAt)
+	if err := os.Chtimes(path, tm, tm); err != nil {
+		t.Fatal(err)
+	}
+	changes := idx.GetChangedFiles()
+	if !slices.Contains(changes.Modified, "src/index.ts") {
+		t.Fatalf("non-git same-mtime changes = %+v", changes)
+	}
+}
+
+func TestRefreshForReadIgnoresUnchangedOversizedPolicySkip(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "main.go"), "package main\nfunc Good() {}\n")
+	big := filepath.Join(dir, "generated.go")
+	writeFile(t, big, strings.Repeat("x", MaxFileSize+1))
+	idx, result, err := Init(dir, Options{})
+	if err != nil || !result.Success {
+		t.Fatalf("Init: %+v %v", result, err)
+	}
+	defer func() { _ = idx.Close() }()
+	for i := 0; i < 2; i++ {
+		res, err := idx.RefreshForRead(Options{})
+		if err != nil || len(res.Errors) != 0 {
+			t.Fatalf("refresh %d: %+v %v", i, res, err)
+		}
+	}
+	writeFile(t, big, "package main\nfunc Generated() {}\n")
+	res, err := idx.RefreshForRead(Options{})
+	if err != nil || len(res.Errors) != 0 || !hasNodeNamed(t, idx, "Generated") {
+		t.Fatalf("shrunk generated refresh: %+v %v", res, err)
+	}
+}
+
+func TestOversizedReplacementRemovesStaleSymbolsUntilShrunk(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "lib.go")
+	writeFile(t, path, "package main\nfunc Helper() {}\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, path, strings.Repeat("x", MaxFileSize+1))
+	first := idx.SyncFiles([]string{"lib.go"}, Options{})
+	if len(first.Errors) == 0 {
+		t.Fatal("first oversized replacement should warn")
+	}
+	for i := 0; i < 2; i++ {
+		if hasNodeNamed(t, idx, "Helper") {
+			t.Fatalf("attempt %d retained stale Helper", i)
+		}
+		res := idx.SyncFiles([]string{"lib.go"}, Options{})
+		if len(res.Errors) != 0 {
+			t.Fatalf("repeat %d = %+v", i, res.Errors)
+		}
+	}
+	writeFile(t, path, "package main\nfunc Recovered() {}\n")
+	res := idx.SyncFiles([]string{"lib.go"}, Options{})
+	if len(res.Errors) != 0 || !hasNodeNamed(t, idx, "Recovered") {
+		t.Fatalf("shrink = %+v", res)
+	}
+}
+
+func TestSyncStreamsOversizedReplacementAndRemovesStaleGraph(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "lib.go")
+	writeFile(t, path, "package main\nfunc Helper() {}\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, path, strings.Repeat("x", MaxFileSize+1))
+	res := idx.Sync(Options{})
+	if len(res.Errors) == 0 || hasNodeNamed(t, idx, "Helper") {
+		t.Fatalf("oversized Sync = %+v, stale Helper=%v", res, hasNodeNamed(t, idx, "Helper"))
+	}
+	if rec, err := idx.fileRecord("lib.go"); err != nil || rec == nil || rec.ContentHash == "" {
+		t.Fatalf("skip fingerprint = %+v, %v", rec, err)
 	}
 }

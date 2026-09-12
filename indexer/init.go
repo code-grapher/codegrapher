@@ -1,7 +1,10 @@
 package indexer
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -36,6 +39,9 @@ func Init(projectRoot string, opts Options) (*Indexer, IndexResult, error) {
 	}
 	reg, err := OpenRegistry(root, storeOptsFrom(opts)...)
 	if err != nil {
+		return nil, IndexResult{}, err
+	}
+	if _, err := reg.Store(scope.Scope{Language: model.LangUnknown, Version: "1"}); err != nil {
 		return nil, IndexResult{}, err
 	}
 	idx := newIndexer(root, reg)
@@ -96,6 +102,9 @@ func (idx *Indexer) IndexAll(opts Options) IndexResult {
 		}
 	}
 	defer idx.lock.Release()
+	if err := idx.invalidateGitHead(); err != nil {
+		return IndexResult{Success: false, Errors: []model.ExtractionError{{Message: err.Error(), Severity: "error", Code: "git_head_metadata_error"}}}
+	}
 
 	return idx.indexAllLocked(opts)
 }
@@ -105,10 +114,21 @@ func (idx *Indexer) IndexAll(opts Options) IndexResult {
 // stamping entirely (missing metadata reads as ""). Read from the primary
 // scope store, which carries the same stamp as every other scope.
 func (idx *Indexer) indexVersionStale() bool {
-	s := idx.Store()
-	v, _ := s.GetMetadata("indexed_with_version")
-	ev, _ := s.GetMetadata("indexed_with_extraction_version")
-	return v != PackageVersion || ev != strconv.Itoa(ExtractionVersion)
+	stores := idx.Stores()
+	if len(stores) == 0 {
+		return true
+	}
+	for _, s := range stores {
+		v, err := s.GetMetadata("indexed_with_version")
+		if err != nil || v != PackageVersion {
+			return true
+		}
+		ev, err := s.GetMetadata("indexed_with_extraction_version")
+		if err != nil || ev != strconv.Itoa(ExtractionVersion) {
+			return true
+		}
+	}
+	return false
 }
 
 // indexAllLocked indexes every source file. The caller MUST already hold
@@ -135,24 +155,47 @@ func (idx *Indexer) indexAllLocked(opts Options) IndexResult {
 	// Phase 2: concurrent extraction, serialized store writes.
 	idx.extractAndStore(files, opts, &result)
 
-	result.Success = result.FilesIndexed > 0 || !hasSevereError(result.Errors)
+	result.Success = !hasSevereError(result.Errors)
 
 	// Phase 3: resolution.
 	if result.Success && result.FilesIndexed > 0 {
 		idx.resolveAll(opts, &result)
+		result.Success = !hasSevereError(result.Errors)
+	}
+	if result.Success && result.FilesIndexed == 0 {
+		for _, s := range idx.Stores() {
+			if err := s.SetMetadata("indexed_with_version", PackageVersion); err != nil {
+				result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "metadata_error"})
+			}
+			if err := s.SetMetadata("indexed_with_extraction_version", strconv.Itoa(ExtractionVersion)); err != nil {
+				result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "metadata_error"})
+			}
+		}
+		result.Success = !hasSevereError(result.Errors)
 	}
 
-	// Phase 4: maintenance + metadata stamp (advisory — never fails a run).
+	// Phase 4: maintenance, trace projection, then metadata. A revision stamp
+	// is a freshness certificate, so write it only after the whole rebuild.
 	if result.Success && result.FilesIndexed > 0 {
 		for _, s := range idx.Stores() {
 			s.RunMaintenance()
-			_ = s.SetMetadata("indexed_with_version", PackageVersion)
-			_ = s.SetMetadata("indexed_with_extraction_version", strconv.Itoa(ExtractionVersion))
 		}
 		if err := idx.indexTrace(); err != nil {
 			result.Errors = append(result.Errors, model.ExtractionError{
-				Message: err.Error(), Severity: "warning", Code: "trace_index_error",
+				Message: err.Error(), Severity: "error", Code: "trace_index_error",
 			})
+		}
+		result.Success = !hasSevereError(result.Errors)
+		if result.Success {
+			for _, s := range idx.Stores() {
+				if err := s.SetMetadata("indexed_with_version", PackageVersion); err != nil {
+					result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "metadata_error"})
+				}
+				if err := s.SetMetadata("indexed_with_extraction_version", strconv.Itoa(ExtractionVersion)); err != nil {
+					result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "metadata_error"})
+				}
+			}
+			result.Success = !hasSevereError(result.Errors)
 		}
 
 		if after, err := idx.aggregateStats(); err == nil {
@@ -267,12 +310,38 @@ func (idx *Indexer) extractAndStore(files []string, opts Options, result *IndexR
 			}
 			if job.tooLarge {
 				result.FilesSkipped++
-				result.Errors = append(result.Errors, model.ExtractionError{
+				skipErr := model.ExtractionError{
 					Message:  fmt.Sprintf("File exceeds max size (%d > %d)", job.size, MaxFileSize),
 					FilePath: job.path,
 					Severity: "warning",
 					Code:     "size_exceeded",
-				})
+				}
+				// Keep a content fingerprint for policy-skipped source files. Without
+				// it, every freshness pass treats an unchanged generated file as a
+				// new candidate and makes normal symbol reads fail forever.
+				hash, readErr := hashFile(filepath.Join(idx.root, job.path))
+				if readErr != nil {
+					result.FilesErrored++
+					result.Errors = append(result.Errors, model.ExtractionError{Message: fmt.Sprintf("Failed to read file: %v", readErr), FilePath: job.path, Severity: "error", Code: "read_error"})
+					continue
+				}
+				s, serr := idx.scopeStoreForFile(job.path, job.lang)
+				if serr == nil {
+					// A policy skip must not leave symbols from the previous, now
+					// uninspectable source body available to node/source retrieval.
+					if err := s.DeleteFile(job.path); err != nil {
+						serr = err
+					}
+				}
+				if serr == nil {
+					serr = s.UpsertFile(model.FileRecord{Path: job.path, ContentHash: hash, Language: job.lang, Size: job.size, ModifiedAt: job.mtimeMs, IndexedAt: now(), Errors: []model.ExtractionError{skipErr}})
+				}
+				if serr != nil {
+					result.FilesErrored++
+					result.Errors = append(result.Errors, model.ExtractionError{Message: serr.Error(), FilePath: job.path, Severity: "error", Code: "store_error"})
+					continue
+				}
+				result.Errors = append(result.Errors, skipErr)
 				continue
 			}
 
@@ -284,6 +353,9 @@ func (idx *Indexer) extractAndStore(files []string, opts Options, result *IndexR
 						s, job.path, job.content, lang,
 						job.size, job.mtimeMs, job.result, now,
 					)
+					if serr == nil {
+						serr = idx.removeFileFromOtherStores(job.path, s)
+					}
 				}
 				if serr != nil {
 					result.FilesErrored++
@@ -317,6 +389,44 @@ func (idx *Indexer) extractAndStore(files []string, opts Options, result *IndexR
 	opts.progress(IndexProgress{Phase: PhaseParsing, Current: total, Total: total})
 }
 
+func hashFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	h := sha256.New()
+	_, copyErr := io.Copy(h, f)
+	closeErr := f.Close()
+	if copyErr != nil {
+		return "", copyErr
+	}
+	if closeErr != nil {
+		return "", closeErr
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// removeFileFromOtherStores completes a successful scope transition. A path
+// may move from unknown to content-detected SpecScore (or back); leaving its
+// old file node behind would make every freshness pass rediscover it.
+func (idx *Indexer) removeFileFromOtherStores(path string, keep *store.Store) error {
+	for _, s := range idx.Stores() {
+		if s == keep {
+			continue
+		}
+		rec, err := s.GetFileByPath(path)
+		if err != nil {
+			return err
+		}
+		if rec != nil {
+			if err := s.DeleteFile(path); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // extractOne reads and parses a single file (no store access — safe to run
 // concurrently).
 func extractOne(rootDir, relPath string) extractJob {
@@ -343,6 +453,7 @@ func extractOne(rootDir, relPath string) extractJob {
 	// pure-unknown case — a large binary then gets a bare file-level node with
 	// no parse. Recognized-by-extension files keep the cap as before.
 	pathLang := extract.DetectLanguage(relPath)
+	job.lang = pathLang
 	if pathLang != model.LangUnknown && job.size > MaxFileSize {
 		job.tooLarge = true
 		return job

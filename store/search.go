@@ -13,6 +13,42 @@ import (
 	"github.com/specscore/codegrapher/model"
 )
 
+// SymbolFilters constrains symbol searches before SQLite applies a result
+// limit. Each non-empty group is ORed case-insensitively.
+type SymbolFilters struct {
+	PathContains []string
+	NameContains []string
+}
+
+func appendSymbolFilters(q string, args []any, f SymbolFilters, prefix string) (string, []any) {
+	if prefix != "" {
+		prefix += "."
+	}
+	if len(f.PathContains) > 0 {
+		terms := make([]string, 0, len(f.PathContains))
+		for _, p := range f.PathContains {
+			terms = append(terms, "lower("+prefix+"file_path) LIKE ? ESCAPE '\\'")
+			args = append(args, "%"+escapeLike(strings.ToLower(p))+"%")
+		}
+		q += " AND (" + strings.Join(terms, " OR ") + ")"
+	}
+	if len(f.NameContains) > 0 {
+		terms := make([]string, 0, len(f.NameContains))
+		for _, n := range f.NameContains {
+			terms = append(terms, "lower("+prefix+"name) LIKE ? ESCAPE '\\'")
+			args = append(args, "%"+escapeLike(strings.ToLower(n))+"%")
+		}
+		q += " AND (" + strings.Join(terms, " OR ") + ")"
+	}
+	return q, args
+}
+
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, "%", `\%`)
+	return strings.ReplaceAll(s, "_", `\_`)
+}
+
 // SearchFTS runs an FTS5 prefix-match query against nodes_fts and returns
 // (node, raw-bm25-score) pairs. The BM25 column weights mirror the original:
 // id=0, name=20, qualified_name=5, docstring=1, signature=2.
@@ -24,6 +60,10 @@ func (s *Store) SearchFTS(
 	langs []model.Language,
 	limit, offset int,
 ) ([]model.SearchResult, error) {
+	return s.SearchFTSFiltered(text, kinds, langs, limit, offset, SymbolFilters{})
+}
+
+func (s *Store) SearchFTSFiltered(text string, kinds []model.NodeKind, langs []model.Language, limit, offset int, filters SymbolFilters) ([]model.SearchResult, error) {
 	ftsQuery := buildFTSQuery(text)
 	if ftsQuery == "" {
 		return nil, nil
@@ -56,6 +96,7 @@ func (s *Store) SearchFTS(
 			args = append(args, string(l))
 		}
 	}
+	sql, args = appendSymbolFilters(sql, args, filters, "nodes")
 	sql += ` ORDER BY score LIMIT ? OFFSET ?`
 	args = append(args, fetchLimit, offset)
 
@@ -88,6 +129,10 @@ func (s *Store) SearchLike(
 	langs []model.Language,
 	limit, offset int,
 ) ([]model.SearchResult, error) {
+	return s.SearchLikeFiltered(text, kinds, langs, limit, offset, SymbolFilters{})
+}
+
+func (s *Store) SearchLikeFiltered(text string, kinds []model.NodeKind, langs []model.Language, limit, offset int, filters SymbolFilters) ([]model.SearchResult, error) {
 	exact := text
 	startsWith := text + "%"
 	contains := "%" + text + "%"
@@ -119,6 +164,7 @@ func (s *Store) SearchLike(
 			args = append(args, string(l))
 		}
 	}
+	q, args = appendSymbolFilters(q, args, filters, "")
 	q += ` ORDER BY score DESC, length(name) ASC LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 
@@ -153,14 +199,33 @@ func (s *Store) SearchFuzzy(
 	limit int,
 	editDistFn func(a, b string, max int) int,
 ) ([]model.SearchResult, error) {
+	return s.SearchFuzzyFiltered(text, kinds, langs, limit, editDistFn, SymbolFilters{})
+}
+
+func (s *Store) SearchFuzzyFiltered(text string, kinds []model.NodeKind, langs []model.Language, limit int, editDistFn func(a, b string, max int) int, filters SymbolFilters) ([]model.SearchResult, error) {
 	lowered := strings.ToLower(text)
 	maxDist := 2
 	if len(lowered) <= 4 {
 		maxDist = 1
 	}
 
-	// Pull distinct names.
-	rows, err := s.db.Query(`SELECT DISTINCT name FROM nodes`)
+	// Pull only names that can produce a filtered result, before the fuzzy cap.
+	q := `SELECT DISTINCT name FROM nodes WHERE 1=1`
+	var args []any
+	if len(kinds) > 0 {
+		q += ` AND kind IN (` + placeholders(len(kinds)) + `)`
+		for _, k := range kinds {
+			args = append(args, string(k))
+		}
+	}
+	if len(langs) > 0 {
+		q += ` AND language IN (` + placeholders(len(langs)) + `)`
+		for _, l := range langs {
+			args = append(args, string(l))
+		}
+	}
+	q, args = appendSymbolFilters(q, args, filters, "")
+	rows, err := s.db.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -213,6 +278,7 @@ func (s *Store) SearchFuzzy(
 				args = append(args, string(l))
 			}
 		}
+		q, args = appendSymbolFilters(q, args, filters, "")
 		q += ` LIMIT 5`
 		nodeRows, err := s.db.Query(q, args...)
 		if err != nil {
@@ -244,6 +310,10 @@ func (s *Store) SearchAllByFilters(
 	langs []model.Language,
 	limit int,
 ) ([]model.SearchResult, error) {
+	return s.SearchAllByFiltersAndSymbolFilters(kinds, langs, limit, SymbolFilters{})
+}
+
+func (s *Store) SearchAllByFiltersAndSymbolFilters(kinds []model.NodeKind, langs []model.Language, limit int, filters SymbolFilters) ([]model.SearchResult, error) {
 	q := `SELECT ` + nodeColumns + ` FROM nodes WHERE 1=1`
 	var args []any
 	if len(kinds) > 0 {
@@ -258,6 +328,7 @@ func (s *Store) SearchAllByFilters(
 			args = append(args, string(l))
 		}
 	}
+	q, args = appendSymbolFilters(q, args, filters, "")
 	q += ` ORDER BY name LIMIT ?`
 	args = append(args, limit)
 	rows, err := s.db.Query(q, args...)
@@ -282,6 +353,10 @@ func (s *Store) ExactNameCaseInsensitive(
 	langs []model.Language,
 	limit int,
 ) ([]model.Node, error) {
+	return s.ExactNameCaseInsensitiveFiltered(term, kinds, langs, limit, SymbolFilters{})
+}
+
+func (s *Store) ExactNameCaseInsensitiveFiltered(term string, kinds []model.NodeKind, langs []model.Language, limit int, filters SymbolFilters) ([]model.Node, error) {
 	q := `SELECT ` + nodeColumns + ` FROM nodes WHERE name = ? COLLATE NOCASE`
 	args := []any{term}
 	if len(kinds) > 0 {
@@ -296,6 +371,7 @@ func (s *Store) ExactNameCaseInsensitive(
 			args = append(args, string(l))
 		}
 	}
+	q, args = appendSymbolFilters(q, args, filters, "")
 	q += ` LIMIT ?`
 	args = append(args, limit)
 	rows, err := s.db.Query(q, args...)

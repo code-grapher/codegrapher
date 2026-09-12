@@ -158,6 +158,24 @@ func TestNodes_ByNameFileLowerQualified(t *testing.T) {
 	}
 }
 
+func TestNodes_ByQualifiedNameSuffix(t *testing.T) {
+	s := newTestStore(t)
+	for _, n := range []model.Node{
+		testNode("method:one", "Run", "one.go", 1),
+		testNode("method:two", "Run", "two.go", 2),
+	} {
+		n.Kind = model.KindMethod
+		n.QualifiedName = "Service::Run"
+		if err := s.InsertNode(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.GetNodesByQualifiedNameSuffix("Service::Run")
+	if err != nil || len(got) != 2 {
+		t.Fatalf("GetNodesByQualifiedNameSuffix = %d, %v", len(got), err)
+	}
+}
+
 func TestEdges_EndpointFilterAndQueries(t *testing.T) {
 	s := newTestStore(t)
 	if err := s.InsertNodes([]model.Node{
@@ -196,6 +214,53 @@ func TestEdges_EndpointFilterAndQueries(t *testing.T) {
 	// match the original's dedupe-by-content behavior at the edge level).
 	if err := s.InsertEdge(edges[0]); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestEdges_LimitedQueriesAreOrderedAndBoundedInSQL(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.InsertNodes([]model.Node{
+		testNode("source", "source", "source.go", 1),
+		testNode("target-c", "c", "c.go", 1),
+		testNode("target-a", "a", "a.go", 1),
+		testNode("target-b", "b", "b.go", 1),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InsertEdges([]model.Edge{
+		{Source: "source", Target: "target-c", Kind: model.EdgeReferences, Line: 3},
+		{Source: "source", Target: "target-a", Kind: model.EdgeCalls, Line: 9},
+		{Source: "source", Target: "target-b", Kind: model.EdgeCalls, Line: 2},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := s.GetOutgoingEdgesLimited("source", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 2 || out[0].Target != "target-a" || out[1].Target != "target-b" {
+		t.Fatalf("limited outgoing = %+v, want calls ordered by target", out)
+	}
+	in, err := s.GetIncomingEdgesLimited("target-a", 1)
+	if err != nil || len(in) != 1 || in[0].Source != "source" {
+		t.Fatalf("limited incoming = %+v, %v", in, err)
+	}
+}
+
+func TestEdges_LimitedQueriesBreakTiesDeterministically(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.InsertNodes([]model.Node{testNode("s", "s", "s.go", 1), testNode("t", "t", "t.go", 1)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InsertEdges([]model.Edge{
+		{Source: "s", Target: "t", Kind: model.EdgeCalls, Line: 1, Provenance: "z"},
+		{Source: "s", Target: "t", Kind: model.EdgeCalls, Line: 1, Provenance: "a"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetOutgoingEdgesLimited("s", 1)
+	if err != nil || len(got) != 1 || got[0].Provenance != "a" {
+		t.Fatalf("tied limited edges = %+v, %v", got, err)
 	}
 }
 

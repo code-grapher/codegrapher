@@ -172,6 +172,19 @@ func (s *Store) GetNodesByQualifiedNameExact(qualifiedName string) ([]model.Node
 	return scanNodes(rows)
 }
 
+// GetNodesByQualifiedNameSuffix finds lexical qualified names at the end of a
+// package/module-qualified selector. It lets callers accept both Foo::Bar and
+// package/path.Foo.Bar without broad fuzzy source selection.
+func (s *Store) GetNodesByQualifiedNameSuffix(qualifiedName string) ([]model.Node, error) {
+	rows, err := s.db.Query(
+		`SELECT `+nodeColumns+` FROM nodes WHERE qualified_name = ? OR qualified_name LIKE ?`,
+		qualifiedName, "%::"+qualifiedName)
+	if err != nil {
+		return nil, err
+	}
+	return scanNodes(rows)
+}
+
 // AllNodes returns every node in the store ordered by id.
 func (s *Store) AllNodes() ([]model.Node, error) {
 	rows, err := s.db.Query(`SELECT ` + nodeColumns + ` FROM nodes ORDER BY id`)

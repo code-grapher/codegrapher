@@ -112,17 +112,18 @@ func SearchNodes(s *store.Store, rawQuery string, opts SearchOptions) ([]model.S
 	kinds := mergeKinds(opts.Kinds, parsed.Kinds)
 	langs := mergeLangs(opts.Languages, parsed.Languages)
 	text := parsed.Text
+	filters := store.SymbolFilters{PathContains: parsed.PathFilters, NameContains: parsed.NameFilters}
 
 	var results []model.SearchResult
 	var err error
 
 	if text != "" {
-		results, err = s.SearchFTS(text, kinds, langs, opts.Limit, opts.Offset)
+		results, err = s.SearchFTSFiltered(text, kinds, langs, opts.Limit, opts.Offset, filters)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		results, err = s.SearchAllByFilters(kinds, langs, opts.Limit*5)
+		results, err = s.SearchAllByFiltersAndSymbolFilters(kinds, langs, opts.Limit*5, filters)
 		if err != nil {
 			return nil, err
 		}
@@ -130,7 +131,7 @@ func SearchNodes(s *store.Store, rawQuery string, opts SearchOptions) ([]model.S
 
 	// LIKE fallback.
 	if len(results) == 0 && len(text) >= 2 {
-		results, err = s.SearchLike(text, kinds, langs, opts.Limit, opts.Offset)
+		results, err = s.SearchLikeFiltered(text, kinds, langs, opts.Limit, opts.Offset, filters)
 		if err != nil {
 			return nil, err
 		}
@@ -138,7 +139,7 @@ func SearchNodes(s *store.Store, rawQuery string, opts SearchOptions) ([]model.S
 
 	// Fuzzy fallback.
 	if len(results) == 0 && len(text) >= 3 {
-		results, err = s.SearchFuzzy(text, kinds, langs, opts.Limit, BoundedEditDistance)
+		results, err = s.SearchFuzzyFiltered(text, kinds, langs, opts.Limit, BoundedEditDistance, filters)
 		if err != nil {
 			return nil, err
 		}
@@ -160,7 +161,7 @@ func SearchNodes(s *store.Store, rawQuery string, opts SearchOptions) ([]model.S
 			if len(term) < 2 {
 				continue
 			}
-			extras, err := s.ExactNameCaseInsensitive(term, kinds, langs, 20)
+			extras, err := s.ExactNameCaseInsensitiveFiltered(term, kinds, langs, 20, filters)
 			if err != nil {
 				return nil, err
 			}
@@ -195,42 +196,6 @@ func SearchNodes(s *store.Store, rawQuery string, opts SearchOptions) ([]model.S
 		if len(results) > opts.Limit {
 			results = results[:opts.Limit]
 		}
-	}
-
-	// Apply path: and name: hard filters.
-	if len(parsed.PathFilters) > 0 {
-		lowered := make([]string, len(parsed.PathFilters))
-		for i, p := range parsed.PathFilters {
-			lowered[i] = strings.ToLower(p)
-		}
-		filtered := results[:0:0]
-		for _, r := range results {
-			fp := strings.ToLower(r.Node.FilePath)
-			for _, p := range lowered {
-				if strings.Contains(fp, p) {
-					filtered = append(filtered, r)
-					break
-				}
-			}
-		}
-		results = filtered
-	}
-	if len(parsed.NameFilters) > 0 {
-		lowered := make([]string, len(parsed.NameFilters))
-		for i, n := range parsed.NameFilters {
-			lowered[i] = strings.ToLower(n)
-		}
-		filtered := results[:0:0]
-		for _, r := range results {
-			nm := strings.ToLower(r.Node.Name)
-			for _, n := range lowered {
-				if strings.Contains(nm, n) {
-					filtered = append(filtered, r)
-					break
-				}
-			}
-		}
-		results = filtered
 	}
 
 	// Sort generated files last (stable, matching bin/codegraph.ts behavior).

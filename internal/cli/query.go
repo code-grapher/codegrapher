@@ -13,6 +13,7 @@ import (
 func newQueryCmd() *cobra.Command {
 	var jsonOut bool
 	var format string
+	var brief bool
 	var limit int
 	var kind string
 	var pathFlag string
@@ -59,6 +60,9 @@ func newQueryCmd() *cobra.Command {
 			if wantsJSON(format, jsonOut) {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
+				if brief {
+					return enc.Encode(briefSearchResults(results))
+				}
 				if results == nil {
 					results = []model.SearchResult{}
 				}
@@ -87,11 +91,45 @@ func newQueryCmd() *cobra.Command {
 	}
 
 	addJSONOutputFlags(cmd, &format, &jsonOut)
+	cmd.Flags().BoolVar(&brief, "brief", false, "Return compact symbol metadata (use with --format json)")
 	cmd.Flags().IntVarP(&limit, "limit", "l", 10, "Maximum results")
 	cmd.Flags().StringVarP(&kind, "kind", "k", "", "Filter by node kind")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
 	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
 	return cmd
+}
+
+// BriefSymbol is the compact, stable discovery shape for automation. It
+// intentionally excludes documentation, decorators, and result scores so an
+// agent can choose a symbol before requesting its source with `node`.
+type BriefSymbol struct {
+	ID            string         `json:"id"`
+	Kind          model.NodeKind `json:"kind"`
+	Name          string         `json:"name"`
+	QualifiedName string         `json:"qualifiedName"`
+	FilePath      string         `json:"filePath"`
+	Language      model.Language `json:"language"`
+	StartLine     int            `json:"startLine"`
+	EndLine       int            `json:"endLine"`
+	StartColumn   int            `json:"startColumn"`
+	EndColumn     int            `json:"endColumn"`
+	Signature     string         `json:"signature,omitempty"`
+}
+
+func briefSearchResults(results []model.SearchResult) []BriefSymbol {
+	if len(results) == 0 {
+		return []BriefSymbol{}
+	}
+	out := make([]BriefSymbol, 0, len(results))
+	for _, r := range results {
+		n := r.Node
+		out = append(out, BriefSymbol{
+			ID: n.ID, Kind: n.Kind, Name: n.Name, QualifiedName: n.QualifiedName,
+			FilePath: n.FilePath, Language: n.Language, StartLine: n.StartLine, EndLine: n.EndLine,
+			StartColumn: n.StartColumn, EndColumn: n.EndColumn, Signature: n.Signature,
+		})
+	}
+	return out
 }
 
 func padRight(s string) string {

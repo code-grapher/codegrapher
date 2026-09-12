@@ -3,6 +3,7 @@ package indexer
 import (
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -89,5 +90,54 @@ func TestSyncEscalatesWhenVersionMetadataMissing(t *testing.T) {
 
 	if !res.FullReindex {
 		t.Fatalf("FullReindex = false, want true when version metadata is missing")
+	}
+}
+
+func TestRefreshForReadHonorsStaleExtractionVersion(t *testing.T) {
+	dir, idx := newSyncProject(t)
+	setMeta(t, idx, "indexed_with_extraction_version", "0")
+	writeFile(t, filepath.Join(dir, "src", "index.ts"), "export function refreshed() {}")
+	res, err := idx.RefreshForRead(Options{})
+	if err != nil || !res.FullReindex {
+		t.Fatalf("RefreshForRead = %+v, %v; want successful full rebuild", res, err)
+	}
+	if !hasNodeNamed(t, idx, "refreshed") {
+		t.Fatal("stale-version refresh did not rebuild current source")
+	}
+}
+
+func TestRefreshForReadRebuildsWhenAnyScopeVersionIsStale(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "package.json"), `{"devDependencies":{"typescript":"5.0.0"}}`)
+	writeFile(t, filepath.Join(dir, "src", "a.ts"), "export function A() {}")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	stores := idx.Stores()
+	if len(stores) < 2 {
+		t.Skip("fixture did not create multiple scopes")
+	}
+	if err := stores[1].SetMetadata("indexed_with_extraction_version", "0"); err != nil {
+		t.Fatal(err)
+	}
+	res, err := idx.RefreshForRead(Options{})
+	if err != nil || !res.FullReindex {
+		t.Fatalf("multi-scope refresh = %+v, %v", res, err)
+	}
+}
+
+func TestStaleVersionRebuildStampsUsableIndexWithSkipWarning(t *testing.T) {
+	dir, idx := newSyncProject(t)
+	setMeta(t, idx, "indexed_with_extraction_version", "0")
+	writeFile(t, filepath.Join(dir, "src", "good.ts"), "export function Good() {}")
+	writeFile(t, filepath.Join(dir, "src", "index.ts"), strings.Repeat("x", MaxFileSize+1))
+	res := idx.Sync(Options{})
+	if len(res.Errors) == 0 {
+		t.Fatal("partial rebuild errors = none")
+	}
+	if got := storedMeta(t, idx, "indexed_with_extraction_version"); got != strconv.Itoa(ExtractionVersion) {
+		t.Fatalf("usable rebuild version = %q, want current", got)
 	}
 }
