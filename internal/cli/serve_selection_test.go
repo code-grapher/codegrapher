@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"io"
 	"sync/atomic"
 	"testing"
@@ -54,6 +55,27 @@ func TestRunServeGroupJoinsEveryParticipantAfterParentCancellation(t *testing.T)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("serve group did not return after every participant joined")
+	}
+}
+
+func TestRunServeGroupCancelsAndJoinsSiblingAfterFirstFailure(t *testing.T) {
+	want := errors.New("participant failed")
+	siblingJoined := make(chan struct{})
+	err := runServeGroup(context.Background(), []func(context.Context) error{
+		func(context.Context) error { return want },
+		func(runCtx context.Context) error {
+			<-runCtx.Done()
+			close(siblingJoined)
+			return nil
+		},
+	})
+	if !errors.Is(err, want) {
+		t.Fatalf("serve error = %v, want %v", err, want)
+	}
+	select {
+	case <-siblingJoined:
+	default:
+		t.Fatal("serve group returned before failed participant's sibling joined")
 	}
 }
 

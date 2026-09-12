@@ -79,13 +79,14 @@ globalThis.runCodeGrapherJourney = async (endpoint, token) => {
   const search = await client.searchSymbols(repo.id, repo.revision, 'Alpha', { limit: 5 });
   const symbol = await client.getSymbol(repo.id, repo.revision, search.results[0].symbol.id);
   const graph = await client.getSymbolGraph(repo.id, repo.revision, symbol.symbol.id, { direction: 'both', depth: 1, maxNodes: 10, maxEdges: 10 });
-  let traversalRejected = false;
-  try { await client.getFile(repo.id, repo.revision, '../secret'); } catch { traversalRejected = true; }
-  let zeroLimitRejected = false;
-  try { await client.searchSymbols(repo.id, repo.revision, 'Alpha', { limit: 0 }); } catch { zeroLimitRejected = true; }
-  let zeroDepthRejected = false;
-  try { await client.getSymbolGraph(repo.id, repo.revision, symbol.symbol.id, { depth: 0 }); } catch { zeroDepthRejected = true; }
-  return { apiVersion: status.apiVersion, repositoryCount: listed.repositories.length, treeEntries: tree.entries.length, content: file.content, symbol: symbol.symbol.name, graphNodes: graph.nodes.length, traversalRejected, zeroLimitRejected, zeroDepthRejected };
+  const captureError = async (operation) => {
+    try { await operation(); return null; }
+    catch (error) { return { status: Number(error.status), code: error.body?.code, requestId: error.body?.requestId }; }
+  };
+  const traversalError = await captureError(() => client.getFile(repo.id, repo.revision, '../secret'));
+  const zeroLimitError = await captureError(() => client.searchSymbols(repo.id, repo.revision, 'Alpha', { limit: 0 }));
+  const zeroDepthError = await captureError(() => client.getSymbolGraph(repo.id, repo.revision, symbol.symbol.id, { depth: 0 }));
+  return { apiVersion: status.apiVersion, repositoryCount: listed.repositories.length, treeEntries: tree.entries.length, content: file.content, symbol: symbol.symbol.name, graphNodes: graph.nodes.length, traversalError, zeroLimitError, zeroDepthError };
 };`, clientImport)
 	if err := os.WriteFile(entry, []byte(source), 0o600); err != nil {
 		t.Fatal(err)
@@ -128,22 +129,32 @@ globalThis.runCodeGrapherJourney = async (endpoint, token) => {
 		t.Fatalf("real browser journey: %v\n%s", err, diagnostics.String())
 	}
 	var got struct {
-		APIVersion        string `json:"apiVersion"`
-		RepositoryCount   int    `json:"repositoryCount"`
-		TreeEntries       int    `json:"treeEntries"`
-		Content           string `json:"content"`
-		Symbol            string `json:"symbol"`
-		GraphNodes        int    `json:"graphNodes"`
-		TraversalRejected bool   `json:"traversalRejected"`
-		ZeroLimitRejected bool   `json:"zeroLimitRejected"`
-		ZeroDepthRejected bool   `json:"zeroDepthRejected"`
+		APIVersion      string       `json:"apiVersion"`
+		RepositoryCount int          `json:"repositoryCount"`
+		TreeEntries     int          `json:"treeEntries"`
+		Content         string       `json:"content"`
+		Symbol          string       `json:"symbol"`
+		GraphNodes      int          `json:"graphNodes"`
+		TraversalError  browserError `json:"traversalError"`
+		ZeroLimitError  browserError `json:"zeroLimitError"`
+		ZeroDepthError  browserError `json:"zeroDepthError"`
 	}
 	if err := json.Unmarshal(output, &got); err != nil {
 		t.Fatalf("decode browser result: %v\n%s", err, output)
 	}
-	if got.APIVersion != "v1" || got.RepositoryCount != 1 || got.TreeEntries == 0 || !strings.Contains(got.Content, "func Alpha") || got.Symbol != "Alpha" || got.GraphNodes == 0 || !got.TraversalRejected || !got.ZeroLimitRejected || !got.ZeroDepthRejected {
+	if got.APIVersion != "v1" || got.RepositoryCount != 1 || got.TreeEntries == 0 || !strings.Contains(got.Content, "func Alpha") || got.Symbol != "Alpha" || got.GraphNodes == 0 || !got.TraversalError.matches(http.StatusBadRequest, "invalid_path") || !got.ZeroLimitError.matches(http.StatusUnprocessableEntity, "invalid_limit") || !got.ZeroDepthError.matches(http.StatusUnprocessableEntity, "invalid_depth") {
 		t.Fatalf("browser journey = %+v", got)
 	}
+}
+
+type browserError struct {
+	Status    int    `json:"status"`
+	Code      string `json:"code"`
+	RequestID string `json:"requestId"`
+}
+
+func (e browserError) matches(status int, code string) bool {
+	return e.Status == status && e.Code == code && e.RequestID != ""
 }
 
 func packageRepositoryRoot(t *testing.T) string {

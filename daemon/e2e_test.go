@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -126,6 +127,21 @@ func TestBuiltBinaryDaemonLifecycle(t *testing.T) {
 	stopped := daemonStatus(t, binaryPath, stateDir)
 	if stopped.Lifecycle != daemon.LifecycleStopped || stopped.Health.Live || stopped.PID != 0 {
 		t.Fatalf("stopped status = %+v", stopped)
+	}
+	assertEndpointClosed(t, afterRestart.Endpoint)
+	assertEndpointClosed(t, afterRestart.BrowserEndpoint)
+}
+
+func assertEndpointClosed(t *testing.T, endpoint string) {
+	t.Helper()
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Host == "" {
+		t.Fatalf("invalid endpoint %q: %v", endpoint, err)
+	}
+	connection, err := net.DialTimeout("tcp", parsed.Host, 300*time.Millisecond)
+	if err == nil {
+		_ = connection.Close()
+		t.Fatalf("listener remained reachable after joined stop: %s", endpoint)
 	}
 }
 

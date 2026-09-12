@@ -41,6 +41,7 @@ type Server struct {
 	limits                             Limits
 	origins                            map[string]struct{}
 	freshness                          func() freshness.Status
+	beforeRevisionConfirm              func()
 	handler                            http.Handler
 }
 
@@ -424,6 +425,9 @@ func (s *Server) validRevision(w http.ResponseWriter, r *http.Request) (snapshot
 }
 
 func (s *Server) ensureCurrentRevision(w http.ResponseWriter, revision string) bool {
+	if s.beforeRevisionConfirm != nil {
+		s.beforeRevisionConfirm()
+	}
 	value, err := snapshotIndex(s.idx)
 	if err != nil {
 		s.internalError(w)

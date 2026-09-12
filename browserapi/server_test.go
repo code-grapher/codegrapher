@@ -10,11 +10,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/specscore/codegrapher/freshness"
 	"github.com/specscore/codegrapher/indexer"
+	"github.com/specscore/codegrapher/model"
 )
 
 const testToken = "browser-token"
@@ -159,6 +161,56 @@ func TestRepositoryIdentitySurvivesMoveAndFreshnessErrorIsScrubbed(t *testing.T)
 	}
 }
 
+func TestFileEndpointRejectsIndexedEscapingSymlink(t *testing.T) {
+	root, api := newTestAPI(t, func() freshness.Status { return freshness.Status{IndexCurrent: true} })
+	target := filepath.Join(filepath.Dir(root), "outside.go")
+	content := []byte("package outside\n")
+	if err := os.WriteFile(target, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(root, "escape.go")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := api.idx.Stores()[0].UpsertFile(model.FileRecord{Path: "escape.go", Size: int64(len(content)), ContentHash: indexer.HashContent(content), Language: model.LangGo}); err != nil {
+		t.Fatal(err)
+	}
+	revision, err := api.Revision()
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetURL := BasePath + "/repositories/" + api.RepositoryID() + "/revisions/" + revision + "/files?path=escape.go"
+	assertError(t, request(t, api, http.MethodGet, targetURL, testToken, ""), http.StatusBadRequest, "invalid_path")
+}
+
+func TestRevisionScopedHTTPReadRejectsInterleavedIndexUpdate(t *testing.T) {
+	root, api := newTestAPI(t, func() freshness.Status { return freshness.Status{IndexCurrent: true} })
+	revision, err := api.Revision()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reachedConfirmation := make(chan struct{})
+	releaseConfirmation := make(chan struct{})
+	var once sync.Once
+	api.beforeRevisionConfirm = func() {
+		once.Do(func() {
+			close(reachedConfirmation)
+			<-releaseConfirmation
+		})
+	}
+	target := BasePath + "/repositories/" + api.RepositoryID() + "/revisions/" + revision + "/search?query=Alpha"
+	result := make(chan *httptest.ResponseRecorder, 1)
+	go func() { result <- request(t, api, http.MethodGet, target, testToken, "") }()
+	<-reachedConfirmation
+	if err := os.WriteFile(filepath.Join(root, "helper.go"), []byte("package sample\n\nfunc Interleaved() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if syncResult := api.idx.Sync(indexer.Options{}); syncResult.LockUnavailable || len(syncResult.Errors) != 0 {
+		t.Fatalf("sync fixture: %+v", syncResult)
+	}
+	close(releaseConfirmation)
+	assertError(t, <-result, http.StatusConflict, "revision_changed")
+}
+
 func TestAPIErrorAndBoundedBranches(t *testing.T) {
 	root, api := newTestAPI(t, func() freshness.Status { return freshness.Status{WatchReady: true} })
 	revision, err := api.Revision()
@@ -195,6 +247,20 @@ func TestAPIErrorAndBoundedBranches(t *testing.T) {
 	decodeResponse(t, request(t, api, http.MethodGet, base+"/symbols/"+symbolID+"/graph?maxNodes=1", testToken, ""), &boundedGraph)
 	if len(boundedGraph.Nodes) != 1 || len(boundedGraph.Edges) != 0 || !boundedGraph.Truncated {
 		t.Fatalf("bounded graph broke referential limits: %+v", boundedGraph)
+	}
+	edgeBoundedAPI, err := New(api.idx, Config{Token: testToken, Limits: Limits{MaxGraphDepth: 1, MaxGraphNodes: 10, MaxGraphEdges: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	edgeRevision, err := edgeBoundedAPI.Revision()
+	if err != nil {
+		t.Fatal(err)
+	}
+	edgeBase := BasePath + "/repositories/" + edgeBoundedAPI.RepositoryID() + "/revisions/" + edgeRevision
+	var edgeBoundedGraph GraphResponse
+	decodeResponse(t, request(t, edgeBoundedAPI, http.MethodGet, edgeBase+"/symbols/"+symbolID+"/graph?depth=99&maxNodes=99&maxEdges=99", testToken, ""), &edgeBoundedGraph)
+	if edgeBoundedGraph.Depth != 1 || edgeBoundedGraph.MaxNodes != 10 || edgeBoundedGraph.MaxEdges != 1 || len(edgeBoundedGraph.Edges) != 1 || !edgeBoundedGraph.Truncated {
+		t.Fatalf("graph limits were not effective and explicit: %+v", edgeBoundedGraph)
 	}
 	boundedAPI, err := New(api.idx, Config{Token: testToken, Limits: Limits{MaxTreeEntries: 1, MaxFileBytes: 8, MaxSearchResults: 1, MaxGraphDepth: 1, MaxGraphNodes: 1, MaxGraphEdges: 1}})
 	if err != nil {
@@ -312,7 +378,7 @@ func (failingListener) Addr() net.Addr            { return &net.TCPAddr{} }
 func newTestAPI(t *testing.T, state func() freshness.Status) (string, *Server) {
 	t.Helper()
 	root := t.TempDir()
-	content := "package sample\n\nfunc Alpha() { Beta() }\nfunc Beta() {}\n"
+	content := "package sample\n\nfunc Alpha() { Beta(); Gamma(); Delta() }\nfunc Beta() {}\nfunc Gamma() {}\nfunc Delta() {}\n"
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -96,6 +96,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check:contract
+      - run: pnpm test:contract-drift
       - run: pnpm build:client
       - name: Run generated-client journey in Chrome
         env:

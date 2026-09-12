@@ -1,6 +1,20 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 
+const generatedStatus = () => execFileSync(
+  'git',
+  [
+    'status',
+    '--porcelain',
+    '--untracked-files=all',
+    '--',
+    'api/openapi/v1',
+    'clients/typescript',
+  ],
+  { encoding: 'utf8' },
+).trim()
+
+const statusBeforeGeneration = generatedStatus()
 execFileSync('pnpm', ['generate:contract'], { stdio: 'inherit' })
 const context = readFileSync('clients/typescript/src/api/v1ClientContext.ts', 'utf8')
 if (!context.includes('options?.endpoint ?? "http://127.0.0.1:7331/codegrapher/v1"')) {
@@ -20,22 +34,11 @@ for (const option of ['limit', 'depth', 'maxNodes', 'maxEdges']) {
     throw new Error(`generated client drops an explicit zero ${option}`)
   }
 }
-const status = execFileSync(
-  'git',
-  [
-    'status',
-    '--porcelain',
-    '--untracked-files=all',
-    '--',
-    'api/openapi/v1',
-    'clients/typescript',
-  ],
-  { encoding: 'utf8' },
-).trim()
+const statusAfterGeneration = generatedStatus()
 
-if (status) {
-  process.stderr.write(
-    `Generated browser contract is stale. Run pnpm generate:contract and commit:\n${status}\n`,
-  )
-  process.exit(1)
+if (statusBeforeGeneration || statusAfterGeneration) {
+	process.stderr.write(
+		`Generated browser contract is stale. Run pnpm generate:contract and commit:\n${statusBeforeGeneration || statusAfterGeneration}\n`,
+	)
+	process.exit(1)
 }
