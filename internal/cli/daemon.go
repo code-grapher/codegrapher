@@ -80,6 +80,9 @@ func newDaemonRestartCmd() *cobra.Command {
 			projectPath := ""
 			if len(args) > 0 {
 				projectPath = resolveArg(args)
+				if mismatch := indexer.DetectWorktreeIndexMismatch(watchStartPath(args), projectPath); mismatch != nil {
+					return fmt.Errorf("cannot restart a daemon for a different git worktree's index:\n%s", indexer.WorktreeMismatchWarning(*mismatch))
+				}
 			}
 			manager, err := daemon.NewManager()
 			if err != nil {

@@ -37,7 +37,13 @@ func Run(parent context.Context, projectPath, stateDir, nonce, token string) err
 	if err := ensureStateDir(stateDir); err != nil {
 		return err
 	}
-	projectPath, err := canonicalProjectPath(projectPath)
+	logWriter, err := newRotatingLogWriter(stateDir)
+	if err != nil {
+		return err
+	}
+	defer logWriter.Close()
+	log.SetOutput(logWriter)
+	projectPath, err = canonicalProjectPath(projectPath)
 	if err != nil {
 		return err
 	}

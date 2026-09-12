@@ -74,6 +74,33 @@ func TestDaemonLogRotatesOneBoundedGeneration(t *testing.T) {
 	}
 }
 
+func TestDaemonLogRotatesWhileProcessIsRunning(t *testing.T) {
+	dir := t.TempDir()
+	writer, err := newRotatingLogWriter(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Write(make([]byte, maxLogSize-1)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Write([]byte("boundary")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, logFileName) + ".1"); err != nil {
+		t.Fatal("running writer did not rotate prior generation:", err)
+	}
+	current, err := os.Stat(filepath.Join(dir, logFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Size() != int64(len("boundary")) {
+		t.Fatalf("current log size = %d", current.Size())
+	}
+}
+
 func assertMode(t *testing.T, path string, want os.FileMode) {
 	t.Helper()
 	info, err := os.Stat(path)

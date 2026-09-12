@@ -42,7 +42,6 @@ func newWatchCmd() *cobra.Command {
 				return err
 			}
 			defer func() { _ = owner.Close() }()
-			output.watching(projectPath)
 
 			err = owner.Wait(ctx)
 			if closeErr := owner.Close(); err == nil {

@@ -88,6 +88,9 @@ func ensureStateDir(dir string) error {
 	if err := os.Chmod(dir, 0o700); err != nil {
 		return fmt.Errorf("protect daemon state directory: %w", err)
 	}
+	if err := protectUserOnly(dir); err != nil {
+		return fmt.Errorf("protect daemon state directory ownership: %w", err)
+	}
 	return nil
 }
 
@@ -137,6 +140,9 @@ func writeState(dir string, state diskState) error {
 	}
 	if err := os.Rename(tmpName, filepath.Join(dir, stateFileName)); err != nil {
 		return fmt.Errorf("commit daemon state transaction: %w", err)
+	}
+	if err := protectUserOnly(filepath.Join(dir, stateFileName)); err != nil {
+		return fmt.Errorf("protect committed daemon state: %w", err)
 	}
 	return nil
 }

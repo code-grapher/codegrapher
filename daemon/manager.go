@@ -75,6 +75,10 @@ func (m *Manager) defaults() error {
 // Start launches the daemon and waits for watch coverage, startup sync, and
 // the startup generation barrier. A live daemon for the same path is idempotent.
 func (m *Manager) Start(ctx context.Context, projectPath string) (Status, error) {
+	return m.start(ctx, projectPath, false)
+}
+
+func (m *Manager) start(ctx context.Context, projectPath string, lockHeld bool) (Status, error) {
 	if err := m.defaults(); err != nil {
 		return Status{}, err
 	}
@@ -86,27 +90,32 @@ func (m *Manager) Start(ctx context.Context, projectPath string) (Status, error)
 		return Status{}, fmt.Errorf("CodeGraph not initialized in %s; run 'codegrapher init' there first", projectPath)
 	}
 
-	startLock := flock.New(filepath.Join(m.StateDir, startLockName))
-	locked, err := startLock.TryLockContext(ctx, 25*time.Millisecond)
-	if err != nil {
-		return Status{}, fmt.Errorf("acquire daemon start lock: %w", err)
+	if !lockHeld {
+		startLock := flock.New(filepath.Join(m.StateDir, startLockName))
+		locked, lockErr := startLock.TryLockContext(ctx, 25*time.Millisecond)
+		if lockErr != nil {
+			return Status{}, fmt.Errorf("acquire daemon start lock: %w", lockErr)
+		}
+		if !locked {
+			return Status{}, fmt.Errorf("daemon start coordination canceled: %w", ctx.Err())
+		}
+		defer func() { _ = startLock.Unlock() }()
 	}
-	if !locked {
-		return Status{}, fmt.Errorf("daemon start coordination canceled: %w", ctx.Err())
+	existing, readErr := readState(m.StateDir)
+	held, probeErr := lifetimeLockHeld(m.StateDir)
+	if probeErr != nil {
+		return Status{}, probeErr
 	}
-	defer func() { _ = startLock.Unlock() }()
-
-	if existing, readErr := readState(m.StateDir); readErr == nil && existing.Lifecycle != LifecycleStopped {
+	if (isNoState(readErr) || (readErr == nil && existing.Lifecycle == LifecycleStopped)) && held {
+		return Status{}, errors.New("daemon lifetime owner exists but its state is missing or stopped; state preserved")
+	}
+	if readErr == nil && existing.Lifecycle != LifecycleStopped {
 		status, liveErr := m.liveStatus(ctx, existing)
 		if liveErr == nil && status.Health.Live {
 			if status.ProjectPath != projectPath {
 				return Status{}, fmt.Errorf("daemon already owns %s; stop it before starting %s", status.ProjectPath, projectPath)
 			}
 			return status, nil
-		}
-		held, probeErr := lifetimeLockHeld(m.StateDir)
-		if probeErr != nil {
-			return Status{}, probeErr
 		}
 		if held {
 			return Status{}, fmt.Errorf("daemon owner for %s is live but its control endpoint is unreachable: %w", existing.ProjectPath, liveErr)
@@ -147,8 +156,8 @@ func (m *Manager) Start(ctx context.Context, projectPath string) (Status, error)
 	child := exec.Command(m.Executable, "daemon", "_run", projectPath)
 	child.Env = append(os.Environ(), envStateDir+"="+m.StateDir, envNonce+"="+nonce, envToken+"="+token)
 	child.Stdin = nil
-	child.Stdout = logFile
-	child.Stderr = logFile
+	child.Stdout = nil
+	child.Stderr = nil
 	configureDetached(child)
 	if err := child.Start(); err != nil {
 		initial.Lifecycle = LifecycleFailed
@@ -182,12 +191,26 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 	}
 	state, err := readState(m.StateDir)
 	if isNoState(err) {
+		held, probeErr := lifetimeLockHeld(m.StateDir)
+		if probeErr != nil {
+			return Status{}, probeErr
+		}
+		if held {
+			return Status{}, errors.New("daemon lifetime owner exists but its state is missing")
+		}
 		return stoppedStatus(), nil
 	}
 	if err != nil {
 		return Status{}, err
 	}
 	if state.Lifecycle == LifecycleStopped {
+		held, probeErr := lifetimeLockHeld(m.StateDir)
+		if probeErr != nil {
+			return Status{}, probeErr
+		}
+		if held {
+			return Status{}, errors.New("daemon is still releasing its lifetime ownership")
+		}
 		return state.Status, nil
 	}
 	status, liveErr := m.liveStatus(ctx, state)
@@ -211,26 +234,46 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 
 // Stop requests authenticated graceful shutdown. It never signals a PID.
 func (m *Manager) Stop(ctx context.Context) (Status, error) {
+	return m.stop(ctx, false)
+}
+
+func (m *Manager) stop(ctx context.Context, lockHeld bool) (Status, error) {
 	if err := m.defaults(); err != nil {
 		return Status{}, err
 	}
-	startLock := flock.New(filepath.Join(m.StateDir, startLockName))
-	locked, err := startLock.TryLockContext(ctx, 25*time.Millisecond)
-	if err != nil {
-		return Status{}, fmt.Errorf("acquire daemon stop lock: %w", err)
+	if !lockHeld {
+		startLock := flock.New(filepath.Join(m.StateDir, startLockName))
+		locked, lockErr := startLock.TryLockContext(ctx, 25*time.Millisecond)
+		if lockErr != nil {
+			return Status{}, fmt.Errorf("acquire daemon stop lock: %w", lockErr)
+		}
+		if !locked {
+			return Status{}, fmt.Errorf("daemon stop coordination canceled: %w", ctx.Err())
+		}
+		defer func() { _ = startLock.Unlock() }()
 	}
-	if !locked {
-		return Status{}, fmt.Errorf("daemon stop coordination canceled: %w", ctx.Err())
-	}
-	defer func() { _ = startLock.Unlock() }()
 	state, err := readState(m.StateDir)
 	if isNoState(err) {
+		held, probeErr := lifetimeLockHeld(m.StateDir)
+		if probeErr != nil {
+			return Status{}, probeErr
+		}
+		if held {
+			return Status{}, errors.New("daemon lifetime owner exists but its state is missing; cannot authenticate stop")
+		}
 		return stoppedStatus(), nil
 	}
 	if err != nil {
 		return Status{}, err
 	}
 	if state.Lifecycle == LifecycleStopped {
+		held, probeErr := lifetimeLockHeld(m.StateDir)
+		if probeErr != nil {
+			return Status{}, probeErr
+		}
+		if held {
+			return Status{}, errors.New("daemon is still releasing its lifetime ownership")
+		}
 		return state.Status, nil
 	}
 	if err := m.controlRequest(ctx, state, http.MethodPost, "/control/v1/stop", nil); err != nil {
@@ -251,7 +294,9 @@ func (m *Manager) Stop(ctx context.Context) (Status, error) {
 		}
 		return state.Status, nil
 	}
-	return m.waitStopped(ctx, state.Nonce)
+	waitCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	return m.waitStopped(waitCtx, state.Nonce)
 }
 
 // Restart stops the current owner and starts projectPath. An empty path reuses
@@ -267,10 +312,26 @@ func (m *Manager) Restart(ctx context.Context, projectPath string) (Status, erro
 			return Status{}, errors.New("no daemon project to restart; provide a path")
 		}
 	}
-	if _, err := m.Stop(ctx); err != nil {
+	canonical, err := canonicalProjectPath(projectPath)
+	if err != nil {
 		return Status{}, err
 	}
-	return m.Start(ctx, projectPath)
+	if !indexer.IsInitialized(canonical) {
+		return Status{}, fmt.Errorf("CodeGraph not initialized in %s; run 'codegrapher init' there first", canonical)
+	}
+	if err := m.defaults(); err != nil {
+		return Status{}, err
+	}
+	startLock := flock.New(filepath.Join(m.StateDir, startLockName))
+	locked, err := startLock.TryLockContext(ctx, 25*time.Millisecond)
+	if err != nil || !locked {
+		return Status{}, fmt.Errorf("acquire daemon restart lock: %w", err)
+	}
+	defer func() { _ = startLock.Unlock() }()
+	if _, err := m.stop(ctx, true); err != nil {
+		return Status{}, err
+	}
+	return m.start(ctx, canonical, true)
 }
 
 func (m *Manager) waitReady(ctx context.Context, nonce string) (Status, error) {
@@ -302,6 +363,9 @@ func (m *Manager) waitStopped(ctx context.Context, nonce string) (Status, error)
 	defer ticker.Stop()
 	for {
 		state, err := readState(m.StateDir)
+		if err == nil && state.Nonce == nonce && state.Lifecycle == LifecycleFailed {
+			return state.Status, fmt.Errorf("daemon stopped with failure: %s", state.Health.LastError)
+		}
 		if err == nil && state.Nonce == nonce && state.Lifecycle == LifecycleStopped {
 			held, probeErr := lifetimeLockHeld(m.StateDir)
 			if probeErr != nil {

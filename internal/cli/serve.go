@@ -120,28 +120,21 @@ type mcpServer interface {
 }
 
 func runCombinedServe(ctx context.Context, owner *freshness.Owner, server mcpServer, input io.Reader, output io.Writer) error {
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	mcpDone := make(chan error, 1)
 	watchDone := make(chan error, 1)
-	go func() { mcpDone <- server.Serve(ctx, input, output) }()
-	go func() { watchDone <- owner.Wait(ctx) }()
-	for mcpDone != nil || watchDone != nil {
-		select {
-		case err := <-mcpDone:
-			mcpDone = nil
-			if err != nil {
-				return err
-			}
-		case err := <-watchDone:
-			watchDone = nil
-			if err != nil {
-				return err
-			}
-			return nil
-		case <-ctx.Done():
-			return nil
-		}
+	go func() { mcpDone <- server.Serve(runCtx, input, output) }()
+	go func() { watchDone <- owner.Wait(runCtx) }()
+	var err error
+	select {
+	case err = <-mcpDone:
+	case err = <-watchDone:
+	case <-ctx.Done():
 	}
-	return nil
+	cancel()
+	_ = owner.Close()
+	return err
 }
 
 // envTruthy retains compatibility with the earlier serve environment parsing.

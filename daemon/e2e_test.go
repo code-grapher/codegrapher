@@ -42,6 +42,10 @@ func TestBuiltBinaryDaemonLifecycle(t *testing.T) {
 	if err := os.WriteFile(sourcePath, []byte("package sample\n\nfunc Before() {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	git := exec.Command("git", "init", "-q", projectPath)
+	if output, err := git.CombinedOutput(); err != nil {
+		t.Fatalf("initialize Git fixture: %v\n%s", err, output)
+	}
 	stateDir := filepath.Join(testRoot, "state")
 	runCLI(t, binaryPath, stateDir, "init", projectPath)
 	started := runCLI(t, binaryPath, stateDir, "daemon", "start", projectPath)
@@ -75,11 +79,11 @@ func TestBuiltBinaryDaemonLifecycle(t *testing.T) {
 	if err := os.WriteFile(sourcePath, []byte("package sample\n\nfunc After() {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	waitForNode(t, binaryPath, stateDir, projectPath, "After", 8*time.Second)
-	afterEdit := waitForCurrent(t, binaryPath, stateDir, 8*time.Second)
+	afterEdit := waitForNewGenerationCurrent(t, binaryPath, stateDir, first.Health.AcceptedGeneration, 8*time.Second)
 	if !afterEdit.Health.IndexCurrent || afterEdit.Health.AcceptedGeneration == 0 || afterEdit.Health.AcceptedGeneration != afterEdit.Health.CompletedGeneration {
 		t.Fatalf("post-edit status = %+v", afterEdit)
 	}
+	waitForNode(t, binaryPath, stateDir, projectPath, "After", 2*time.Second)
 
 	runCLI(t, binaryPath, stateDir, "daemon", "restart")
 	afterRestart := daemonStatus(t, binaryPath, stateDir)
@@ -93,13 +97,13 @@ func TestBuiltBinaryDaemonLifecycle(t *testing.T) {
 	}
 }
 
-func waitForCurrent(t *testing.T, binaryPath, stateDir string, timeout time.Duration) daemon.Status {
+func waitForNewGenerationCurrent(t *testing.T, binaryPath, stateDir string, previous uint64, timeout time.Duration) daemon.Status {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	var status daemon.Status
 	for time.Now().Before(deadline) {
 		status = daemonStatus(t, binaryPath, stateDir)
-		if status.Health.IndexCurrent && status.Health.AcceptedGeneration == status.Health.CompletedGeneration {
+		if status.Health.IndexCurrent && status.Health.AcceptedGeneration > previous && status.Health.AcceptedGeneration == status.Health.CompletedGeneration {
 			return status
 		}
 		time.Sleep(50 * time.Millisecond)
