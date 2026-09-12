@@ -50,3 +50,9 @@ specscore.local.yaml
 # e.g. `v0.13.3+dirty`. GoReleaser's own dirty check only looks at tracked
 # modifications, so it never complains, and the version string lies quietly.
 dist/
+
+# The generated browser client is consumed directly from immutable GitHub
+# revisions. pnpm's GitHub subdirectory archive does not run prepare, so its
+# declared package exports must travel with that revision.
+!clients/typescript/dist/
+!clients/typescript/dist/**
