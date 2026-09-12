@@ -1,11 +1,11 @@
 ---
 format: https://specscore.md/idea-specification
-status: Specified
+status: Implemented
 ---
 
 # Idea: Live daemon repository browser
 
-**Status:** Specified
+**Status:** Implemented
 **Date:** 2026-09-12
 **Owner:** alex
 **Promotes To:** live-daemon-api
@@ -14,7 +14,7 @@ status: Specified
 
 ## Problem Statement
 
-How might codegrapher.com browse authenticated repositories and worktrees served by a released CodeGrapher daemon while preserving the existing GitHub provider experience?
+How might CodeGrapher.dev browse authenticated repositories and worktrees served by a released CodeGrapher daemon while preserving the existing GitHub provider experience?
 
 ## Context
 

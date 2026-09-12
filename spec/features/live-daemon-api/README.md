@@ -1,18 +1,18 @@
 ---
 format: https://specscore.md/feature-specification
-status: Amending
+status: Stable
 ---
 
 # Feature: Authenticated browser API
 
 > [SpecScore.**Studio**](https://specscore.studio): | [Explore](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/live-daemon-api?op=explore) | [Edit](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/live-daemon-api?op=edit) | [Ask question](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/live-daemon-api?op=ask) | [Request change](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/live-daemon-api?op=request-change) |
-**Status:** Amending
+**Status:** Stable
 **Source Ideas:** live-daemon-repository-browser
 
 ## Summary
 
 Expose the one repository owned by a foreground server or background daemon
-through a bounded, authenticated, versioned HTTP API that the codegrapher.com
+through a bounded, authenticated, versioned HTTP API that the CodeGrapher.dev
 repository browser can consume without learning local filesystem paths.
 
 ## Problem
