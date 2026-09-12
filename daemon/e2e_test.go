@@ -3,7 +3,9 @@ package daemon_test
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,7 +51,7 @@ func TestBuiltBinaryDaemonLifecycle(t *testing.T) {
 	stateDir := filepath.Join(testRoot, "state")
 	runCLI(t, binaryPath, stateDir, "init", projectPath)
 	started := runCLI(t, binaryPath, stateDir, "daemon", "start", projectPath)
-	if !strings.Contains(started, "Owner: current user") || !strings.Contains(started, "Stop: codegrapher daemon stop") {
+	if !strings.Contains(started, "Owner: current user") || !strings.Contains(started, "Stop: codegrapher daemon stop") || !strings.Contains(started, "Browser link: https://codegrapher.dev/browse/") {
 		t.Fatalf("start output omitted owner or teardown:\n%s", started)
 	}
 	t.Cleanup(func() {
@@ -61,6 +63,37 @@ func TestBuiltBinaryDaemonLifecycle(t *testing.T) {
 	first := daemonStatus(t, binaryPath, stateDir)
 	if first.Lifecycle != daemon.LifecycleReady || !first.Health.Live || !first.Health.WatchReady || !first.Health.IndexCurrent {
 		t.Fatalf("initial status = %+v", first)
+	}
+	if first.BrowserEndpoint == "" {
+		t.Fatal("ready daemon omitted browser endpoint")
+	}
+	browserSecret := browserSecretFromOutput(t, started)
+	publicRequest, err := http.NewRequest(http.MethodGet, first.BrowserEndpoint+"/status", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicRequest.Header.Set("Authorization", "Bearer "+browserSecret)
+	publicResponse, err := http.DefaultClient.Do(publicRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = publicResponse.Body.Close() }()
+	if publicResponse.StatusCode != http.StatusOK {
+		t.Fatalf("authenticated browser status = %d", publicResponse.StatusCode)
+	}
+	controlWithBrowserToken, err := http.NewRequest(http.MethodGet, first.Endpoint+"/control/v1/status", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controlWithBrowserToken.Header.Set("Authorization", "Bearer "+browserSecret)
+	controlWithBrowserToken.Header.Set("X-CodeGrapher-Nonce", "wrong")
+	controlResponse, err := http.DefaultClient.Do(controlWithBrowserToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = controlResponse.Body.Close() }()
+	if controlResponse.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("browser token authorized control API: %d", controlResponse.StatusCode)
 	}
 	duplicate := runCLI(t, binaryPath, stateDir, "daemon", "start", projectPath)
 	if !strings.Contains(duplicate, fmt.Sprintf("PID: %d", first.PID)) {
@@ -95,6 +128,46 @@ func TestBuiltBinaryDaemonLifecycle(t *testing.T) {
 	if stopped.Lifecycle != daemon.LifecycleStopped || stopped.Health.Live || stopped.PID != 0 {
 		t.Fatalf("stopped status = %+v", stopped)
 	}
+	assertEndpointClosed(t, afterRestart.Endpoint)
+	assertEndpointClosed(t, afterRestart.BrowserEndpoint)
+}
+
+func assertEndpointClosed(t *testing.T, endpoint string) {
+	t.Helper()
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Host == "" {
+		t.Fatalf("invalid endpoint %q: %v", endpoint, err)
+	}
+	connection, err := net.DialTimeout("tcp", parsed.Host, 300*time.Millisecond)
+	if err == nil {
+		_ = connection.Close()
+		t.Fatalf("listener remained reachable after joined stop: %s", endpoint)
+	}
+}
+
+func browserSecretFromOutput(t *testing.T, output string) string {
+	t.Helper()
+	for line := range strings.SplitSeq(output, "\n") {
+		if !strings.HasPrefix(line, "Browser link: ") {
+			continue
+		}
+		parsed, err := url.Parse(strings.TrimPrefix(line, "Browser link: "))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(parsed.EscapedPath(), "/repos/") || !strings.Contains(parsed.EscapedPath(), "/revisions/") || !strings.HasSuffix(parsed.EscapedPath(), "/tree") {
+			t.Fatalf("browser link is not a canonical repository route: %s", parsed.EscapedPath())
+		}
+		values, err := url.ParseQuery(parsed.Fragment)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if secret := values.Get("secret"); secret != "" {
+			return secret
+		}
+	}
+	t.Fatal("browser link secret missing")
+	return ""
 }
 
 func waitForNewGenerationCurrent(t *testing.T, binaryPath, stateDir string, previous uint64, timeout time.Duration) daemon.Status {

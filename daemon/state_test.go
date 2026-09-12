@@ -12,9 +12,10 @@ import (
 func TestStateIsPrivateAndPublicStatusOmitsCredentials(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "state")
 	state := diskState{
-		Status: Status{Lifecycle: LifecycleStarting, ProjectPath: "/example"},
-		Nonce:  "ownership-nonce",
-		Token:  "control-token",
+		Status:       Status{Lifecycle: LifecycleStarting, ProjectPath: "/example"},
+		Nonce:        "ownership-nonce",
+		Token:        "control-token",
+		BrowserToken: "browser-token",
 	}
 	if err := writeState(dir, state); err != nil {
 		t.Fatal(err)
@@ -23,14 +24,14 @@ func TestStateIsPrivateAndPublicStatusOmitsCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Nonce != state.Nonce || loaded.Token != state.Token {
+	if loaded.Nonce != state.Nonce || loaded.Token != state.Token || loaded.BrowserToken != state.BrowserToken {
 		t.Fatalf("credentials did not round trip: %+v", loaded)
 	}
 	encoded, err := json.Marshal(loaded.Status)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(encoded), state.Nonce) || strings.Contains(string(encoded), state.Token) {
+	if strings.Contains(string(encoded), state.Nonce) || strings.Contains(string(encoded), state.Token) || strings.Contains(string(encoded), state.BrowserToken) {
 		t.Fatalf("public status leaked credentials: %s", encoded)
 	}
 	if runtime.GOOS != "windows" {

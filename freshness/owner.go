@@ -68,6 +68,10 @@ type Owner struct {
 	closeErr              error
 }
 
+// Indexer returns the shared open index owned by this freshness session.
+// Callers may issue concurrent read queries but must not close it.
+func (o *Owner) Indexer() *indexer.Indexer { return o.indexer }
+
 // Start establishes native coverage first, runs startup reconciliation, then
 // drains the accepted event generation captured after that reconciliation.
 // It returns only at a linearized current point or after joined cleanup.

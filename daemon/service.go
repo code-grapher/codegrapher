@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
+	"github.com/specscore/codegrapher/browserapi"
 	"github.com/specscore/codegrapher/freshness"
 	"github.com/specscore/codegrapher/watch"
 )
@@ -26,14 +27,15 @@ func RunFromEnvironment(ctx context.Context, projectPath string) error {
 	stateDir := os.Getenv(envStateDir)
 	nonce := os.Getenv(envNonce)
 	token := os.Getenv(envToken)
-	if stateDir == "" || nonce == "" || token == "" {
+	browserToken := os.Getenv(envBrowserToken)
+	if stateDir == "" || nonce == "" || token == "" || browserToken == "" {
 		return errors.New("daemon child credentials are missing")
 	}
-	return Run(ctx, projectPath, stateDir, nonce, token)
+	return Run(ctx, projectPath, stateDir, nonce, token, browserToken)
 }
 
 // Run owns the lifetime lock, control endpoint, and shared freshness owner.
-func Run(parent context.Context, projectPath, stateDir, nonce, token string) error {
+func Run(parent context.Context, projectPath, stateDir, nonce, token, browserToken string) error {
 	if err := ensureStateDir(stateDir); err != nil {
 		return err
 	}
@@ -61,7 +63,7 @@ func Run(parent context.Context, projectPath, stateDir, nonce, token string) err
 	if err != nil {
 		return err
 	}
-	if !secretEqual(state.Nonce, nonce) || !secretEqual(state.Token, token) || state.ProjectPath != projectPath || state.Lifecycle != LifecycleStarting {
+	if !secretEqual(state.Nonce, nonce) || !secretEqual(state.Token, token) || !secretEqual(state.BrowserToken, browserToken) || state.ProjectPath != projectPath || state.Lifecycle != LifecycleStarting {
 		return errors.New("daemon startup ownership changed before child initialization")
 	}
 
@@ -126,9 +128,39 @@ func Run(parent context.Context, projectPath, stateDir, nonce, token string) err
 		}
 	}
 	runtime.setOwner(owner)
+	browserListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		_ = owner.Close()
+		shutdownServer(server)
+		return runtime.fail(fmt.Errorf("bind browser API: %w", err))
+	}
+	defer func() { _ = browserListener.Close() }()
+	browserServer, err := browserapi.New(owner.Indexer(), browserapi.Config{
+		Token:          browserToken,
+		AllowedOrigins: splitOrigins(os.Getenv(envBrowserOrigins)),
+		Freshness:      owner.Status,
+	})
+	if err != nil {
+		_ = owner.Close()
+		shutdownServer(server)
+		return runtime.fail(err)
+	}
+	runtime.mu.Lock()
+	runtime.state.BrowserEndpoint = "http://" + browserListener.Addr().String() + browserapi.BasePath
+	err = runtime.persistLocked()
+	runtime.mu.Unlock()
+	if err != nil {
+		_ = owner.Close()
+		shutdownServer(server)
+		return err
+	}
+	browserErr := make(chan error, 1)
+	go func() { browserErr <- browserServer.Serve(runCtx, browserListener) }()
 	if err := runtime.ready(); err != nil {
 		_ = owner.Close()
 		shutdownServer(server)
+		cancel()
+		<-browserErr
 		return err
 	}
 	log.Printf("codegrapher daemon ready pid=%d project=%s", os.Getpid(), projectPath)
@@ -136,11 +168,14 @@ func Run(parent context.Context, projectPath, stateDir, nonce, token string) err
 	watchErr := make(chan error, 1)
 	go func() { watchErr <- owner.Wait(runCtx) }()
 	var terminalErr error
+	browserFinished := false
 	select {
 	case <-runtime.stopCh:
 	case <-parent.Done():
 	case terminalErr = <-watchErr:
 	case terminalErr = <-serverErr:
+	case terminalErr = <-browserErr:
+		browserFinished = true
 	}
 	cancel()
 	if terminalErr != nil {
@@ -149,6 +184,18 @@ func Run(parent context.Context, projectPath, stateDir, nonce, token string) err
 		_ = runtime.stopping()
 	}
 	shutdownServer(server)
+	if !browserFinished {
+		select {
+		case browserCloseErr := <-browserErr:
+			if terminalErr == nil {
+				terminalErr = browserCloseErr
+			}
+		case <-time.After(3 * time.Second):
+			if terminalErr == nil {
+				terminalErr = errors.New("browser API did not stop")
+			}
+		}
+	}
 	closeErr := owner.Close()
 	if terminalErr == nil {
 		terminalErr = closeErr
@@ -162,6 +209,16 @@ func Run(parent context.Context, projectPath, stateDir, nonce, token string) err
 	}
 	log.Printf("codegrapher daemon stopped pid=%d project=%s", os.Getpid(), projectPath)
 	return nil
+}
+
+func splitOrigins(raw string) []string {
+	var origins []string
+	for origin := range strings.SplitSeq(raw, ",") {
+		if origin = strings.TrimSpace(origin); origin != "" {
+			origins = append(origins, origin)
+		}
+	}
+	return origins
 }
 
 type serviceRuntime struct {
@@ -295,8 +352,10 @@ func (r *serviceRuntime) stopped() error {
 	r.state.StoppedAt = time.Now().UTC()
 	r.state.PID = 0
 	r.state.Endpoint = ""
+	r.state.BrowserEndpoint = ""
 	r.state.Health = Health{}
 	r.state.Token = ""
+	r.state.BrowserToken = ""
 	return r.persistLocked()
 }
 

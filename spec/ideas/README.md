@@ -12,7 +12,7 @@ Pre-spec one-pagers. Each Idea is a lint-clean problem-direction-MVP one-pager t
 |------|--------|------|-------|-------------|
 | [automatic-index-freshness](automatic-index-freshness.md) | Implementing | 2026-09-12 | alex | automatic-index-freshness |
 | [index-all-non-gitignored-files-as-file-level-nodes-even](index-all-non-gitignored-files-as-file-level-nodes-even.md) | Implemented | 2026-06-15 | specstudio:implement | whole-repo-file-nodes |
-| [live-daemon-repository-browser](live-daemon-repository-browser.md) | Draft | 2026-09-12 | alex | — |
+| [live-daemon-repository-browser](live-daemon-repository-browser.md) | Specified | 2026-09-12 | alex | live-daemon-api |
 | [specscore-artifact-extraction](specscore-artifact-extraction.md) | Approved | 2026-06-15 | trakhimenok | — |
 
 ## Open Questions

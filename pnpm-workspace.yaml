@@ -1,0 +1,8 @@
+packages:
+  - .
+  - clients/typescript
+
+allowBuilds:
+  esbuild: true
+
+enableGlobalVirtualStore: false

@@ -1,0 +1,22 @@
+{
+  "name": "@code-grapher/codegrapher-contract",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "generate:contract": "tsp compile typespec && node tools/fix-generated-client.mjs",
+    "check:contract": "node tools/check-generated-contract.mjs",
+    "test:contract-drift": "node tools/test-contract-drift.mjs",
+    "build:client": "pnpm --dir clients/typescript build"
+  },
+  "devDependencies": {
+    "@typespec/compiler": "1.16.0",
+    "@typespec/http": "1.16.0",
+    "@typespec/http-client-js": "0.16.2",
+    "@typespec/openapi": "1.16.0",
+    "@typespec/openapi3": "1.16.0",
+    "@typespec/rest": "0.86.0",
+    "esbuild": "0.25.10",
+    "playwright-core": "1.61.1"
+  }
+}

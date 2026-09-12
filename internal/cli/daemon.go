@@ -45,7 +45,11 @@ func newDaemonStartCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			writeDaemonStarted(cmd, status)
+			browserLink, err := manager.BrowserLink(cmd.Context())
+			if err != nil {
+				return err
+			}
+			writeDaemonStarted(cmd, status, browserLink)
 			return nil
 		},
 	}
@@ -92,7 +96,11 @@ func newDaemonRestartCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			writeDaemonStarted(cmd, status)
+			browserLink, err := manager.BrowserLink(cmd.Context())
+			if err != nil {
+				return err
+			}
+			writeDaemonStarted(cmd, status, browserLink)
 			return nil
 		},
 	}
@@ -119,8 +127,9 @@ func newDaemonStatusCmd() *cobra.Command {
 				encoder.SetIndent("", "  ")
 				return encoder.Encode(status)
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Lifecycle: %s\nPID: %d\nProject: %s\nLive: %t\nWatch ready: %t\nIndex current: %t\nPending paths: %d\nLast error: %s\nLog: %s\n",
-				status.Lifecycle, status.PID, status.ProjectPath, status.Health.Live,
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Lifecycle: %s\nPID: %d\nProject: %s\nBrowser API: %s\nLive: %t\nWatch ready: %t\nIndex current: %t\nPending paths: %d\nLast error: %s\nLog: %s\n",
+				status.Lifecycle, status.PID, status.ProjectPath, status.BrowserEndpoint,
+				status.Health.Live,
 				status.Health.WatchReady, status.Health.IndexCurrent,
 				status.Health.PendingDirtyPaths, status.Health.LastError, status.LogPath)
 			return err
@@ -144,9 +153,9 @@ func newDaemonRunCmd() *cobra.Command {
 	return command
 }
 
-func writeDaemonStarted(cmd *cobra.Command, status daemon.Status) {
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "CodeGrapher daemon ready\nPID: %d\nProject: %s\nLog: %s\nOwner: current user\nStop: codegrapher daemon stop\n",
-		status.PID, status.ProjectPath, status.LogPath)
+func writeDaemonStarted(cmd *cobra.Command, status daemon.Status, browserLink string) {
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "CodeGrapher daemon ready\nPID: %d\nProject: %s\nBrowser API: %s\nBrowser link: %s\nLog: %s\nOwner: current user\nStop: codegrapher daemon stop\n",
+		status.PID, status.ProjectPath, status.BrowserEndpoint, browserLink, status.LogPath)
 }
 
 func projectSuffix(projectPath string) string {

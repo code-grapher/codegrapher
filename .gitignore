@@ -22,6 +22,8 @@ profile.cov
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+node_modules/
+clients/typescript/dist/
 
 # Go workspace file
 go.work
@@ -32,6 +34,7 @@ go.work.sum
 
 # codegraph index artifacts (per-scope SQLite stores written by `init`)
 .codegraph/
+.specscore-lifecycle.lock
 
 # external corpus clone cache (opt-in TestExternalCorpus, CODEGRAPH_EXTERNAL_CORPUS=1)
 testdata/external/cache/
