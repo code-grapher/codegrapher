@@ -120,14 +120,14 @@ func snapshotIndex(idx *indexer.Indexer) (snapshot, error) {
 		if err != nil {
 			return snapshot{}, err
 		}
-		fmt.Fprintf(hash, "store:%d\x00nodes:%d\x00edges:%d\x00", storeIndex, stats.NodeCount, stats.EdgeCount)
+		_, _ = fmt.Fprintf(hash, "store:%d\x00nodes:%d\x00edges:%d\x00", storeIndex, stats.NodeCount, stats.EdgeCount)
 		keys := make([]string, 0, len(metadata))
 		for key := range metadata {
 			keys = append(keys, key)
 		}
 		sort.Strings(keys)
 		for _, key := range keys {
-			fmt.Fprintf(hash, "meta:%s=%s\x00", key, metadata[key])
+			_, _ = fmt.Fprintf(hash, "meta:%s=%s\x00", key, metadata[key])
 		}
 		result.symbolCount += stats.NodeCount
 		result.edgeCount += stats.EdgeCount
@@ -135,7 +135,7 @@ func snapshotIndex(idx *indexer.Indexer) (snapshot, error) {
 			if _, err := normalizeRelativePath(file.Path, false); err != nil {
 				return snapshot{}, errors.New("index contains an unsafe file path")
 			}
-			fmt.Fprintf(hash, "file:%s\x00%s\x00%d\x00%s\x00", file.Path, file.ContentHash, file.Size, file.Language)
+			_, _ = fmt.Fprintf(hash, "file:%s\x00%s\x00%d\x00%s\x00", file.Path, file.ContentHash, file.Size, file.Language)
 			if existing, ok := result.files[file.Path]; !ok || existing.IndexedAt < file.IndexedAt {
 				result.files[file.Path] = file
 			}
