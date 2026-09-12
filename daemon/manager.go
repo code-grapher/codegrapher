@@ -407,7 +407,7 @@ func (m *Manager) controlRequest(ctx context.Context, state diskState, method, p
 	if err != nil {
 		return err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return fmt.Errorf("control endpoint returned %s", response.Status)
 	}

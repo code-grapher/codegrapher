@@ -97,14 +97,6 @@ func reconcilePathsForWatch(idx *indexer.Indexer, paths []string) (watch.SyncRes
 	return freshness.ReconcilePaths(idx, paths)
 }
 
-func reconcileStartupForWatch(idx *indexer.Indexer) (watch.SyncResult, error) {
-	return freshness.ReconcileStartup(idx)
-}
-
-func mapReconcileResult(result indexer.SyncResult) (watch.SyncResult, error) {
-	return freshness.MapSyncResult(result)
-}
-
 type watchOutput struct {
 	stdout  io.Writer
 	stderr  io.Writer

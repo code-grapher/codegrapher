@@ -41,7 +41,7 @@ func Run(parent context.Context, projectPath, stateDir, nonce, token string) err
 	if err != nil {
 		return err
 	}
-	defer logWriter.Close()
+	defer func() { _ = logWriter.Close() }()
 	log.SetOutput(logWriter)
 	projectPath, err = canonicalProjectPath(projectPath)
 	if err != nil {
@@ -79,7 +79,7 @@ func Run(parent context.Context, projectPath, stateDir, nonce, token string) err
 	if err != nil {
 		return runtime.fail(fmt.Errorf("bind loopback control endpoint: %w", err))
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 	runtime.mu.Lock()
 	runtime.state.PID = os.Getpid()
 	runtime.state.Endpoint = "http://" + listener.Addr().String()
