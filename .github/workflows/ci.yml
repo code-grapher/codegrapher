@@ -101,7 +101,7 @@ jobs:
       - name: Test generated client from the published GitHub revision
         run: pnpm test:client-package
         env:
-          CODEGRAPHER_CLIENT_GIT_URL: git+https://github.com/${{ github.repository }}.git#${{ github.event.pull_request.head.sha || github.sha }}&path:/clients/typescript
+          CODEGRAPHER_CLIENT_GIT_URL: git+https://github.com/${{ github.event.pull_request.head.repo.full_name || github.repository }}.git#${{ github.event.pull_request.head.sha || github.sha }}&path:/clients/typescript
       - name: Run generated-client journey in Chrome
         env:
           CODEGRAPH_BROWSER_E2E: '1'

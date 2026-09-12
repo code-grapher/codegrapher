@@ -2,13 +2,14 @@ import { execFileSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
+  existsSync,
   readFileSync,
   readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -16,6 +17,9 @@ const packageDirectory = join(root, "clients", "typescript");
 const destination = mkdtempSync(join(tmpdir(), "codegrapher-client-package-"));
 
 try {
+  const staleOutput = join(packageDirectory, "dist", "stale-client-output.js");
+  mkdirSync(dirname(staleOutput), { recursive: true });
+  writeFileSync(staleOutput, "throw new Error('stale generated output');\n");
   execFileSync(
     "pnpm",
     ["--dir", packageDirectory, "pack", "--pack-destination", destination],
@@ -30,6 +34,9 @@ try {
   const contents = execFileSync("tar", ["-tzf", join(destination, archive)], {
     encoding: "utf8",
   });
+  if (existsSync(staleOutput) || contents.includes("stale-client-output")) {
+    throw new Error("generated client build did not remove stale compiler output");
+  }
   for (const expected of [
     "package/dist/index.js",
     "package/dist/index.d.ts",
