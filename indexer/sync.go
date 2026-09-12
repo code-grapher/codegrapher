@@ -99,12 +99,12 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 	for _, filePath := range currentFiles {
 		fullPath := filepath.Join(idx.root, filepath.FromSlash(filePath))
 		rec, isTracked := trackedMap[filePath]
+		fi, err := os.Stat(fullPath)
+		if err != nil {
+			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), FilePath: filePath, Severity: "error", Code: "stat_error"})
+			continue
+		}
 		if isTracked {
-			fi, err := os.Stat(fullPath)
-			if err != nil {
-				result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), FilePath: filePath, Severity: "error", Code: "stat_error"})
-				continue
-			}
 			if fi.Size() == rec.Size && statMtimeMs(fi) == rec.ModifiedAt {
 				// Git lists dirty candidates cheaply; always hash those so a
 				// same-size change within one millisecond is never missed.
@@ -114,12 +114,20 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 			}
 		}
 
-		content, err := os.ReadFile(fullPath)
+		var hash string
+		if fi.Size() > MaxFileSize && IsSourceFile(filePath) {
+			hash, err = hashFile(fullPath)
+		} else {
+			content, readErr := os.ReadFile(fullPath)
+			err = readErr
+			if err == nil {
+				hash = HashContent(content)
+			}
+		}
 		if err != nil {
 			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), FilePath: filePath, Severity: "error", Code: "read_error"})
 			continue
 		}
-		hash := HashContent(content)
 
 		if !isTracked {
 			filesToIndex = append(filesToIndex, filePath)

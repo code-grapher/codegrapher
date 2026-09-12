@@ -965,3 +965,22 @@ func TestOversizedReplacementRemovesStaleSymbolsUntilShrunk(t *testing.T) {
 		t.Fatalf("shrink = %+v", res)
 	}
 }
+
+func TestSyncStreamsOversizedReplacementAndRemovesStaleGraph(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "lib.go")
+	writeFile(t, path, "package main\nfunc Helper() {}\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, path, strings.Repeat("x", MaxFileSize+1))
+	res := idx.Sync(Options{})
+	if len(res.Errors) == 0 || hasNodeNamed(t, idx, "Helper") {
+		t.Fatalf("oversized Sync = %+v, stale Helper=%v", res, hasNodeNamed(t, idx, "Helper"))
+	}
+	if rec, err := idx.fileRecord("lib.go"); err != nil || rec == nil || rec.ContentHash == "" {
+		t.Fatalf("skip fingerprint = %+v, %v", rec, err)
+	}
+}
