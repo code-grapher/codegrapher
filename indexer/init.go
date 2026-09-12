@@ -149,6 +149,7 @@ func (idx *Indexer) indexAllLocked(opts Options) IndexResult {
 			_ = s.SetMetadata("indexed_with_version", PackageVersion)
 			_ = s.SetMetadata("indexed_with_extraction_version", strconv.Itoa(ExtractionVersion))
 		}
+		_ = idx.markCurrentGitHead()
 		if err := idx.indexTrace(); err != nil {
 			result.Errors = append(result.Errors, model.ExtractionError{
 				Message: err.Error(), Severity: "warning", Code: "trace_index_error",

@@ -217,6 +217,36 @@ func TestEdges_EndpointFilterAndQueries(t *testing.T) {
 	}
 }
 
+func TestEdges_LimitedQueriesAreOrderedAndBoundedInSQL(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.InsertNodes([]model.Node{
+		testNode("source", "source", "source.go", 1),
+		testNode("target-c", "c", "c.go", 1),
+		testNode("target-a", "a", "a.go", 1),
+		testNode("target-b", "b", "b.go", 1),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InsertEdges([]model.Edge{
+		{Source: "source", Target: "target-c", Kind: model.EdgeReferences, Line: 3},
+		{Source: "source", Target: "target-a", Kind: model.EdgeCalls, Line: 9},
+		{Source: "source", Target: "target-b", Kind: model.EdgeCalls, Line: 2},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := s.GetOutgoingEdgesLimited("source", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 2 || out[0].Target != "target-a" || out[1].Target != "target-b" {
+		t.Fatalf("limited outgoing = %+v, want calls ordered by target", out)
+	}
+	in, err := s.GetIncomingEdgesLimited("target-a", 1)
+	if err != nil || len(in) != 1 || in[0].Source != "source" {
+		t.Fatalf("limited incoming = %+v, %v", in, err)
+	}
+}
+
 func TestNodeDeletion_CascadesEdges(t *testing.T) {
 	s := newTestStore(t)
 	_ = s.InsertNodes([]model.Node{

@@ -133,6 +133,11 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 	if result.FilesAdded > 0 || result.FilesModified > 0 || result.FilesRemoved > 0 {
 		idx.runMaintenanceAll()
 	}
+	if len(result.Errors) == 0 {
+		if err := idx.markCurrentGitHead(); err != nil {
+			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "git_head_metadata_error"})
+		}
+	}
 
 	result.DurationMs = now() - start
 	return result
@@ -174,10 +179,6 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 			}
 			continue
 		}
-		if !IsSourceFile(filePath) {
-			continue
-		}
-
 		content, err := os.ReadFile(fullPath)
 		if err != nil {
 			continue
@@ -225,6 +226,14 @@ func (idx *Indexer) syncChangedFiles(filesToIndex []string, opts Options, result
 	idx.extractAndStore(filesToIndex, opts, &ir)
 	if err := idx.restoreIncomingEdges(backups); err != nil {
 		result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "edge_restore_error"})
+		return
+	}
+	if len(ir.Errors) > 0 {
+		// Surface every extraction warning/error to freshness callers. Restore
+		// still ran, but only for targets proven replaced; that preserves
+		// unchanged callers when a parser returned a partial valid result while
+		// avoiding duplicate edges when it left the old nodes intact.
+		result.Errors = append(result.Errors, ir.Errors...)
 		return
 	}
 
@@ -310,8 +319,18 @@ func (idx *Indexer) restoreIncomingEdges(backups []incomingEdgeBackup) error {
 	}
 	restore := make(map[*store.Store][]model.Edge)
 	for _, backup := range backups {
+		// extractAndStore can fail after capture (for example a parse/read
+		// failure) and intentionally leaves the old file record intact. Only
+		// restore an edge when its original target was actually replaced.
+		old, err := backup.store.GetNodeByID(backup.target.ID)
+		if err != nil {
+			return fmt.Errorf("check replaced target %s: %w", backup.target.ID, err)
+		}
+		if old != nil {
+			continue
+		}
 		for _, candidate := range byStoreFile[backup.store][backup.target.FilePath] {
-			if candidate.Kind != backup.target.Kind || candidate.Name != backup.target.Name || candidate.QualifiedName != backup.target.QualifiedName {
+			if candidate.Kind != backup.target.Kind || candidate.Name != backup.target.Name || candidate.QualifiedName != backup.target.QualifiedName || candidate.Signature != backup.target.Signature || candidate.ReturnType != backup.target.ReturnType || strings.Join(candidate.TypeParameters, "\x00") != strings.Join(backup.target.TypeParameters, "\x00") {
 				continue
 			}
 			edge := backup.edge
@@ -328,41 +347,20 @@ func (idx *Indexer) restoreIncomingEdges(backups []incomingEdgeBackup) error {
 	return nil
 }
 
-// GetChangedFiles classifies filesystem changes since the last index without
-// applying them. Uses `git status --porcelain` as a fast path when available,
-// falling back to a full scan + hash compare. Mirrors
-// ExtractionOrchestrator.getChangedFiles.
-func (idx *Indexer) GetChangedFiles() ChangedFiles {
-	if changes, ok := gitChangedFiles(idx.root); ok {
-		out := ChangedFiles{}
-		for _, filePath := range changes.deleted {
-			if rec, err := idx.fileRecord(filePath); err == nil && rec != nil {
-				out.Removed = append(out.Removed, filePath)
-			}
-		}
-		// Untracked (`??`) files stay untracked in git even after indexing,
-		// so they are hash-compared like modified files instead of always
-		// counting as added (issue #206 upstream).
-		for _, filePath := range append(append([]string{}, changes.modified...), changes.added...) {
-			content, err := os.ReadFile(filepath.Join(idx.root, filepath.FromSlash(filePath)))
-			if err != nil {
-				continue
-			}
-			hash := HashContent(content)
-			rec, err := idx.fileRecord(filePath)
-			if err != nil {
-				continue
-			}
-			if rec == nil {
-				out.Added = append(out.Added, filePath)
-			} else if rec.ContentHash != hash {
-				out.Modified = append(out.Modified, filePath)
-			}
-		}
-		return out
-	}
+const indexedGitHeadKey = "indexed_git_head"
 
-	// Fallback: full scan (non-git project or git failure).
+// GetChangedFiles prefers a persisted git revision plus git's own change
+// lists. That avoids a whole-tree walk for each symbol read while still
+// catching clean commits made after indexing. Non-git projects, and old
+// indexes without a revision stamp, retain the filesystem/hash fallback.
+func (idx *Indexer) GetChangedFiles() ChangedFiles {
+	if changed, ok := idx.gitChangedFilesSinceIndex(); ok {
+		return changed
+	}
+	return idx.getChangedFilesByScan()
+}
+
+func (idx *Indexer) getChangedFilesByScan() ChangedFiles {
 	currentFiles := ScanDirectory(idx.root)
 	currentSet := make(map[string]bool, len(currentFiles))
 	for _, f := range currentFiles {
@@ -374,6 +372,8 @@ func (idx *Indexer) GetChangedFiles() ChangedFiles {
 	}
 	out := ChangedFiles{}
 	for _, rec := range tracked {
+		// Always stat persisted paths: indexed untracked files may disappear
+		// without appearing in git status or ScanDirectory's git candidate set.
 		if !currentSet[rec.Path] {
 			out.Removed = append(out.Removed, rec.Path)
 		}
@@ -382,19 +382,188 @@ func (idx *Indexer) GetChangedFiles() ChangedFiles {
 	for _, f := range tracked {
 		trackedMap[f.Path] = f
 	}
+	dirty := map[string]struct{}{}
+	if changes, ok := gitChangedFiles(idx.root); ok {
+		for _, p := range append(append(changes.modified, changes.added...), changes.deleted...) {
+			dirty[p] = struct{}{}
+		}
+	}
 	for _, filePath := range currentFiles {
+		rec, isTracked := trackedMap[filePath]
+		if !isTracked {
+			out.Added = append(out.Added, filePath)
+			continue
+		}
+		fi, err := os.Stat(filepath.Join(idx.root, filepath.FromSlash(filePath)))
+		if err != nil {
+			continue
+		}
+		_, forceHash := dirty[filePath]
+		if !forceHash && fi.Size() == rec.Size && statMtimeMs(fi) == rec.ModifiedAt {
+			continue
+		}
 		content, err := os.ReadFile(filepath.Join(idx.root, filepath.FromSlash(filePath)))
 		if err != nil {
 			continue
 		}
-		hash := HashContent(content)
-		rec, isTracked := trackedMap[filePath]
-		if !isTracked {
-			out.Added = append(out.Added, filePath)
-		} else if rec.ContentHash != hash {
+		if rec.ContentHash != HashContent(content) {
 			out.Modified = append(out.Modified, filePath)
 		}
 	}
+	sort.Strings(out.Added)
+	sort.Strings(out.Modified)
+	sort.Strings(out.Removed)
+	return out
+}
+
+func (idx *Indexer) gitChangedFilesSinceIndex() (ChangedFiles, bool) {
+	indexedHead, err := idx.Store().GetMetadata(indexedGitHeadKey)
+	if err != nil || indexedHead == "" {
+		return ChangedFiles{}, false
+	}
+	currentHead, ok := gitHead(idx.root)
+	if !ok {
+		return ChangedFiles{}, false
+	}
+	trackedNow, ok := gitTrackedFiles(idx.root)
+	if !ok {
+		return ChangedFiles{}, false
+	}
+	tracked, err := idx.allTrackedFiles()
+	if err != nil {
+		return ChangedFiles{}, false
+	}
+	candidates := newChangedFilesSet()
+	if indexedHead != currentHead {
+		committed, ok := gitDiffFiles(idx.root, indexedHead, currentHead)
+		if !ok {
+			return ChangedFiles{}, false
+		}
+		candidates.merge(committed)
+	}
+	working, ok := gitChangedFiles(idx.root)
+	if !ok {
+		return ChangedFiles{}, false
+	}
+	candidates.merge(working)
+	records := make(map[string]model.FileRecord, len(tracked))
+	for _, rec := range tracked {
+		records[rec.Path] = rec
+	}
+	changes := newChangedFilesSet()
+	candidatePaths := map[string]struct{}{}
+	for _, group := range []map[string]struct{}{candidates.added, candidates.modified, candidates.removed} {
+		for path := range group {
+			candidatePaths[path] = struct{}{}
+		}
+	}
+	for path := range candidatePaths {
+		rec, indexed := records[path]
+		fullPath := filepath.Join(idx.root, filepath.FromSlash(path))
+		if _, err := os.Stat(fullPath); err != nil {
+			if indexed {
+				changes.removed[path] = struct{}{}
+			}
+			continue
+		}
+		content, err := os.ReadFile(fullPath)
+		if err != nil {
+			// Preserve the candidate rather than claiming a fresh index when a
+			// file could not be inspected. SyncFiles will surface its read error.
+			if indexed {
+				changes.modified[path] = struct{}{}
+			} else {
+				changes.added[path] = struct{}{}
+			}
+			continue
+		}
+		if !indexed {
+			changes.added[path] = struct{}{}
+		} else if rec.ContentHash != HashContent(content) {
+			changes.modified[path] = struct{}{}
+		}
+	}
+
+	// A formerly-untracked file can disappear without either a diff against
+	// HEAD or status output. Find those by checking only persisted paths that
+	// git says are not tracked now, rather than statting every indexed file.
+	for _, rec := range tracked {
+		if trackedNow[rec.Path] {
+			continue
+		}
+		if _, candidate := candidatePaths[rec.Path]; candidate {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(idx.root, filepath.FromSlash(rec.Path))); err != nil {
+			changes.removed[rec.Path] = struct{}{}
+		}
+	}
+	return changes.result(), true
+}
+
+// MarkCurrentGitHead records the repository revision only after a caller has
+// successfully refreshed every candidate it chose. It is public so the CLI's
+// freshness path can make that completion explicit without making SyncFiles
+// (which deliberately accepts arbitrary subsets) claim whole-tree freshness.
+func (idx *Indexer) MarkCurrentGitHead() error { return idx.markCurrentGitHead() }
+
+func (idx *Indexer) markCurrentGitHead() error {
+	head, ok := gitHead(idx.root)
+	if !ok {
+		return nil
+	}
+	for _, s := range idx.Stores() {
+		if err := s.SetMetadata(indexedGitHeadKey, head); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type changedFilesSet struct {
+	added, modified, removed map[string]struct{}
+}
+
+func newChangedFilesSet() changedFilesSet {
+	return changedFilesSet{added: map[string]struct{}{}, modified: map[string]struct{}{}, removed: map[string]struct{}{}}
+}
+
+func (s changedFilesSet) merge(changes gitChanges) {
+	for _, path := range changes.added {
+		s.added[path] = struct{}{}
+	}
+	for _, path := range changes.modified {
+		s.modified[path] = struct{}{}
+	}
+	for _, path := range changes.deleted {
+		s.removed[path] = struct{}{}
+	}
+}
+
+func (s changedFilesSet) result() ChangedFiles {
+	// A delete followed by an add is a modification (for example an unstaged
+	// replacement after a committed rename), while an add followed by a delete
+	// is absent from both candidates.
+	for path := range s.added {
+		if _, removed := s.removed[path]; removed {
+			delete(s.added, path)
+			delete(s.removed, path)
+			s.modified[path] = struct{}{}
+		}
+	}
+	out := ChangedFiles{}
+	for path := range s.added {
+		out.Added = append(out.Added, path)
+	}
+	for path := range s.modified {
+		out.Modified = append(out.Modified, path)
+	}
+	for path := range s.removed {
+		out.Removed = append(out.Removed, path)
+	}
+	sort.Strings(out.Added)
+	sort.Strings(out.Modified)
+	sort.Strings(out.Removed)
 	return out
 }
 
@@ -470,23 +639,25 @@ type gitChanges struct {
 	deleted  []string
 }
 
-// gitChangedFiles parses `git status --porcelain --no-renames`. Returns
-// ok=false when git is unavailable so callers fall back to a full scan.
+// gitChangedFiles parses the NUL-delimited porcelain format. Filenames are
+// opaque byte sequences here: unlike line porcelain, spaces and quotes never
+// need C-style unquoting.
 func gitChangedFiles(rootDir string) (gitChanges, bool) {
-	out, err := gitOutputRaw(rootDir, "status", "--porcelain", "--no-renames")
+	out, err := gitOutputRaw(rootDir, "status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all")
 	if err != nil {
 		return gitChanges{}, false
 	}
+	return parsePorcelainZ(out), true
+}
+
+func parsePorcelainZ(out string) gitChanges {
 	changes := gitChanges{}
-	for line := range strings.SplitSeq(out, "\n") {
-		if len(line) < 4 {
+	for record := range strings.SplitSeq(out, "\x00") {
+		if len(record) < 4 {
 			continue // minimum: "XY file"
 		}
-		statusCode := line[:2]
-		filePath := filepath.ToSlash(strings.TrimSpace(line[3:]))
-		if !IsSourceFile(filePath) {
-			continue
-		}
+		statusCode := record[:2]
+		filePath := filepath.ToSlash(record[3:])
 		switch {
 		case statusCode == "??":
 			changes.added = append(changes.added, filePath)
@@ -494,6 +665,50 @@ func gitChangedFiles(rootDir string) (gitChanges, bool) {
 			changes.deleted = append(changes.deleted, filePath)
 		default:
 			changes.modified = append(changes.modified, filePath)
+		}
+	}
+	return changes
+}
+
+func gitHead(rootDir string) (string, bool) {
+	head, err := gitOutput(rootDir, "rev-parse", "HEAD")
+	return head, err == nil && head != ""
+}
+
+func gitTrackedFiles(rootDir string) (map[string]bool, bool) {
+	out, err := gitOutputRaw(rootDir, "ls-files", "-z")
+	if err != nil {
+		return nil, false
+	}
+	files := map[string]bool{}
+	for path := range strings.SplitSeq(out, "\x00") {
+		if path != "" {
+			files[filepath.ToSlash(path)] = true
+		}
+	}
+	return files, true
+}
+
+func gitDiffFiles(rootDir, from, to string) (gitChanges, bool) {
+	out, err := gitOutputRaw(rootDir, "diff", "--name-status", "-z", "--no-renames", from, to)
+	if err != nil {
+		return gitChanges{}, false
+	}
+	changes := gitChanges{}
+	parts := strings.Split(out, "\x00")
+	for i := 0; i+1 < len(parts); i += 2 {
+		status, path := parts[i], parts[i+1]
+		if status == "" || path == "" {
+			continue
+		}
+		path = filepath.ToSlash(path)
+		switch status[0] {
+		case 'A':
+			changes.added = append(changes.added, path)
+		case 'D':
+			changes.deleted = append(changes.deleted, path)
+		default:
+			changes.modified = append(changes.modified, path)
 		}
 	}
 	return changes, true

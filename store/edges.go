@@ -100,6 +100,24 @@ func (s *Store) GetIncomingEdges(targetID string, kinds []model.EdgeKind) ([]mod
 	return scanEdges(rows)
 }
 
+// GetOutgoingEdgesLimited returns deterministic immediate edges without
+// loading an unbounded adjacency list.
+func (s *Store) GetOutgoingEdgesLimited(sourceID string, limit int) ([]model.Edge, error) {
+	rows, err := s.db.Query(`SELECT `+edgeColumns+` FROM edges WHERE source = ? ORDER BY kind, target, line, col LIMIT ?`, sourceID, limit)
+	if err != nil {
+		return nil, err
+	}
+	return scanEdges(rows)
+}
+
+func (s *Store) GetIncomingEdgesLimited(targetID string, limit int) ([]model.Edge, error) {
+	rows, err := s.db.Query(`SELECT `+edgeColumns+` FROM edges WHERE target = ? ORDER BY kind, source, line, col LIMIT ?`, targetID, limit)
+	if err != nil {
+		return nil, err
+	}
+	return scanEdges(rows)
+}
+
 // FindEdgesBetweenNodes returns all edges whose source AND target are both in
 // nodeIDs (uses json_each like the original to stay under param limits).
 func (s *Store) FindEdgesBetweenNodes(nodeIDs []string, kinds []model.EdgeKind) ([]model.Edge, error) {

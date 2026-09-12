@@ -57,11 +57,12 @@ never guesses a body. It exits non-zero as a disambiguation response; retry it
 with `node "<exact id>" --source` (or `--file` / `--line`) using a candidate
 from `query --brief`. Do not fall back to grep or a surrounding-file read.
 
-Before node lookup, CodeGrapher uses the persisted file hash and modification
-metadata to incrementally refresh Git-dirty or untracked source files. When
-`--source` is requested it verifies the current file bytes against the indexed
-hash; it refreshes once or returns an explicit stale/lock/read error rather
-than slicing a stale range.
+Before node lookup, CodeGrapher compares the persisted Git revision with the
+current revision, then uses Git's dirty/untracked candidates and persisted file
+hashes to refresh only relevant files. This also catches a clean commit made
+after indexing. When `--source` is requested it verifies the current file bytes
+against the indexed hash; it refreshes once or returns an explicit stale/lock/
+read error rather than slicing a stale range.
 
 Use relationship verbs when you need a wider or transitive answer:
 

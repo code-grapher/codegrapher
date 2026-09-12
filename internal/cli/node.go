@@ -144,6 +144,9 @@ func refreshNodeIndex(idx *indexer.Indexer) (NodeFreshness, error) {
 	paths := append(append([]string{}, changes.Added...), changes.Modified...)
 	paths = append(paths, changes.Removed...)
 	if len(paths) == 0 {
+		if err := idx.MarkCurrentGitHead(); err != nil {
+			return NodeFreshness{}, fmt.Errorf("record verified index revision: %w", err)
+		}
 		return NodeFreshness{}, nil
 	}
 	res := idx.SyncFiles(paths, indexer.Options{})
@@ -152,6 +155,9 @@ func refreshNodeIndex(idx *indexer.Indexer) (NodeFreshness, error) {
 	}
 	if len(res.Errors) > 0 {
 		return NodeFreshness{}, fmt.Errorf("incremental refresh failed: %s", res.Errors[0].Message)
+	}
+	if err := idx.MarkCurrentGitHead(); err != nil {
+		return NodeFreshness{}, fmt.Errorf("record refreshed index revision: %w", err)
 	}
 	return NodeFreshness{Refreshed: true}, nil
 }
@@ -324,9 +330,6 @@ func nodeRelations(match matchedNode, limit int) ([]NodeRelation, error) {
 		return []NodeRelation{}, nil
 	}
 	collect := func(edges []model.Edge, direction string) ([]NodeRelation, error) {
-		if len(edges) > limit {
-			edges = edges[:limit]
-		}
 		ids := make([]string, 0, len(edges))
 		for _, e := range edges {
 			if direction == "outgoing" {
@@ -351,11 +354,11 @@ func nodeRelations(match matchedNode, limit int) ([]NodeRelation, error) {
 		}
 		return out, nil
 	}
-	outgoing, err := match.store.GetOutgoingEdges(match.node.ID, nil, "")
+	outgoing, err := match.store.GetOutgoingEdgesLimited(match.node.ID, limit)
 	if err != nil {
 		return nil, err
 	}
-	incoming, err := match.store.GetIncomingEdges(match.node.ID, nil)
+	incoming, err := match.store.GetIncomingEdgesLimited(match.node.ID, limit)
 	if err != nil {
 		return nil, err
 	}

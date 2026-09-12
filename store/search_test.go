@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/specscore/codegrapher/model"
@@ -213,6 +214,24 @@ func TestSearchLike_ReturnsSubstringMatches(t *testing.T) {
 	}
 }
 
+func TestSymbolFiltersTreatLikeMetacharactersLiterally(t *testing.T) {
+	s := newTestStore(t)
+	nodes := []model.Node{
+		{ID: "literal", Kind: model.KindFunction, Name: "literal_name%", QualifiedName: "literal_name%", FilePath: "dir/a_b%/file.go", Language: model.LangGo, StartLine: 1, EndLine: 2, UpdatedAt: fixedNow()},
+		{ID: "wildcard", Kind: model.KindFunction, Name: "literalXnameZ", QualifiedName: "literalXnameZ", FilePath: "dir/axbq/file.go", Language: model.LangGo, StartLine: 1, EndLine: 2, UpdatedAt: fixedNow()},
+	}
+	if err := s.InsertNodes(nodes); err != nil {
+		t.Fatal(err)
+	}
+	results, err := s.SearchLikeFiltered("literal", nil, nil, 10, 0, SymbolFilters{PathContains: []string{"a_b%"}, NameContains: []string{"_name%"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Node.ID != "literal" {
+		t.Fatalf("literal filters = %+v, want only literal", results)
+	}
+}
+
 // TestSearchLike_ExactMatchScoresHighest verifies that exact-name match scores
 // higher than prefix and contains matches.
 func TestSearchLike_ExactMatchScoresHighest(t *testing.T) {
@@ -292,6 +311,27 @@ func TestSearchFuzzy_RejectsDistantStrings(t *testing.T) {
 		if r.Node.Name == "xyzzy" {
 			t.Error("'xyzzy' should not match 'authenticate' fuzzy search")
 		}
+	}
+}
+
+func TestSearchFuzzyAppliesFiltersBeforeCandidateCap(t *testing.T) {
+	s := newTestStore(t)
+	var nodes []model.Node
+	// More than the old 50-candidate cap are near matches in unrelated files.
+	for i := 0; i < 60; i++ {
+		name := fmt.Sprintf("target%02d", i)
+		nodes = append(nodes, model.Node{ID: fmt.Sprintf("other-%d", i), Kind: model.KindFunction, Name: name, QualifiedName: name, FilePath: "other/file.go", Language: model.LangGo, StartLine: 1, EndLine: 2, UpdatedAt: fixedNow()})
+	}
+	nodes = append(nodes, model.Node{ID: "wanted", Kind: model.KindFunction, Name: "target", QualifiedName: "target", FilePath: "wanted/file.go", Language: model.LangGo, StartLine: 1, EndLine: 2, UpdatedAt: fixedNow()})
+	if err := s.InsertNodes(nodes); err != nil {
+		t.Fatal(err)
+	}
+	results, err := s.SearchFuzzyFiltered("targot", nil, nil, 1, boundedEditDistance, SymbolFilters{PathContains: []string{"wanted/"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Node.ID != "wanted" {
+		t.Fatalf("filtered fuzzy results = %+v, want wanted node", results)
 	}
 }
 

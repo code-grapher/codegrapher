@@ -27,20 +27,26 @@ func appendSymbolFilters(q string, args []any, f SymbolFilters, prefix string) (
 	if len(f.PathContains) > 0 {
 		terms := make([]string, 0, len(f.PathContains))
 		for _, p := range f.PathContains {
-			terms = append(terms, "lower("+prefix+"file_path) LIKE ?")
-			args = append(args, "%"+strings.ToLower(p)+"%")
+			terms = append(terms, "lower("+prefix+"file_path) LIKE ? ESCAPE '\\'")
+			args = append(args, "%"+escapeLike(strings.ToLower(p))+"%")
 		}
 		q += " AND (" + strings.Join(terms, " OR ") + ")"
 	}
 	if len(f.NameContains) > 0 {
 		terms := make([]string, 0, len(f.NameContains))
 		for _, n := range f.NameContains {
-			terms = append(terms, "lower("+prefix+"name) LIKE ?")
-			args = append(args, "%"+strings.ToLower(n)+"%")
+			terms = append(terms, "lower("+prefix+"name) LIKE ? ESCAPE '\\'")
+			args = append(args, "%"+escapeLike(strings.ToLower(n))+"%")
 		}
 		q += " AND (" + strings.Join(terms, " OR ") + ")"
 	}
 	return q, args
+}
+
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, "%", `\%`)
+	return strings.ReplaceAll(s, "_", `\_`)
 }
 
 // SearchFTS runs an FTS5 prefix-match query against nodes_fts and returns
@@ -203,8 +209,23 @@ func (s *Store) SearchFuzzyFiltered(text string, kinds []model.NodeKind, langs [
 		maxDist = 1
 	}
 
-	// Pull distinct names.
-	rows, err := s.db.Query(`SELECT DISTINCT name FROM nodes`)
+	// Pull only names that can produce a filtered result, before the fuzzy cap.
+	q := `SELECT DISTINCT name FROM nodes WHERE 1=1`
+	var args []any
+	if len(kinds) > 0 {
+		q += ` AND kind IN (` + placeholders(len(kinds)) + `)`
+		for _, k := range kinds {
+			args = append(args, string(k))
+		}
+	}
+	if len(langs) > 0 {
+		q += ` AND language IN (` + placeholders(len(langs)) + `)`
+		for _, l := range langs {
+			args = append(args, string(l))
+		}
+	}
+	q, args = appendSymbolFilters(q, args, filters, "")
+	rows, err := s.db.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
