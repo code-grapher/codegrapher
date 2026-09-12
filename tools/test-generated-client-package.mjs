@@ -50,15 +50,19 @@ try {
 
   const consumer = join(destination, "consumer");
   mkdirSync(consumer);
-  writeFileSync(
-    join(consumer, "package.json"),
-    '{"name":"generated-client-consumer","private":true,"type":"module"}\n',
-  );
   const revision = execFileSync("git", ["rev-parse", "HEAD"], {
     cwd: root,
     encoding: "utf8",
   }).trim();
   const gitDependency = `git+${pathToFileURL(root).href}#${revision}&path:/clients/typescript`;
+  writeFileSync(
+    join(consumer, "package.json"),
+    '{"name":"generated-client-consumer","private":true,"type":"module"}\n',
+  );
+  writeFileSync(
+    join(consumer, "pnpm-workspace.yaml"),
+    `allowBuilds:\n  '${packageJson.name}@${gitDependency}': true\n`,
+  );
   execFileSync("pnpm", ["add", "--prefer-offline", gitDependency], {
     cwd: consumer,
     stdio: "inherit",
