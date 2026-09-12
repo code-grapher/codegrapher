@@ -13,15 +13,6 @@ import (
 	selfupdatecmd "github.com/strongo/cli-helpers/selfupdate/cobracmd"
 )
 
-const codeGrapherHomebrewUpgradeCommand = "brew update && brew upgrade --cask codegrapher"
-
-func codeGrapherHomebrewManager() selfupdate.Manager {
-	return selfupdate.Homebrew(codeGrapherHomebrewUpgradeCommand).WithExecutableUpgradeSteps(
-		selfupdate.ManagedCommand{Executable: "brew", Args: []string{"update"}},
-		selfupdate.ManagedCommand{Executable: "brew", Args: []string{"upgrade", "--cask", "codegrapher"}},
-	)
-}
-
 func newSelfUpdateConfig() selfupdate.Config {
 	build := buildinfo.Get("codegrapher")
 	return selfupdate.Config{
@@ -29,7 +20,7 @@ func newSelfUpdateConfig() selfupdate.Config {
 		Repository:           "code-grapher/codegrapher",
 		CurrentVersion:       build.Version,
 		UndeterminedVersions: []string{"dev"},
-		Managers:             []selfupdate.Manager{codeGrapherHomebrewManager()},
+		Managers:             []selfupdate.Manager{selfupdate.HomebrewCask("codegrapher")},
 		SupportedPlatforms:   []selfupdate.Platform{{GOOS: "darwin", GOARCH: "amd64"}, {GOOS: "darwin", GOARCH: "arm64"}, {GOOS: "linux", GOARCH: "amd64"}, {GOOS: "linux", GOARCH: "arm64"}, {GOOS: "windows", GOARCH: "amd64"}},
 		VersionProbeArgs:     []string{"--version"},
 		ChecksumsName:        func(string, string) string { return "checksums.txt" },
