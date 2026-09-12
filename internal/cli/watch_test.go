@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/specscore/codegrapher/indexer"
+	"github.com/specscore/codegrapher/model"
 	"github.com/specscore/codegrapher/watch"
 )
 
@@ -83,6 +85,127 @@ func TestWatchOutputDefaultSuppressesRawEventsAndNoOpCompletion(t *testing.T) {
 	}
 }
 
+func TestReconcilePathsForWatchSurfacesRealIndexerFailure(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, _, err := indexer.Init(dir, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	if err := os.Mkdir(filepath.Join(dir, "not-a-file"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := reconcilePathsForWatch(idx, []string{"not-a-file"})
+	if err == nil || !strings.Contains(err.Error(), "index reconciliation failed") {
+		t.Fatalf("reconcilePathsForWatch error = %v", err)
+	}
+	if result.FilesChecked != 1 {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:failure-remains-dirty-and-visible
+func TestWatcherRetriesAfterRealIndexerFailure(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, _, err := indexer.Init(dir, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	badPath := filepath.Join(dir, "bad")
+	if err := os.Mkdir(badPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	failures := make(chan watch.Observation, 1)
+	w := watch.NewWithPaths(dir, func(paths []string) (watch.SyncResult, error) {
+		return reconcilePathsForWatch(idx, paths)
+	}, watch.Options{
+		DebounceMs:    30,
+		InertForTests: true,
+		OnObservation: func(observation watch.Observation) {
+			if observation.Kind == watch.ObservationOperationFailed {
+				select {
+				case failures <- observation:
+				default:
+				}
+			}
+		},
+	})
+	if err := w.StartWithError(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(w.Stop)
+	w.IngestEventForTests("bad")
+	select {
+	case <-failures:
+	case <-time.After(2 * time.Second):
+		t.Fatal("real indexer failure was not observed")
+	}
+	if len(w.PendingFiles()) != 1 {
+		t.Fatalf("pending after failure = %+v", w.PendingFiles())
+	}
+	if err := os.Remove(badPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(badPath, []byte("now a file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	waitForCLI(t, 3*time.Second, func() bool { return len(w.PendingFiles()) == 0 })
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:worktree-index-is-local
+func TestWatchCommandRejectsNearestIndexFromDifferentGitWorktree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	outer := t.TempDir()
+	runGitForWatchTest(t, outer, "init", "-q")
+	if err := os.WriteFile(filepath.Join(outer, "main.go"), []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, _, err := indexer.Init(outer, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := idx.Close(); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(outer, "nested-worktree")
+	if err := os.Mkdir(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGitForWatchTest(t, nested, "init", "-q")
+
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(nested); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(previous) })
+	cmd := newWatchCmd()
+	err = cmd.ExecuteContext(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "different git worktree") || !strings.Contains(err.Error(), "codegrapher init") {
+		t.Fatalf("watch error = %v, want actionable worktree-local init error", err)
+	}
+}
+
+func runGitForWatchTest(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, output)
+	}
+}
+
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:foreground-watch-reconciles-real-edit
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:graceful-cancellation
 func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
@@ -94,7 +217,15 @@ func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/watchtest\n\ngo 1.22\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
+	mainPath := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(mainPath, []byte("package main\n\nfunc Target() int { return 1 }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "caller.go"), []byte("package main\n\nfunc Caller() int { return Target() }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	originalInfo, err := os.Stat(mainPath)
+	if err != nil {
 		t.Fatal(err)
 	}
 	idx, _, err := indexer.Init(dir, indexer.Options{})
@@ -117,6 +248,18 @@ func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
 	go func() { done <- cmd.ExecuteContext(ctx) }()
 
 	waitForCLI(t, 5*time.Second, func() bool { return strings.Contains(stdout.String(), "Watching ") })
+	// Keep both byte length and mtime unchanged. The watcher must pass its
+	// exact dirty path to SyncFiles so content hashing still finds the edit.
+	updatedMain := []byte("package main\n\nfunc Target() int { return 2 }\n")
+	if err := os.WriteFile(mainPath, updatedMain, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(mainPath, originalInfo.ModTime(), originalInfo.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	waitForCLI(t, 8*time.Second, func() bool {
+		return strings.Contains(stdout.String(), "modified=1")
+	})
 	if err := os.WriteFile(filepath.Join(dir, "added.go"), []byte("package main\n\nfunc Added() int { return 7 }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -138,16 +281,42 @@ func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = idx.Close() }()
-	var found bool
+	var foundAdded, foundTarget, preservedCall, updatedHash bool
 	for _, store := range idx.Stores() {
 		nodes, getErr := store.GetNodesByName("Added")
 		if getErr != nil {
 			t.Fatal(getErr)
 		}
-		found = found || len(nodes) > 0
+		foundAdded = foundAdded || len(nodes) > 0
+		nodes, getErr = store.GetNodesByName("Target")
+		if getErr != nil {
+			t.Fatal(getErr)
+		}
+		foundTarget = foundTarget || len(nodes) > 0
+		callers, getErr := store.GetNodesByName("Caller")
+		if getErr != nil {
+			t.Fatal(getErr)
+		}
+		if len(callers) == 1 {
+			edges, edgeErr := store.GetOutgoingEdges(callers[0].ID, []model.EdgeKind{model.EdgeCalls}, "")
+			if edgeErr != nil {
+				t.Fatal(edgeErr)
+			}
+			preservedCall = preservedCall || len(edges) == 1
+		}
+		files, fileErr := store.GetAllFiles()
+		if fileErr != nil {
+			t.Fatal(fileErr)
+		}
+		for _, file := range files {
+			if file.Path == "main.go" {
+				updatedHash = file.ContentHash == indexer.HashContent(updatedMain)
+			}
+		}
 	}
-	if !found {
-		t.Fatalf("Added symbol not indexed; stdout=%s stderr=%s", stdout.String(), stderr.String())
+	if !foundAdded || !foundTarget || !preservedCall || !updatedHash {
+		t.Fatalf("unexpected graph added=%t target=%t preserved_call=%t updated_hash=%t; stdout=%s stderr=%s",
+			foundAdded, foundTarget, preservedCall, updatedHash, stdout.String(), stderr.String())
 	}
 }
 

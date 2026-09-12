@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -66,6 +67,10 @@ type Observation struct {
 // It should return ErrLockUnavailable when the cross-process write lock is
 // held; the watcher retries without clearing pendingFiles in that case.
 type SyncFunc func() (SyncResult, error)
+
+// SyncPathsFunc is the callback the watcher invokes with the exact dirty
+// project-relative paths in the current debounce batch.
+type SyncPathsFunc func(paths []string) (SyncResult, error)
 
 // IsSourceFileFunc reports whether a project-relative POSIX path is a source
 // file that should be indexed.
@@ -171,7 +176,7 @@ type Options struct {
 // debounced sync callback.
 type FileWatcher struct {
 	root     string
-	syncFn   SyncFunc
+	syncFn   SyncPathsFunc
 	opts     Options
 	debounce time.Duration
 
@@ -183,10 +188,10 @@ type FileWatcher struct {
 	stopped           bool
 	ready             bool
 	readyCh           chan struct{}
-	dirCapWarn        bool
 	eventSeq          uint64
 	completedEventSeq uint64
 	operationSeq      uint64
+	syncWG            sync.WaitGroup
 
 	// fsnotify watcher (nil until Start is called).
 	fsw *fsnotify.Watcher
@@ -199,6 +204,15 @@ type FileWatcher struct {
 // New creates a FileWatcher that has not yet started. Call [FileWatcher.Start]
 // to begin watching.
 func New(root string, syncFn SyncFunc, opts Options) *FileWatcher {
+	return NewWithPaths(root, func([]string) (SyncResult, error) {
+		return syncFn()
+	}, opts)
+}
+
+// NewWithPaths creates a FileWatcher whose reconciliation callback receives
+// the exact dirty paths in each batch. Call [FileWatcher.Start] to begin
+// watching.
+func NewWithPaths(root string, syncFn SyncPathsFunc, opts Options) *FileWatcher {
 	debounceMs := opts.DebounceMs
 	if debounceMs == 0 {
 		if raw := os.Getenv("CODEGRAPH_WATCH_DEBOUNCE_MS"); raw != "" {
@@ -243,17 +257,24 @@ func New(root string, syncFn SyncFunc, opts Options) *FileWatcher {
 // Start begins watching. Returns true if watching started, false if disabled
 // (e.g., CODEGRAPH_NO_WATCH or WSL2 /mnt drive).
 func (fw *FileWatcher) Start() bool {
+	return fw.StartWithError() == nil
+}
+
+// StartWithError begins watching and returns the reason native watching could
+// not be established. Start is retained as the compatibility bool API.
+func (fw *FileWatcher) StartWithError() error {
 	fw.mu.Lock()
-	defer fw.mu.Unlock()
 
 	if fw.ready || fw.inert {
-		return true // already started
+		fw.mu.Unlock()
+		return nil // already started
 	}
 	fw.stopped = false
 
 	// Check watch-disabled policy.
 	if reason := WatchDisabledReason(fw.root, WatchProbe{}); reason != "" {
-		return false
+		fw.mu.Unlock()
+		return fmt.Errorf("%s", reason)
 	}
 
 	if fw.opts.InertForTests {
@@ -262,12 +283,16 @@ func (fw *FileWatcher) Start() bool {
 		var err error
 		fw.fsw, err = fsnotify.NewWatcher()
 		if err != nil {
-			return false
+			fw.mu.Unlock()
+			return err
 		}
 		if err := fw.addWatches(); err != nil {
 			_ = fw.fsw.Close()
 			fw.fsw = nil
-			return false
+			fw.watchedDirs = make(map[string]struct{})
+			fw.mu.Unlock()
+			fw.observe(Observation{Kind: ObservationWatcherError, Err: err})
+			return err
 		}
 		go fw.readEvents(fw.fsw)
 	}
@@ -278,7 +303,8 @@ func (fw *FileWatcher) Start() bool {
 
 	// Register in the test registry (no-op if not a test).
 	registerForTests(fw.root, fw)
-	return true
+	fw.mu.Unlock()
+	return nil
 }
 
 // addWatches sets up fsnotify watches by walking the tree and adding a watch
@@ -295,30 +321,25 @@ func (fw *FileWatcher) addWatches() error {
 // start). If markExisting is true, source files already in the directory are
 // added to pendingFiles.
 func (fw *FileWatcher) watchTreeLocked(dir string, markExisting bool) error {
-	if _, ok := fw.watchedDirs[dir]; ok {
-		return nil
-	}
-	if len(fw.watchedDirs) >= fw.opts.MaxDirWatches {
-		if !fw.dirCapWarn {
-			fw.dirCapWarn = true
-			// best-effort warning; no log package dependency
-			_, _ = fmt.Fprintf(os.Stderr,
-				"[codegrapher/watch] directory-watch cap reached (%d); "+
-					"remaining subtrees rely on manual sync\n",
-				fw.opts.MaxDirWatches)
+	if _, ok := fw.watchedDirs[dir]; !ok {
+		if len(fw.watchedDirs) >= fw.opts.MaxDirWatches {
+			return fmt.Errorf("directory-watch cap reached (%d); increase CODEGRAPH_MAX_DIR_WATCHES", fw.opts.MaxDirWatches)
 		}
-		return nil
+		if err := fw.fsw.Add(dir); err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return fmt.Errorf("watch directory %s: %w", dir, err)
+		}
+		fw.watchedDirs[dir] = struct{}{}
 	}
-
-	if err := fw.fsw.Add(dir); err != nil {
-		// ENOENT / permission denied — skip quietly.
-		return nil
-	}
-	fw.watchedDirs[dir] = struct{}{}
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil // can't read — skip
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read watched directory %s: %w", dir, err)
 	}
 	for _, e := range entries {
 		child := filepath.Join(dir, e.Name())
@@ -330,10 +351,16 @@ func (fw *FileWatcher) watchTreeLocked(dir string, markExisting bool) error {
 			if fw.opts.IsIgnored != nil && fw.opts.IsIgnored(rel+"/") {
 				continue
 			}
-			_ = fw.watchTreeLocked(child, markExisting)
+			if err := fw.watchTreeLocked(child, markExisting); err != nil {
+				return err
+			}
 		} else if markExisting && e.Type().IsRegular() {
 			rel := toRelPOSIX(fw.root, child)
-			fw.recordPendingLocked(rel)
+			if !fw.isAlwaysIgnored(rel) &&
+				(fw.opts.IsIgnored == nil || !fw.opts.IsIgnored(rel)) &&
+				fw.opts.IsSourceFile(rel) {
+				fw.recordPendingLocked(rel)
+			}
 		}
 	}
 	return nil
@@ -378,17 +405,40 @@ func (fw *FileWatcher) handleFSNotifyEvent(event fsnotify.Event) {
 	// all platforms, since fsnotify v1.10 has no public recursive API).
 	if event.Op&fsnotify.Create != 0 {
 		if info, err := os.Stat(name); err == nil && info.IsDir() {
+			var watchErr error
+			var shouldSchedule bool
 			fw.mu.Lock()
 			if !fw.isAlwaysIgnored(rel) &&
 				(fw.opts.IsIgnored == nil || !fw.opts.IsIgnored(rel+"/")) {
-				_ = fw.watchTreeLocked(name, true)
+				before := fw.eventSeq
+				watchErr = fw.watchTreeLocked(name, true)
+				shouldSchedule = fw.eventSeq > before
+				if shouldSchedule {
+					fw.scheduleSyncLocked()
+				}
 			}
 			fw.mu.Unlock()
+			if watchErr != nil {
+				fw.observe(Observation{Kind: ObservationWatcherError, Path: rel, Err: watchErr})
+			}
 			return
 		}
 	}
 
 	fw.handleChange(rel)
+	if filepath.Base(rel) == ".gitignore" {
+		var watchErr error
+		fw.mu.Lock()
+		before := fw.eventSeq
+		watchErr = fw.watchTreeLocked(fw.root, true)
+		if fw.eventSeq > before {
+			fw.scheduleSyncLocked()
+		}
+		fw.mu.Unlock()
+		if watchErr != nil {
+			fw.observe(Observation{Kind: ObservationWatcherError, Path: rel, Err: watchErr})
+		}
+	}
 }
 
 // handleChange is the shared path for both real and synthetic events.
@@ -456,16 +506,20 @@ func (fw *FileWatcher) flush() {
 	batchEndSeq := fw.eventSeq
 	eventsReceived := batchEndSeq - fw.completedEventSeq
 	dirtyPaths := 0
-	for _, entry := range fw.pending {
+	paths := make([]string, 0, len(fw.pending))
+	for path, entry := range fw.pending {
 		if entry.lastEventSeq <= batchEndSeq {
 			dirtyPaths++
+			paths = append(paths, path)
 		}
 	}
+	sort.Strings(paths)
 	coalescedEvents := uint64(0)
 	if eventsReceived > uint64(dirtyPaths) {
 		coalescedEvents = eventsReceived - uint64(dirtyPaths)
 	}
 	startedAt := fw.syncStarted
+	fw.syncWG.Add(1)
 	fw.mu.Unlock()
 
 	fw.observe(Observation{
@@ -478,7 +532,7 @@ func (fw *FileWatcher) flush() {
 		At:              startedAt,
 	})
 
-	result, err := fw.syncFn()
+	result, err := fw.syncFn(paths)
 	finishedAt := fw.opts.Now()
 	duration := finishedAt.Sub(startedAt)
 	if duration < 0 {
@@ -530,13 +584,12 @@ func (fw *FileWatcher) flush() {
 	if onError != nil {
 		onError(err)
 	}
+	fw.syncWG.Done()
 }
 
 // Stop shuts down the watcher and clears state.
 func (fw *FileWatcher) Stop() {
 	fw.mu.Lock()
-	defer fw.mu.Unlock()
-
 	fw.stopped = true
 	if fw.timer != nil {
 		fw.timer.Stop()
@@ -546,8 +599,14 @@ func (fw *FileWatcher) Stop() {
 		_ = fw.fsw.Close()
 		fw.fsw = nil
 	}
+	fw.mu.Unlock()
+
+	// Do not let callers close the index while an in-flight reconciliation is
+	// still writing to it.
+	fw.syncWG.Wait()
+
+	fw.mu.Lock()
 	fw.watchedDirs = make(map[string]struct{})
-	fw.dirCapWarn = false
 	fw.inert = false
 	fw.pending = make(map[string]*pendingEntry)
 	fw.eventSeq = 0
@@ -556,6 +615,7 @@ func (fw *FileWatcher) Stop() {
 	// Reset ready state so the watcher can be re-started.
 	fw.ready = false
 	fw.readyCh = make(chan struct{})
+	fw.mu.Unlock()
 	unregisterForTests(fw.root)
 }
 

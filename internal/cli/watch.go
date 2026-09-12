@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -22,7 +24,14 @@ func newWatchCmd() *cobra.Command {
 		Short: "Keep the graph current as files change",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, stopSignals := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stopSignals()
+
+			startPath := watchStartPath(args)
 			projectPath := resolveArg(args)
+			if mismatch := indexer.DetectWorktreeIndexMismatch(startPath, projectPath); mismatch != nil {
+				return fmt.Errorf("cannot watch a different git worktree's index:\n%s", indexer.WorktreeMismatchWarning(*mismatch))
+			}
 			if !indexer.IsInitialized(projectPath) {
 				return fmt.Errorf("CodeGraph not initialized in %s; run 'codegrapher init' there first", projectPath)
 			}
@@ -34,15 +43,15 @@ func newWatchCmd() *cobra.Command {
 			defer func() { _ = idx.Close() }()
 
 			output := newWatchOutput(cmd.OutOrStdout(), cmd.ErrOrStderr(), verbose)
-			watcher := watch.New(projectPath, func() (watch.SyncResult, error) {
-				return reconcileForWatch(idx)
-			}, watch.Options{OnObservation: output.observe})
-			if !watcher.Start() {
-				reason := watch.WatchDisabledReason(projectPath, watch.WatchProbe{})
-				if reason == "" {
-					reason = "the native filesystem watcher could not be started"
-				}
-				return fmt.Errorf("cannot watch %s: %s", projectPath, reason)
+			pathFilter := indexer.NewPathFilter(projectPath)
+			watcher := watch.NewWithPaths(projectPath, func(paths []string) (watch.SyncResult, error) {
+				return reconcilePathsForWatch(idx, paths)
+			}, watch.Options{
+				IsIgnored:     pathFilter.IsIgnored,
+				OnObservation: output.observe,
+			})
+			if err := watcher.StartWithError(); err != nil {
+				return fmt.Errorf("cannot watch %s: %w", projectPath, err)
 			}
 			defer watcher.Stop()
 
@@ -50,17 +59,21 @@ func newWatchCmd() *cobra.Command {
 			// during startup remain pending for the normal debounced path, closing
 			// the otherwise unavoidable scan-to-watch race.
 			started := time.Now()
-			output.startupStarted(started)
-			startupResult, err := reconcileForWatch(idx)
+			const startupOperationID = 0
+			output.startupStarted(started, startupOperationID)
+			startupResult, err := reconcilePathsForWatch(idx, nil)
 			if err != nil {
 				return fmt.Errorf("startup reconciliation: %w", err)
 			}
-			output.startupCompleted(time.Now(), time.Since(started), startupResult)
+			output.startupCompleted(time.Now(), startupOperationID, time.Since(started), startupResult)
+			if ctx.Err() != nil {
+				watcher.Stop()
+				return nil
+			}
 			output.watching(projectPath)
 
-			ctx, stopSignals := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
-			defer stopSignals()
 			<-ctx.Done()
+			watcher.Stop()
 			output.stopped(projectPath)
 			return nil
 		},
@@ -70,12 +83,28 @@ func newWatchCmd() *cobra.Command {
 	return cmd
 }
 
-func reconcileForWatch(idx *indexer.Indexer) (watch.SyncResult, error) {
-	result := idx.Sync(indexer.Options{})
-	if result.FilesChecked == 0 && result.DurationMs == 0 {
-		return watch.SyncResult{}, watch.NewLockUnavailableError("")
+func watchStartPath(args []string) string {
+	raw := ""
+	if len(args) > 0 {
+		raw = args[0]
+	} else {
+		raw, _ = os.Getwd()
 	}
-	return watch.SyncResult{
+	abs, err := filepath.Abs(raw)
+	if err != nil {
+		return raw
+	}
+	return abs
+}
+
+func reconcilePathsForWatch(idx *indexer.Indexer, paths []string) (watch.SyncResult, error) {
+	var result indexer.SyncResult
+	if paths == nil {
+		result = idx.Sync(indexer.Options{})
+	} else {
+		result = idx.SyncFiles(paths, indexer.Options{})
+	}
+	mapped := watch.SyncResult{
 		FilesChanged:  result.FilesAdded + result.FilesModified + result.FilesRemoved,
 		FilesChecked:  result.FilesChecked,
 		FilesAdded:    result.FilesAdded,
@@ -84,7 +113,22 @@ func reconcileForWatch(idx *indexer.Indexer) (watch.SyncResult, error) {
 		NodesUpdated:  result.NodesUpdated,
 		DurationMs:    result.DurationMs,
 		FullReindex:   result.FullReindex,
-	}, nil
+	}
+	if len(result.Errors) > 0 {
+		messages := make([]string, 0, len(result.Errors))
+		for _, extractionErr := range result.Errors {
+			message := extractionErr.Message
+			if extractionErr.FilePath != "" {
+				message = extractionErr.FilePath + ": " + message
+			}
+			messages = append(messages, message)
+		}
+		return mapped, fmt.Errorf("index reconciliation failed: %s", strings.Join(messages, "; "))
+	}
+	if result.LockUnavailable {
+		return mapped, watch.NewLockUnavailableError("")
+	}
+	return mapped, nil
 }
 
 type watchOutput struct {
@@ -142,22 +186,23 @@ func (o *watchOutput) observe(observation watch.Observation) {
 	}
 }
 
-func (o *watchOutput) startupStarted(at time.Time) {
+func (o *watchOutput) startupStarted(at time.Time, operationID uint64) {
 	if !o.verbose {
 		return
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	_, _ = fmt.Fprintf(o.stdout, "%s startup reconciliation started\n", at.UTC().Format(time.RFC3339Nano))
+	_, _ = fmt.Fprintf(o.stdout, "%s operation=%d started kind=startup_reconcile\n",
+		at.UTC().Format(time.RFC3339Nano), operationID)
 }
 
-func (o *watchOutput) startupCompleted(at time.Time, duration time.Duration, result watch.SyncResult) {
+func (o *watchOutput) startupCompleted(at time.Time, operationID uint64, duration time.Duration, result watch.SyncResult) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.verbose {
 		_, _ = fmt.Fprintf(o.stdout,
-			"%s startup reconciliation completed duration=%s checked=%d added=%d modified=%d removed=%d nodes_updated=%d full_reindex=%t\n",
-			at.UTC().Format(time.RFC3339Nano), observationDuration(duration), result.FilesChecked,
+			"%s operation=%d completed kind=startup_reconcile duration=%s checked=%d added=%d modified=%d removed=%d nodes_updated=%d full_reindex=%t\n",
+			at.UTC().Format(time.RFC3339Nano), operationID, observationDuration(duration), result.FilesChecked,
 			result.FilesAdded, result.FilesModified, result.FilesRemoved, result.NodesUpdated, result.FullReindex)
 		return
 	}

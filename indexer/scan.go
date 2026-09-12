@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/specscore/codegrapher/internal/extract"
 	"github.com/specscore/codegrapher/model"
@@ -232,6 +233,75 @@ func buildDefaultIgnore(rootDir string) *ignoreMatcher {
 		}
 	}
 	return m
+}
+
+// PathFilter applies the same built-in and layered .gitignore admission rules
+// as the filesystem scanner. It is safe for concurrent watcher callbacks.
+type PathFilter struct {
+	root   string
+	mu     sync.Mutex
+	base   *ignoreMatcher
+	nested map[string]*ignoreMatcher
+}
+
+// NewPathFilter creates a watcher-friendly path filter for rootDir.
+func NewPathFilter(rootDir string) *PathFilter {
+	abs, err := filepath.Abs(rootDir)
+	if err != nil {
+		abs = rootDir
+	}
+	return &PathFilter{
+		root:   abs,
+		base:   buildDefaultIgnore(abs),
+		nested: make(map[string]*ignoreMatcher),
+	}
+}
+
+// IsIgnored reports whether a project-relative path is excluded. A trailing
+// slash marks a directory. Seeing a .gitignore event invalidates the relevant
+// cached matcher before the event is admitted for reconciliation.
+func (f *PathFilter) IsIgnored(relPath string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	isDir := strings.HasSuffix(relPath, "/")
+	relPath = filepath.ToSlash(filepath.Clean(strings.TrimSuffix(relPath, "/")))
+	if relPath == "." || relPath == "" || strings.HasPrefix(relPath, "../") {
+		return false
+	}
+	if filepath.Base(relPath) == ".gitignore" {
+		dir := filepath.ToSlash(filepath.Dir(relPath))
+		if dir == "." {
+			f.base = buildDefaultIgnore(f.root)
+		} else {
+			delete(f.nested, dir)
+		}
+		return false
+	}
+	if f.base.Ignored(relPath, isDir) {
+		return true
+	}
+
+	segs := strings.Split(relPath, "/")
+	limit := len(segs) - 1
+	for i := 1; i <= limit; i++ {
+		dirRel := strings.Join(segs[:i], "/")
+		matcher, ok := f.nested[dirRel]
+		if !ok {
+			matcher = &ignoreMatcher{}
+			if data, err := os.ReadFile(filepath.Join(f.root, filepath.FromSlash(dirRel), ".gitignore")); err == nil {
+				for line := range strings.SplitSeq(string(data), "\n") {
+					matcher.addPattern(strings.TrimSuffix(line, "\r"))
+				}
+			}
+			f.nested[dirRel] = matcher
+		}
+		candidate := strings.Join(segs[i:], "/")
+		if candidate != "" && matcher.Ignored(candidate, isDir) {
+			return true
+		}
+	}
+	return false
 }
 
 // --- scanning ----------------------------------------------------------------

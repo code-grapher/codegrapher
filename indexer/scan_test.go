@@ -87,6 +87,40 @@ func TestScanDirectoryNestedGitignore(t *testing.T) {
 	}
 }
 
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:watch-coverage-is-complete-or-start-fails
+func TestPathFilterMatchesBuiltInAndNestedIgnoreRules(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "pkg", ".gitignore"), "generated/\n")
+	filter := NewPathFilter(dir)
+
+	for _, path := range []string{"node_modules/", "node_modules/dep/x.js", "pkg/generated/", "pkg/generated/x.go"} {
+		if !filter.IsIgnored(path) {
+			t.Errorf("IsIgnored(%q) = false, want true", path)
+		}
+	}
+	for _, path := range []string{"pkg/.gitignore", "pkg/real.go"} {
+		if filter.IsIgnored(path) {
+			t.Errorf("IsIgnored(%q) = true, want false", path)
+		}
+	}
+}
+
+func TestPathFilterReloadsChangedGitignore(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "pkg", ".gitignore"), "old/\n")
+	filter := NewPathFilter(dir)
+	if !filter.IsIgnored("pkg/old/x.go") {
+		t.Fatal("old rule was not applied")
+	}
+	writeFile(t, filepath.Join(dir, "pkg", ".gitignore"), "new/\n")
+	if filter.IsIgnored("pkg/.gitignore") {
+		t.Fatal(".gitignore event must remain admitted")
+	}
+	if !filter.IsIgnored("pkg/new/x.go") || filter.IsIgnored("pkg/old/x.go") {
+		t.Fatal("nested matcher was not refreshed after .gitignore event")
+	}
+}
+
 func TestScanDirectorySkipsCodeGraphDataDirs(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, ".codegraph", "x.go"), "package x\n")

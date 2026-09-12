@@ -16,15 +16,15 @@ import (
 // skips unchanged files, then a content-hash compare confirms real changes.
 // Changed files are deleted and re-extracted, references are re-resolved, and
 // maintenance runs when anything changed. When the cross-process file lock is
-// held elsewhere, the zero-value SyncResult is returned (not an error), so
-// callers like the file watcher can detect the lock case by FilesChecked==0
-// && DurationMs==0. Mirrors ExtractionOrchestrator.sync + CodeGraph.sync.
+// held elsewhere, SyncResult.LockUnavailable is returned so callers can retry
+// without confusing an empty, fast repository with contention. Mirrors
+// ExtractionOrchestrator.sync + CodeGraph.sync.
 func (idx *Indexer) Sync(opts Options) SyncResult {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
 	if err := idx.lock.Acquire(); err != nil {
-		return SyncResult{}
+		return SyncResult{LockUnavailable: true}
 	}
 	defer idx.lock.Release()
 	if err := idx.invalidateGitHead(); err != nil {
@@ -170,7 +170,7 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 	defer idx.mu.Unlock()
 
 	if err := idx.lock.Acquire(); err != nil {
-		return SyncResult{}
+		return SyncResult{LockUnavailable: true}
 	}
 	defer idx.lock.Release()
 	if err := idx.invalidateGitHead(); err != nil {
@@ -253,7 +253,7 @@ func (idx *Indexer) Rebuild(opts Options) SyncResult {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	if err := idx.lock.Acquire(); err != nil {
-		return SyncResult{}
+		return SyncResult{LockUnavailable: true}
 	}
 	defer idx.lock.Release()
 	if err := idx.invalidateGitHead(); err != nil {
@@ -284,7 +284,7 @@ func (idx *Indexer) fullRebuildLocked(opts Options, start int64, now func() int6
 func requiresScopeRebuild(paths []string) bool {
 	for _, path := range paths {
 		switch filepath.Base(filepath.ToSlash(path)) {
-		case "package.json", "go.mod", "pom.xml", "build.gradle", "build.gradle.kts":
+		case ".gitignore", "package.json", "go.mod", "pom.xml", "build.gradle", "build.gradle.kts":
 			return true
 		}
 	}

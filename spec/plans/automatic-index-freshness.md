@@ -21,12 +21,13 @@ WB hinting, and graph-sharing phases remain explicitly deferred in the Feature.
 
 ## Approach
 
-First make watcher behavior observable without terminal coupling, then add the
-CLI lifecycle and render concise/verbose output, and finally prove the whole
-journey through a real filesystem edit and cancellation. This ordering keeps
-the canonical indexer authoritative and makes each failure diagnosable. The
-plan does not implement daemon or graph-storage redesign because neither is
-needed to validate the foreground contract.
+First audit the full lifecycle and preserve its decisions, then make watcher
+behavior observable without terminal coupling. Feed exact dirty-path batches
+to the canonical `SyncFiles` path, harden coverage/error/shutdown boundaries,
+add the CLI lifecycle and concise/verbose rendering, and finally prove the
+whole journey through real filesystem edits and cancellation. The plan does
+not implement daemon or graph-storage redesign because neither is needed to
+validate the foreground contract; it does specify their ownership and gates.
 
 ## End-to-End User Journey
 
@@ -58,9 +59,9 @@ and deferred phases explicit.
 
 ### Task 2: Add structured watcher observations
 
-**Verifies:** automatic-index-freshness#ac:burst-is-coalesced, automatic-index-freshness#ac:failure-remains-dirty-and-visible
+**Verifies:** automatic-index-freshness#ac:burst-is-coalesced, automatic-index-freshness#ac:failure-remains-dirty-and-visible, automatic-index-freshness#ac:lock-contention-retries-without-clearing, automatic-index-freshness#ac:watch-coverage-is-complete-or-start-fails, automatic-index-freshness#ac:populated-directory-move-is-reconciled
 **Depends-On:** 1
-**Status:** planning
+**Status:** complete
 
 Add a library-level observation callback for native events, operation start,
 completion, retry/failure, and watcher errors. Track exact per-operation event,
@@ -68,31 +69,41 @@ unique-path, coalescing, duration, and sync-result statistics without changing
 debounce or reconciliation semantics. Cover success, coalescing, failure, lock
 retry, and non-verbose/no-observer behavior with deterministic unit tests.
 
+Pass sorted exact dirty paths to `Indexer.SyncFiles`, retain them across real
+errors and lock contention, fail startup rather than accept partial native
+watch coverage, align watcher admission with scanner ignore rules, discover
+pre-populated/newly-unignored trees, and wait for active writes during stop.
+
 ### Task 3: Add the foreground CLI command
 
-**Verifies:** automatic-index-freshness#ac:verbose-reports-event-and-operation-timing, automatic-index-freshness#ac:default-output-is-not-event-level, automatic-index-freshness#ac:graceful-cancellation
+**Verifies:** automatic-index-freshness#ac:verbose-reports-event-and-operation-timing, automatic-index-freshness#ac:default-output-is-not-event-level, automatic-index-freshness#ac:graceful-cancellation, automatic-index-freshness#ac:worktree-index-is-local
 **Depends-On:** 2
-**Status:** planning
+**Status:** complete
 
-Wire `codegrapher watch [path]` to the existing `Indexer.Sync` and watcher.
+Wire `codegrapher watch [path]` to startup `Indexer.Sync`, path-aware
+`Indexer.SyncFiles`, and the watcher.
 Establish watches before startup reconciliation, support `-v/--verbose`, use
 command writers/context for testability, emit actionable initialization and
 disabled-watcher errors, and release the index and watcher on cancellation.
+Reject an initialized ancestor belonging to another Git worktree and propagate
+structured indexer failures rather than treating them as successful batches.
 
 ### Task 4: Prove the bounded whole journey
 
-**Verifies:** automatic-index-freshness#ac:foreground-watch-reconciles-real-edit, automatic-index-freshness#ac:graceful-cancellation
+**Verifies:** automatic-index-freshness#ac:foreground-watch-reconciles-real-edit, automatic-index-freshness#ac:graceful-cancellation, automatic-index-freshness#ac:failure-remains-dirty-and-visible, automatic-index-freshness#ac:populated-directory-move-is-reconciled
 **Depends-On:** 3
-**Status:** planning
+**Status:** complete
 
-Add one integration test using a real `fsnotify` watcher, a real initialized
-temporary Go repository, a real file edit, an observed graph update, and
-context cancellation. Keep it skipped under short mode and avoid exhaustive
-platform/event permutations already covered by watcher unit tests.
+Add one command integration test using a real `fsnotify` watcher, a real
+initialized temporary Go repository, a same-size/same-mtime edit, an added
+file, content-hash/symbol/call-edge assertions, and context cancellation. Add
+one focused real-filesystem test for moving in a populated directory; keep
+both skipped under short mode and leave platform/event permutations to unit
+tests.
 
 ### Task 5: Review, verify, and reconcile lifecycle state
 
-**Verifies:** automatic-index-freshness#ac:foreground-watch-reconciles-real-edit, automatic-index-freshness#ac:burst-is-coalesced, automatic-index-freshness#ac:verbose-reports-event-and-operation-timing, automatic-index-freshness#ac:default-output-is-not-event-level, automatic-index-freshness#ac:failure-remains-dirty-and-visible, automatic-index-freshness#ac:graceful-cancellation
+**Verifies:** automatic-index-freshness#ac:foreground-watch-reconciles-real-edit, automatic-index-freshness#ac:burst-is-coalesced, automatic-index-freshness#ac:verbose-reports-event-and-operation-timing, automatic-index-freshness#ac:default-output-is-not-event-level, automatic-index-freshness#ac:failure-remains-dirty-and-visible, automatic-index-freshness#ac:lock-contention-retries-without-clearing, automatic-index-freshness#ac:watch-coverage-is-complete-or-start-fails, automatic-index-freshness#ac:worktree-index-is-local, automatic-index-freshness#ac:populated-directory-move-is-reconciled, automatic-index-freshness#ac:graceful-cancellation
 **Depends-On:** 4
 **Status:** planning
 

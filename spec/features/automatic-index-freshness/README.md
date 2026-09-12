@@ -33,13 +33,37 @@ standalone foreground command and no diagnostic event/operation lifecycle.
   content hash, removes missing files, re-extracts changed files, resolves
   cross-file edges, refreshes SpecScore trace data, and runs maintenance only
   after a material change. A scanner-version mismatch escalates to full reindex.
+- `Indexer.SyncFiles` is the cheaper path-aware form used by Git hooks and now
+  by the watcher. It always hashes the supplied candidates, handles additions,
+  edits and removals, rebuilds when scope-affecting manifests change, preserves
+  incoming edges while a callee is replaced, refreshes trace data, and returns
+  per-file extraction errors. `Indexer.GetChangedFiles` is a read-side
+  classifier for status/freshness reporting; it combines Git candidates with
+  index-vs-filesystem verification but does not mutate the graph.
 - Writes are serialized in process and by a PID-backed cross-process lock.
+- Sync mutation is not one SQLite transaction spanning all scope stores.
+  Individual store operations can succeed before a later extraction, edge, or
+  trace operation fails. `SyncResult.Errors` is therefore part of the freshness
+  contract: strict callers must retain dirty state and retry rather than report
+  the batch current. Lock contention is now an explicit result signal rather
+  than an ambiguous zero-duration result.
 - `watch.FileWatcher` already performs recursive `fsnotify` watching,
   debounce, path deduplication, retry after lock contention, create-directory
   registration, pending-path tracking, graceful stop/restart, and a bounded
   real-filesystem test. It is not wired into a `watch` CLI command, native
   watcher errors are discarded, and it exposes no structured raw-event or
   operation timing stream.
+- Opt-in Git hooks already exist for `post-commit`, `post-merge`, and
+  `post-checkout`. They launch `codegrapher sync` in the background and preserve
+  user hook content. They remain a fallback when native watching is unavailable,
+  not a second mutation implementation and not the default freshness mechanism.
+- The scanner obtains tracked and untracked visible files from Git when
+  possible and otherwise performs a layered `.gitignore` walk. Git change
+  classification covers staged, unstaged, untracked, deleted, clean committed
+  renames, and embedded repositories. Current metadata records HEAD and
+  invalidates commit-sensitive data when it moves. It does not yet model an
+  upstream/base ref, merge-base ancestry, branch-switch deltas, or the shared
+  common Git directory as a durable repository identity.
 - Git worktree support currently detects accidental use of another worktree's
   index and advises local initialization. Repository identity, HEAD identity,
   base snapshots, and delta overlays remain future work.
@@ -48,6 +72,16 @@ standalone foreground command and no diagnostic event/operation lifecycle.
 - A local full initialization of this worktree indexed 1,275 files and 5,628
   nodes in about 6.3 seconds. This is directional development evidence, not a
   committed benchmark.
+
+### Baseline and measurement gaps
+
+The repository currently has correctness tests and one directional full-index
+timing, but no stable benchmark suite for warm open/query latency, one-file
+reconciliation, idle watcher CPU/wakeups, duplicate storage across worktrees,
+or daemon startup. Those numbers MUST be collected on fixed fixture repositories
+before choosing daemon pooling or structural sharing. Phase 1 adds operation
+timings and batch counts so real watcher workloads can be measured without
+instrumentation-only rescans.
 
 ## Behavior
 
@@ -129,6 +163,109 @@ paths to content, and worktree-local deltas. Branch names are labels, not graph
 identity. The foreground watcher intentionally works with today's per-worktree
 store while keeping this boundary intact.
 
+#### Component responsibilities
+
+- **Hint producers** report possible dirty paths or a whole-worktree dirty
+  signal. Native filesystem events, a manual command, a future lifecycle API,
+  Git hooks, WB, and agents are peers; none writes graph storage directly.
+- **Watcher/batcher** owns recursive watch coverage, ignore admission,
+  debounce, deduplication, exact dirty-path batches, retry retention, and
+  diagnostic observations. Native events are never treated as authoritative.
+- **Reconciler** owns filesystem/Git verification, content hashing, scope
+  rebuild decisions, extraction, edge restoration/resolution, trace refresh,
+  maintenance, error propagation, and the writer lock. `SyncFiles` handles
+  exact hints; `Sync` handles whole-worktree uncertainty and startup repair.
+- **Store boundary today** is one worktree-local `.codegraph` directory with
+  scoped SQLite databases. Only the reconciler mutates it. Readers use existing
+  strict freshness checks where the command contract requires current data.
+- **Future daemon** owns process lifetime, repository registrations, watch
+  budgets, retry/backoff, and IPC. It calls the same watcher and reconciler and
+  does not introduce a daemon-only graph format.
+- **Future reusable storage** separates immutable content-addressed parse data,
+  commit snapshots mapping repository-relative paths to content IDs, and
+  worktree-local overlays. A materializer presents the existing query model so
+  callers do not need to understand base/delta composition.
+
+#### Lifecycle decisions
+
+- A foreground watch is scoped to the explicitly selected checkout or the
+  current Git worktree. It refuses an initialized ancestor belonging to another
+  worktree and never initializes implicitly.
+- Startup order is signal handling, index open, native watch establishment,
+  whole-worktree reconciliation, then readiness. Events received during
+  reconciliation remain queued for a path-aware follow-up, closing the
+  scan-to-watch race.
+- Shutdown stops admission and timers, closes native watches, waits for any
+  active reconciliation and its observations, then closes the index.
+- A future daemon registration is keyed first by canonical worktree root plus
+  repository/common-Git-dir identity. Registration is explicit or demand-led;
+  path disappearance moves to a grace period, reappearance resumes with full
+  reconciliation, and expiry releases watches while preserving reusable graph
+  data. Moves are treated as disappear-plus-register unless repository identity
+  proves continuity. Daemon restart reloads registrations, validates every
+  path/HEAD, then reconciles before reporting current.
+- The future generic hint API accepts repository identity, worktree path,
+  optional dirty paths, optional old/new HEADs, source, and monotonic request
+  identity. WB may call it, but CodeGrapher MUST remain correct without WB.
+
+#### Git and identity decisions
+
+- Repository-relative paths are stable within a checkout; branch names are
+  presentation labels only. A snapshot is identified by repository identity,
+  commit/tree identity, index format/extractor version, and relevant config.
+- Staged, unstaged, untracked, deleted, and renamed paths form a worktree delta
+  over HEAD. A branch switch or changed HEAD is a whole-worktree uncertainty
+  until a verified tree diff can safely narrow it.
+- Upstream, base branch, merge-base, and ancestry are useful future inputs for
+  reuse and impact analysis, but none is required for Phase 1 correctness.
+- Linked worktrees share a common Git directory but keep independent working
+  trees and dirty overlays. Same repository plus same HEAD permits reuse only
+  after config/version equality is verified; dirty state never shares a mutable
+  overlay.
+
+#### Decision record
+
+1. **One reconciler, multiple hints.** Rejected: watcher-specific graph writes,
+   because they would drift from manual sync correctness.
+2. **Foreground command first.** Rejected for Phase 1: daemon-first delivery,
+   because process ownership/IPC adds lifecycle risk before event correctness is
+   measured.
+3. **Exact dirty paths after native events.** Rejected: full scan per debounce,
+   because it wastes work and can miss same-size/same-mtime non-Git edits behind
+   a stat prefilter.
+4. **Fail closed on incomplete watch coverage.** Rejected: warn and continue
+   after the directory cap, because “watching” would falsely imply freshness.
+5. **Per-worktree storage now, content-addressed reuse later.** Rejected for the
+   first slice: immediate storage redesign, because it is not needed to validate
+   the freshness journey and lacks duplicate-storage measurements.
+6. **Generic lifecycle hints before WB coupling.** Rejected: a WB-only protocol,
+   because correctness and public CLI behavior must remain independently useful.
+7. **Existing Git hooks stay opt-in fallback.** Rejected: mandatory hook
+   installation, because hooks are shared machine state, can conflict with hook
+   managers, and do not observe ordinary editor saves.
+
+#### Risks and mitigations
+
+- Native APIs may duplicate, reorder, rename, or overflow events. Debounce and
+  authoritative reconciliation handle ordinary ambiguity; overflow/event-storm
+  full reconciliation remains a Phase 2 gate before daemonization.
+- Directory limits or permission failures can leave partial coverage. Startup
+  fails actionably instead of reporting readiness; runtime errors are emitted
+  visibly and retain dirty state when reconciliation is involved.
+- Ignore rules can change while watching. The watcher uses scanner-aligned
+  built-ins/layered `.gitignore` rules, admits ignore-file events, and discovers
+  newly visible subtrees after an ignore change.
+- Multi-store partial failure can expose a partially updated graph. Strict
+  error propagation prevents “current” claims; a transactional journal or
+  generation swap is a later atomicity improvement.
+- Daemon crashes, stale registrations, moved/deleted worktrees, PID reuse, and
+  version skew can leak resources or serve stale data. The daemon phase requires
+  versioned IPC, liveness ownership, reconciliation-on-restart, grace/expiry,
+  and explicit health before it can replace foreground ownership.
+- Shared parse/snapshot data can corrupt isolation if config, extractor version,
+  or dirty overlays are mixed. Reuse keys include all semantic inputs and shared
+  layers remain immutable.
+
 ### Phased delivery
 
 1. Foreground watcher, startup reconciliation, structured diagnostics, and a
@@ -152,10 +289,11 @@ store while keeping this boundary intact.
 
 **Given** an initialized temporary repository and a running foreground watcher
 
-**When** a real source file is created or changed
+**When** an existing source file is changed without changing its size or mtime,
+and another source file is created
 
-**Then** one debounced reconciliation updates the graph and the watcher remains
-active until it is cancelled.
+**Then** path-aware debounced reconciliations update content hashes, symbols,
+and call edges, and the watcher remains active until it is cancelled.
 
 ### AC: burst-is-coalesced
 
@@ -195,12 +333,58 @@ remain visible.
 
 **Requirements:** automatic-index-freshness#req:watcher-failures-visible
 
-**Given** a dirty path whose reconciliation fails or cannot acquire the lock
+**Given** a dirty path whose reconciliation returns an indexer error
 
 **When** the operation ends
 
-**Then** the path remains pending, a failure is observable when appropriate,
-and a later retry can clear it only after success.
+**Then** the path remains pending, the failure is observable, and a later retry
+can clear it only after success.
+
+### AC: lock-contention-retries-without-clearing
+
+**Requirements:** automatic-index-freshness#req:watcher-failures-visible
+
+**Given** a dirty path while another writer owns the graph lock
+
+**When** reconciliation receives the explicit lock-unavailable result
+
+**Then** a retry observation is emitted, no failure callback is emitted, and
+the dirty path is cleared only after a later successful reconciliation.
+
+### AC: watch-coverage-is-complete-or-start-fails
+
+**Requirements:** automatic-index-freshness#req:foreground-watch-command, automatic-index-freshness#req:watcher-failures-visible
+
+**Given** ignored dependency/build directories or a repository exceeding the
+configured native directory-watch budget
+
+**When** foreground watching starts
+
+**Then** scanner-aligned ignored trees consume no watches, while an uncovered
+admitted tree causes actionable startup failure rather than false readiness.
+
+### AC: worktree-index-is-local
+
+**Requirements:** automatic-index-freshness#req:foreground-watch-command
+
+**Given** an uninitialized Git worktree nested below a different initialized
+checkout
+
+**When** `codegrapher watch` resolves its default path
+
+**Then** it refuses the other checkout's index and instructs the user to run
+`codegrapher init` in the current worktree.
+
+### AC: populated-directory-move-is-reconciled
+
+**Requirements:** automatic-index-freshness#req:canonical-incremental-reconciliation
+
+**Given** a running watcher
+
+**When** a pre-populated source directory is moved into the watched tree
+
+**Then** its existing admitted files form a dirty-path batch and reconciliation
+is scheduled without waiting for a later unrelated event.
 
 ### AC: graceful-cancellation
 
@@ -208,9 +392,10 @@ and a later retry can clear it only after success.
 
 **Given** a running watcher
 
-**When** its command context is cancelled
+**When** its command context is cancelled during idle or an active reconciliation
 
-**Then** native watches and timers are released and the command exits cleanly.
+**Then** native watches and timers are released, active graph writes finish
+before index close, and the command exits cleanly.
 
 ## Open Questions
 

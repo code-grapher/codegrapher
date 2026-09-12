@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -246,6 +247,128 @@ func TestFailedOperationObservationRetainsDirtyPath(t *testing.T) {
 	}
 }
 
+func TestNewWithPathsReceivesSortedDirtyBatch(t *testing.T) {
+	dir := t.TempDir()
+	received := make(chan []string, 1)
+	w := watch.NewWithPaths(dir, func(paths []string) (watch.SyncResult, error) {
+		received <- append([]string(nil), paths...)
+		return watch.SyncResult{FilesChanged: len(paths)}, nil
+	}, watch.Options{DebounceMs: 20, InertForTests: true})
+	if err := w.StartWithError(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(w.Stop)
+	w.IngestEventForTests("z.go")
+	w.IngestEventForTests("a.go")
+	w.IngestEventForTests("z.go")
+
+	select {
+	case paths := <-received:
+		if got, want := strings.Join(paths, ","), "a.go,z.go"; got != want {
+			t.Fatalf("paths = %q, want %q", got, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for dirty batch")
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:graceful-cancellation
+func TestStopWaitsForActiveSync(t *testing.T) {
+	dir := t.TempDir()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	w := newInertWatcher(t, dir, func() (watch.SyncResult, error) {
+		close(started)
+		<-release
+		return watch.SyncResult{FilesChanged: 1}, nil
+	}, watch.Options{DebounceMs: 20})
+	if err := w.StartWithError(); err != nil {
+		t.Fatal(err)
+	}
+	w.IngestEventForTests("active.go")
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("sync did not start")
+	}
+
+	stopped := make(chan struct{})
+	go func() {
+		w.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+		t.Fatal("Stop returned while sync was active")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop did not return after sync completed")
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:watch-coverage-is-complete-or-start-fails
+func TestStartFailsWhenDirectoryWatchCapWouldLeavePartialCoverage(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	w := watch.New(dir, func() (watch.SyncResult, error) { return watch.SyncResult{}, nil }, watch.Options{
+		MaxDirWatches: 1,
+	})
+	err := w.StartWithError()
+	if err == nil || !strings.Contains(err.Error(), "directory-watch cap reached") {
+		t.Fatalf("StartWithError() = %v, want directory-watch cap error", err)
+	}
+	if w.IsActive() {
+		t.Fatal("watcher must not report active with partial directory coverage")
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:populated-directory-move-is-reconciled
+func TestPopulatedDirectoryMoveSchedulesDirtyPathBatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping real-watcher test in short mode")
+	}
+	watchedRoot := t.TempDir()
+	stagingRoot := t.TempDir()
+	incoming := filepath.Join(stagingRoot, "incoming")
+	if err := os.Mkdir(incoming, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(incoming, "moved.go"), []byte("package moved\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pathsCh := make(chan []string, 1)
+	w := watch.NewWithPaths(watchedRoot, func(paths []string) (watch.SyncResult, error) {
+		select {
+		case pathsCh <- append([]string(nil), paths...):
+		default:
+		}
+		return watch.SyncResult{FilesChanged: len(paths)}, nil
+	}, watch.Options{DebounceMs: 50})
+	if err := w.StartWithError(); err != nil {
+		t.Skipf("watcher could not start: %v", err)
+	}
+	t.Cleanup(w.Stop)
+	if err := os.Rename(incoming, filepath.Join(watchedRoot, "incoming")); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case paths := <-pathsCh:
+		if got, want := strings.Join(paths, ","), "incoming/moved.go"; got != want {
+			t.Fatalf("paths = %q, want %q", got, want)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("populated directory move did not schedule reconciliation")
+	}
+}
+
 // TestAdmitUnknownLanguageFile verifies that a non-gitignored file with an
 // unknown language is admitted (triggers a sync) so it becomes a bare
 // file-level node, per the whole-repo-file-nodes change.
@@ -430,6 +553,7 @@ func TestPendingFilesRetainedOnSyncError(t *testing.T) {
 	w.Stop()
 }
 
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:lock-contention-retries-without-clearing
 // TestLockUnavailableReschedules verifies the LockUnavailableError path:
 // no onSyncError called, pendingFiles preserved, retry succeeds.
 func TestLockUnavailableReschedules(t *testing.T) {

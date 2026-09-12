@@ -226,7 +226,7 @@ Not defined yet.
 	}
 }
 
-func TestSyncLockConflictReturnsZeroResult(t *testing.T) {
+func TestSyncLockConflictReturnsExplicitSignal(t *testing.T) {
 	dir, idx := newSyncProject(t)
 	other, err := Open(dir, Options{})
 	if err != nil {
@@ -238,8 +238,8 @@ func TestSyncLockConflictReturnsZeroResult(t *testing.T) {
 	}
 
 	res := idx.Sync(Options{})
-	if res.FilesChecked != 0 || res.DurationMs != 0 {
-		t.Errorf("SyncResult = %+v, want zero-value (lock signal)", res)
+	if !res.LockUnavailable || res.FilesChecked != 0 || res.DurationMs != 0 {
+		t.Errorf("SyncResult = %+v, want explicit lock-unavailable signal", res)
 	}
 }
 
@@ -477,6 +477,25 @@ func TestSyncFilesRebuildsWhenPackageManifestCanChangeScopes(t *testing.T) {
 	res := idx.SyncFiles([]string{"package.json"}, Options{})
 	if !res.FullReindex || len(res.Errors) != 0 {
 		t.Fatalf("manifest sync = %+v, want successful rebuild", res)
+	}
+}
+
+func TestSyncFilesRebuildsWhenGitignoreChangesAdmission(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "generated", "stale.go"), "package generated\nfunc Stale() {}\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, filepath.Join(dir, ".gitignore"), "generated/\n")
+
+	res := idx.SyncFiles([]string{".gitignore"}, Options{})
+	if !res.FullReindex || len(res.Errors) != 0 {
+		t.Fatalf(".gitignore sync = %+v, want successful rebuild", res)
+	}
+	if nodes, err := idx.Store().GetNodesByName("Stale"); err != nil || len(nodes) != 0 {
+		t.Fatalf("ignored symbol remains: nodes=%+v err=%v", nodes, err)
 	}
 }
 
