@@ -1,11 +1,11 @@
 ---
 format: https://specscore.md/idea-specification
-status: Specified
+status: Implemented
 ---
 
 # Idea: Live daemon repository browser
 
-**Status:** Specified
+**Status:** Implemented
 **Date:** 2026-09-12
 **Owner:** alex
 **Promotes To:** live-daemon-api

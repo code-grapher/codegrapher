@@ -1,12 +1,12 @@
 ---
 format: https://specscore.md/feature-specification
-status: Approved
+status: Stable
 ---
 
 # Feature: Authenticated browser API
 
 > [SpecScore.**Studio**](https://specscore.studio): | [Explore](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/live-daemon-api?op=explore) | [Edit](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/live-daemon-api?op=edit) | [Ask question](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/live-daemon-api?op=ask) | [Request change](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/live-daemon-api?op=request-change) |
-**Status:** Approved
+**Status:** Stable
 **Source Ideas:** live-daemon-repository-browser
 
 ## Summary

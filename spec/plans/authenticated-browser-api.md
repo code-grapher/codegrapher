@@ -1,11 +1,11 @@
 ---
 format: https://specscore.md/plan-specification
-status: Executing
+status: Implemented
 ---
 
 # Plan: Authenticated browser API
 
-**Status:** Executing
+**Status:** Implemented
 **Source Feature:** live-daemon-api
 **Date:** 2026-09-12
 **Owner:** alex
@@ -114,7 +114,7 @@ watcher/daemon lifecycle regressions.
 
 **Verifies:** live-daemon-api#ac:contract-generated-from-typespec, live-daemon-api#ac:public-api-authenticates-and-confines-origin, live-daemon-api#ac:status-negotiates-api-compatibility, live-daemon-api#ac:repository-identity-is-stable-and-path-free, live-daemon-api#ac:tree-and-file-access-is-traversal-safe-and-bounded, live-daemon-api#ac:symbol-search-and-graph-are-bounded, live-daemon-api#ac:freshness-and-revision-are-truthful, live-daemon-api#ac:serve-capabilities-compose, live-daemon-api#ac:daemon-separates-browser-and-control-credentials, live-daemon-api#ac:real-server-browser-api-journey
 **Depends-On:** 5
-**Status:** in_progress
+**Status:** complete
 
 Run focused tests, the required Go/CGO gates once, contract drift verification,
 SpecScore lint, and an independent adversarial review of the exact diff. Resolve
@@ -122,6 +122,13 @@ every finding, land via WB, verify the exact remote receipt and release revision
 upgrade the Homebrew-managed binary, and run the installed daemon/browser API
 journey before reporting the consumer integration contract and still-pending
 website wiring explicitly.
+
+Completed with independent exact-diff review, WB landing receipt
+`merge-code-grapher-codegrapher-main-b40ee432e912-742186f7412f.json`, remote
+`main` and CodeGrapher `v0.8.0` both at
+`cfb06fb949dcacad7288605cbcfbef00241a634b`, 15 passing post-merge checks, and
+an installed Homebrew `v0.8.0` daemon/API journey covering start, all endpoint
+families, security errors, stop, and listener teardown.
 
 ## Open Questions
 
