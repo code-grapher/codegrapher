@@ -1,11 +1,11 @@
 ---
 format: https://specscore.md/plan-specification
-status: Implemented
+status: Executing
 ---
 
 # Plan: Authenticated browser API
 
-**Status:** Implemented
+**Status:** Executing
 **Source Feature:** live-daemon-api
 **Date:** 2026-09-12
 **Owner:** alex
@@ -129,6 +129,18 @@ Completed with independent exact-diff review, WB landing receipt
 `cfb06fb949dcacad7288605cbcfbef00241a634b`, 15 passing post-merge checks, and
 an installed Homebrew `v0.8.0` daemon/API journey covering start, all endpoint
 families, security errors, stop, and listener teardown.
+
+### Task 7: Make the generated client consumable by the browser repository
+
+**Verifies:** live-daemon-api#ac:generated-client-installs-from-git
+**Depends-On:** 6
+**Status:** in_progress
+
+Add the package lifecycle and export metadata required for pnpm to install the
+generated client directly from an immutable CodeGrapher Git subdirectory.
+Prove a clean package build/import, release the repair, and let the
+`codegrapher-dev` consumer pin that immutable provider revision without a local
+filesystem link.
 
 ## Open Questions
 

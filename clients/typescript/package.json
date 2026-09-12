@@ -11,10 +11,23 @@
     "typescript": "^5.5.2"
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "prepare": "pnpm run build"
   },
   "exports": {
-    ".": "./dist/index.js",
-    "./models": "./dist/models/index.js"
-  }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./models": {
+      "types": "./dist/models/index.d.ts",
+      "import": "./dist/models/index.js",
+      "default": "./dist/models/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "types": "./dist/index.d.ts"
 }

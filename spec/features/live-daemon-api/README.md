@@ -1,12 +1,12 @@
 ---
 format: https://specscore.md/feature-specification
-status: Stable
+status: Amending
 ---
 
 # Feature: Authenticated browser API
 
 > [SpecScore.**Studio**](https://specscore.studio): | [Explore](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/live-daemon-api?op=explore) | [Edit](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/live-daemon-api?op=edit) | [Ask question](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/live-daemon-api?op=ask) | [Request change](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/live-daemon-api?op=request-change) |
-**Status:** Stable
+**Status:** Amending
 **Source Ideas:** live-daemon-repository-browser
 
 ## Summary
@@ -36,6 +36,14 @@ filesystem roots.
   `/codegrapher/v1/` contract. Its checked-in OpenAPI document and TypeScript
 client MUST be generated artifacts, and verification MUST fail when either
 drifts.
+
+### REQ: generated-client-distribution
+
+The generated `@code-grapher/browser-api-client` package MUST be consumable
+from an immutable CodeGrapher Git revision without a local filesystem link.
+Installing its `clients/typescript` subdirectory MUST build the declared
+JavaScript and declaration exports reproducibly from the checked-in generated
+source.
 
 ### REQ: public-authentication-and-cors
 
@@ -140,6 +148,16 @@ revision change, stale indexed file, and bounds violations MUST be distinct.
 **When** contract generation and drift verification run
 
 **Then** both artifacts reproduce byte-for-byte and a changed generated file makes the drift check fail.
+
+### AC: generated-client-installs-from-git
+
+**Requirements:** live-daemon-api#req:generated-client-distribution
+
+**Given** an immutable CodeGrapher Git revision and its `clients/typescript` package
+
+**When** a consumer installs that Git subdirectory and imports the package root
+
+**Then** the declared JavaScript and TypeScript exports exist without a local workspace link or copied DTOs.
 
 ### AC: public-api-authenticates-and-confines-origin
 
