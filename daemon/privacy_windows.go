@@ -17,6 +17,9 @@ func protectUserOnly(path string) error {
 	if err != nil {
 		return err
 	}
+	var pinner runtime.Pinner
+	pinner.Pin(user.User.Sid)
+	defer pinner.Unpin()
 	inheritance := uint32(windows.NO_INHERITANCE)
 	info, err := os.Stat(path)
 	if err != nil {
@@ -35,9 +38,6 @@ func protectUserOnly(path string) error {
 			TrusteeValue: windows.TrusteeValueFromSID(user.User.Sid),
 		},
 	}}, nil)
-	// TrusteeValueFromSID converts the SID pointer to uintptr, so it does not
-	// keep the token-user buffer alive for the Windows call that copies it.
-	runtime.KeepAlive(user)
 	if err != nil {
 		return err
 	}
