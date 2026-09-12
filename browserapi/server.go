@@ -135,6 +135,13 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET "+BasePath+"/repositories/{repositoryId}/revisions/{revision}/search", s.search)
 	mux.HandleFunc("GET "+BasePath+"/repositories/{repositoryId}/revisions/{revision}/symbols/{symbolId}/graph", s.graph)
 	mux.HandleFunc("OPTIONS "+BasePath+"/{rest...}", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	mux.HandleFunc(BasePath+"/{rest...}", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			s.writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Public API operations are read-only GET requests")
+			return
+		}
+		s.writeError(w, http.StatusNotFound, "route_not_found", "Public API route was not found")
+	})
 	return s.security(mux)
 }
 
@@ -156,7 +163,11 @@ func (s *Server) security(next http.Handler) http.Handler {
 			}
 		}
 		if r.Method != http.MethodOptions {
-			provided := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+			scheme, provided, found := strings.Cut(r.Header.Get("Authorization"), " ")
+			if !found || scheme != "Bearer" {
+				s.writeError(w, http.StatusUnauthorized, "unauthorized", "A valid browser credential is required")
+				return
+			}
 			if len(provided) != len(s.token) || subtle.ConstantTimeCompare([]byte(provided), []byte(s.token)) != 1 {
 				s.writeError(w, http.StatusUnauthorized, "unauthorized", "A valid browser credential is required")
 				return
@@ -263,6 +274,9 @@ func (s *Server) getTree(w http.ResponseWriter, r *http.Request) {
 	if truncated {
 		ordered = ordered[:s.limits.MaxTreeEntries]
 	}
+	if !s.ensureCurrentRevision(w, snapshot.revision) {
+		return
+	}
 	s.writeJSON(w, http.StatusOK, TreeResponse{RepositoryID: s.repositoryID, Revision: snapshot.revision, Path: directory, Entries: ordered, Limit: s.limits.MaxTreeEntries, Truncated: truncated, Freshness: publicFreshness(s.freshness(), snapshot.indexedAt)})
 }
 
@@ -316,6 +330,9 @@ func (s *Server) getFile(w http.ResponseWriter, r *http.Request) {
 			lineCount++
 		}
 	}
+	if !s.ensureCurrentRevision(w, snapshot.revision) {
+		return
+	}
 	s.writeJSON(w, http.StatusOK, FileResponse{RepositoryID: s.repositoryID, Revision: snapshot.revision, Path: relative, Language: string(record.Language), Size: int64(len(content)), LineCount: lineCount, ContentHash: record.ContentHash, Content: string(content), Freshness: publicFreshness(s.freshness(), snapshot.indexedAt)})
 }
 
@@ -331,6 +348,9 @@ func (s *Server) getSymbol(w http.ResponseWriter, r *http.Request) {
 	}
 	if node == nil {
 		s.writeError(w, http.StatusNotFound, "symbol_not_found", "Indexed symbol was not found")
+		return
+	}
+	if !s.ensureCurrentRevision(w, snapshot.revision) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, SymbolResponse{RepositoryID: s.repositoryID, Revision: snapshot.revision, Symbol: publicSymbol(*node), Freshness: publicFreshness(s.freshness(), snapshot.indexedAt)})
@@ -373,6 +393,9 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	if truncated {
 		all = all[:limit]
 	}
+	if !s.ensureCurrentRevision(w, snapshot.revision) {
+		return
+	}
 	s.writeJSON(w, http.StatusOK, SearchResponse{RepositoryID: s.repositoryID, Revision: snapshot.revision, Query: raw, Results: all, Limit: limit, Truncated: truncated, Freshness: publicFreshness(s.freshness(), snapshot.indexedAt)})
 }
 
@@ -398,6 +421,19 @@ func (s *Server) validRevision(w http.ResponseWriter, r *http.Request) (snapshot
 		return snapshot{}, false
 	}
 	return value, true
+}
+
+func (s *Server) ensureCurrentRevision(w http.ResponseWriter, revision string) bool {
+	value, err := snapshotIndex(s.idx)
+	if err != nil {
+		s.internalError(w)
+		return false
+	}
+	if value.revision != revision {
+		s.writeError(w, http.StatusConflict, "revision_changed", "Repository index revision has changed")
+		return false
+	}
+	return true
 }
 
 func (s *Server) findNode(id string) (*model.Node, error) {

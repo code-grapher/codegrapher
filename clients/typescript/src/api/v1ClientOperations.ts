@@ -189,7 +189,7 @@ export async function searchSymbols(
     repositoryId: repositoryId,
     revision: revision,
     query: query,
-    ...(options?.limit && {limit: options.limit})
+    ...(options?.limit !== undefined && {limit: options.limit})
   });
   const httpRequestOptions = {
     headers: {},
@@ -224,9 +224,9 @@ export async function getSymbolGraph(
     revision: revision,
     symbolId: symbolId,
     ...(options?.direction && {direction: options.direction}),
-    ...(options?.depth && {depth: options.depth}),
-    ...(options?.maxNodes && {maxNodes: options.maxNodes}),
-    ...(options?.maxEdges && {maxEdges: options.maxEdges})
+    ...(options?.depth !== undefined && {depth: options.depth}),
+    ...(options?.maxNodes !== undefined && {maxNodes: options.maxNodes}),
+    ...(options?.maxEdges !== undefined && {maxEdges: options.maxEdges})
   });
   const httpRequestOptions = {
     headers: {},

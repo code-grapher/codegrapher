@@ -39,6 +39,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+        '405':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '409':
           description: The request conflicts with the current state of the server.
           content:
@@ -105,6 +111,12 @@ paths:
                 $ref: '#/components/schemas/ApiError'
         '404':
           description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '405':
+          description: Client error
           content:
             application/json:
               schema:
@@ -186,6 +198,12 @@ paths:
                 $ref: '#/components/schemas/ApiError'
         '404':
           description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '405':
+          description: Client error
           content:
             application/json:
               schema:
@@ -278,6 +296,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+        '405':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '409':
           description: The request conflicts with the current state of the server.
           content:
@@ -354,6 +378,12 @@ paths:
                 $ref: '#/components/schemas/ApiError'
         '404':
           description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '405':
+          description: Client error
           content:
             application/json:
               schema:
@@ -465,6 +495,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+        '405':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '409':
           description: The request conflicts with the current state of the server.
           content:
@@ -546,6 +582,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+        '405':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '409':
           description: The request conflicts with the current state of the server.
           content:
@@ -607,6 +649,12 @@ paths:
                 $ref: '#/components/schemas/ApiError'
         '404':
           description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '405':
+          description: Client error
           content:
             application/json:
               schema:
@@ -850,6 +898,7 @@ components:
       required:
         - id
         - label
+        - revision
         - freshness
         - fileCount
         - symbolCount

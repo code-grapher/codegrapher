@@ -123,12 +123,7 @@ func newServeCmd() *cobra.Command {
 						allowedOrigins = append(allowedOrigins, origin)
 					}
 				}
-				api, err := browserapi.New(idx, browserapi.Config{Token: token, AllowedOrigins: allowedOrigins, Freshness: func() freshness.Status {
-					if owner != nil {
-						return owner.Status()
-					}
-					return freshness.Status{IndexCurrent: true}
-				}})
+				api, err := browserapi.New(idx, browserapi.Config{Token: token, AllowedOrigins: allowedOrigins, Freshness: func() freshness.Status { return servedFreshness(owner) }})
 				if err != nil {
 					_ = listener.Close()
 					return err
@@ -164,6 +159,15 @@ func newServeCmd() *cobra.Command {
 }
 
 type serveCapabilities struct{ mcp, watch, api bool }
+
+func servedFreshness(owner *freshness.Owner) freshness.Status {
+	if owner == nil {
+		// Without a watcher there is no observation proving the filesystem still
+		// matches the index, so API-only serving must remain visibly stale.
+		return freshness.Status{}
+	}
+	return owner.Status()
+}
 
 func selectServeCapabilities(explicit, mcp, watch, api, noWatch bool) serveCapabilities {
 	if !explicit {
@@ -201,14 +205,16 @@ func runServeGroup(ctx context.Context, participants []func(context.Context) err
 		go func(run func(context.Context) error) { done <- run(runCtx) }(participant)
 	}
 	var first error
+	completed := 0
 	select {
 	case first = <-done:
+		completed = 1
 	case <-ctx.Done():
 	}
 	cancel()
 	timer := time.NewTimer(2 * time.Second)
 	defer timer.Stop()
-	for remaining := len(participants) - 1; remaining > 0; remaining-- {
+	for remaining := len(participants) - completed; remaining > 0; remaining-- {
 		select {
 		case <-done:
 		case <-timer.C:

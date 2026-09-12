@@ -55,10 +55,22 @@ func TestRealBrowserGeneratedClientJourney(t *testing.T) {
 
 	entry := filepath.Join(t.TempDir(), "journey.ts")
 	clientImport := filepath.ToSlash(filepath.Join(repositoryRoot, "clients/typescript/src/index.ts"))
-	source := fmt.Sprintf(`import { V1Client } from %q;
+	source := fmt.Sprintf(`import { createV1ClientFromTransport } from %q;
 globalThis.runCodeGrapherJourney = async (endpoint, token) => {
-  const credential = { getBearerToken: async () => token };
-  const client = new V1Client(credential, { endpoint, allowInsecureConnection: true });
+  const base = new URL(endpoint);
+  const transport = {
+    baseUrl: endpoint,
+    fetch: async (input, init) => {
+      const requested = new URL(input instanceof Request ? input.url : String(input), endpoint + '/');
+      if (requested.origin !== base.origin || (requested.pathname !== base.pathname && !requested.pathname.startsWith(base.pathname + '/'))) {
+        throw new Error('Refusing to send daemon credentials outside its API.');
+      }
+      const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
+      headers.set('Authorization', 'Bearer ' + token);
+      return fetch(new Request(requested, { ...init, headers, credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer' }));
+    },
+  };
+  const client = createV1ClientFromTransport(transport);
   const status = await client.getStatus();
   const listed = await client.listRepositories();
   const repo = listed.repositories[0];
@@ -69,7 +81,11 @@ globalThis.runCodeGrapherJourney = async (endpoint, token) => {
   const graph = await client.getSymbolGraph(repo.id, repo.revision, symbol.symbol.id, { direction: 'both', depth: 1, maxNodes: 10, maxEdges: 10 });
   let traversalRejected = false;
   try { await client.getFile(repo.id, repo.revision, '../secret'); } catch { traversalRejected = true; }
-  return { apiVersion: status.apiVersion, repositoryCount: listed.repositories.length, treeEntries: tree.entries.length, content: file.content, symbol: symbol.symbol.name, graphNodes: graph.nodes.length, traversalRejected };
+  let zeroLimitRejected = false;
+  try { await client.searchSymbols(repo.id, repo.revision, 'Alpha', { limit: 0 }); } catch { zeroLimitRejected = true; }
+  let zeroDepthRejected = false;
+  try { await client.getSymbolGraph(repo.id, repo.revision, symbol.symbol.id, { depth: 0 }); } catch { zeroDepthRejected = true; }
+  return { apiVersion: status.apiVersion, repositoryCount: listed.repositories.length, treeEntries: tree.entries.length, content: file.content, symbol: symbol.symbol.name, graphNodes: graph.nodes.length, traversalRejected, zeroLimitRejected, zeroDepthRejected };
 };`, clientImport)
 	if err := os.WriteFile(entry, []byte(source), 0o600); err != nil {
 		t.Fatal(err)
@@ -119,11 +135,13 @@ globalThis.runCodeGrapherJourney = async (endpoint, token) => {
 		Symbol            string `json:"symbol"`
 		GraphNodes        int    `json:"graphNodes"`
 		TraversalRejected bool   `json:"traversalRejected"`
+		ZeroLimitRejected bool   `json:"zeroLimitRejected"`
+		ZeroDepthRejected bool   `json:"zeroDepthRejected"`
 	}
 	if err := json.Unmarshal(output, &got); err != nil {
 		t.Fatalf("decode browser result: %v\n%s", err, output)
 	}
-	if got.APIVersion != "v1" || got.RepositoryCount != 1 || got.TreeEntries == 0 || !strings.Contains(got.Content, "func Alpha") || got.Symbol != "Alpha" || got.GraphNodes == 0 || !got.TraversalRejected {
+	if got.APIVersion != "v1" || got.RepositoryCount != 1 || got.TreeEntries == 0 || !strings.Contains(got.Content, "func Alpha") || got.Symbol != "Alpha" || got.GraphNodes == 0 || !got.TraversalRejected || !got.ZeroLimitRejected || !got.ZeroDepthRejected {
 		t.Fatalf("browser journey = %+v", got)
 	}
 }

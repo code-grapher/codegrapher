@@ -11,7 +11,7 @@ name: Release
 # `feat!:` is capped to a minor bump instead of jumping to v1.0.0. Cut v1.0.0
 # deliberately by pushing that tag.
 #
-# The Homebrew cask (see .goreleaser.yaml) publishes to specscore/homebrew-tap
+# The Homebrew cask (see .goreleaser.yaml) publishes to code-grapher/homebrew-tap
 # and needs a GORELEASER_GITHUB_TOKEN secret with Contents:write on that tap;
 # until that secret is set the cask push fails (the GitHub release still ships).
 
@@ -61,7 +61,7 @@ jobs:
       # signed binary is exactly what shipped dead (SIGKILL on launch) before.
       require_notarized_macos: true
     secrets:
-      # Cross-repo PAT with Contents:write on specscore/homebrew-tap (the cask
+      # Cross-repo PAT with Contents:write on code-grapher/homebrew-tap (the cask
       # target), forwarded to GoReleaser as $GORELEASER_GITHUB_TOKEN.
       GORELEASER_GITHUB_TOKEN: ${{ secrets.GORELEASER_GITHUB_TOKEN }}
       # macOS signing + notarization. These activate the `notarize:` block in

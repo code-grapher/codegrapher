@@ -10,6 +10,16 @@ const client = readFileSync('clients/typescript/src/v1Client.ts', 'utf8')
 if (!client.includes("Object.defineProperty(globalThis, 'process'")) {
   throw new Error('generated client is missing the browser-safe insecure-loopback shim')
 }
+const transport = readFileSync('clients/typescript/src/transport.ts', 'utf8')
+if (!transport.includes('createV1ClientFromTransport')) {
+  throw new Error('generated client is missing the browser transport adapter')
+}
+const operations = readFileSync('clients/typescript/src/api/v1ClientOperations.ts', 'utf8')
+for (const option of ['limit', 'depth', 'maxNodes', 'maxEdges']) {
+  if (!operations.includes(`options?.${option} !== undefined`)) {
+    throw new Error(`generated client drops an explicit zero ${option}`)
+  }
+}
 const status = execFileSync(
   'git',
   [

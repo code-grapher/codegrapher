@@ -24,8 +24,17 @@ func TestBrowserAPIAuthenticatedJourneyAndPathSafety(t *testing.T) {
 
 	unauthorized := request(t, api, http.MethodGet, BasePath+"/status", "", "")
 	assertError(t, unauthorized, http.StatusUnauthorized, "unauthorized")
+	for _, header := range []string{testToken, "Basic " + testToken, "bearer " + testToken, "Bearer  " + testToken} {
+		req := httptest.NewRequest(http.MethodGet, BasePath+"/status", nil)
+		req.Header.Set("Authorization", header)
+		response := httptest.NewRecorder()
+		api.Handler().ServeHTTP(response, req)
+		assertError(t, response, http.StatusUnauthorized, "unauthorized")
+	}
 	forbidden := request(t, api, http.MethodGet, BasePath+"/status", testToken, "https://evil.example")
 	assertError(t, forbidden, http.StatusForbidden, "origin_forbidden")
+	assertError(t, request(t, api, http.MethodPost, BasePath+"/status", testToken, ""), http.StatusMethodNotAllowed, "method_not_allowed")
+	assertError(t, request(t, api, http.MethodGet, BasePath+"/missing", testToken, ""), http.StatusNotFound, "route_not_found")
 	preflightRequest := httptest.NewRequest(http.MethodOptions, BasePath+"/status", nil)
 	preflightRequest.Header.Set("Origin", "https://codegrapher.dev")
 	preflightRequest.Header.Set("Access-Control-Request-Private-Network", "true")
@@ -38,6 +47,11 @@ func TestBrowserAPIAuthenticatedJourneyAndPathSafety(t *testing.T) {
 	status := request(t, api, http.MethodGet, BasePath+"/status", testToken, "https://codegrapher.dev")
 	if status.Code != http.StatusOK || strings.Contains(status.Body.String(), root) {
 		t.Fatalf("status = %d %s", status.Code, status.Body.String())
+	}
+	var statusBody StatusResponse
+	decodeResponse(t, status, &statusBody)
+	if statusBody.APIVersion != "v1" || statusBody.ServerVersion == "" || statusBody.RepositoryCount != 1 || len(statusBody.Capabilities) == 0 {
+		t.Fatalf("status compatibility handshake = %+v", statusBody)
 	}
 	var repositories struct {
 		Repositories []Repository `json:"repositories"`
@@ -212,6 +226,17 @@ func TestAPIErrorAndBoundedBranches(t *testing.T) {
 			t.Fatal("escaping symlink was accepted")
 		}
 	}
+	if err := os.WriteFile(filepath.Join(root, "helper.go"), []byte("package sample\n\nfunc Reindexed() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if result := api.idx.Sync(indexer.Options{}); result.LockUnavailable || len(result.Errors) != 0 {
+		t.Fatalf("sync fixture: %+v", result)
+	}
+	revisionResponse := httptest.NewRecorder()
+	if api.ensureCurrentRevision(revisionResponse, revision) {
+		t.Fatal("changed index accepted an earlier revision")
+	}
+	assertError(t, revisionResponse, http.StatusConflict, "revision_changed")
 }
 
 func TestPublicAPIHelpers(t *testing.T) {

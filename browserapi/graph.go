@@ -135,6 +135,9 @@ func (s *Server) graph(w http.ResponseWriter, r *http.Request) {
 		}
 		return publicEdges[i].TargetID < publicEdges[j].TargetID
 	})
+	if !s.ensureCurrentRevision(w, snapshot.revision) {
+		return
+	}
 	s.writeJSON(w, http.StatusOK, GraphResponse{RepositoryID: s.repositoryID, Revision: snapshot.revision, RootSymbolID: rootID, Direction: direction, Depth: depth, MaxNodes: maxNodes, MaxEdges: maxEdges, Nodes: publicNodes, Edges: publicEdges, Truncated: truncated, Freshness: publicFreshness(s.freshness(), snapshot.indexedAt)})
 }
 

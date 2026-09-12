@@ -41,7 +41,7 @@ type Repository struct {
 	Remote      string    `json:"remote,omitempty"`
 	Branch      string    `json:"branch,omitempty"`
 	HeadCommit  string    `json:"headCommit,omitempty"`
-	Revision    string    `json:"revision,omitempty"`
+	Revision    string    `json:"revision"`
 	Freshness   Freshness `json:"freshness"`
 	FileCount   int       `json:"fileCount"`
 	SymbolCount int       `json:"symbolCount"`

@@ -59,7 +59,7 @@ export interface RepositorySummary {
   remote?: string;
   branch?: string;
   headCommit?: string;
-  revision?: string;
+  revision: string;
   freshness: Freshness;
   fileCount: number;
   symbolCount: number;

@@ -64,7 +64,7 @@ model RepositorySummary {
   remote?: string;
   branch?: string;
   headCommit?: string;
-  revision?: Revision;
+  revision: Revision;
   freshness: Freshness;
   fileCount: int32;
   symbolCount: int32;
@@ -179,7 +179,7 @@ model ApiError {
 
 @error
 model ApiErrorResponse {
-  @statusCode statusCode: 400 | 401 | 403 | 404 | 409 | 413 | 422 | 500 | 503;
+  @statusCode statusCode: 400 | 401 | 403 | 404 | 405 | 409 | 413 | 422 | 500 | 503;
   @body error: ApiError;
 }
 

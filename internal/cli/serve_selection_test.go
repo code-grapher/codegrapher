@@ -5,6 +5,7 @@ import (
 	"io"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestCombinedServeCancelsAndJoinsWatchWhenMCPCompletes(t *testing.T) {
@@ -29,7 +30,37 @@ func TestRunServeGroupAllowsNoParticipants(t *testing.T) {
 	}
 }
 
+func TestRunServeGroupJoinsEveryParticipantAfterParentCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	release := make(chan struct{})
+	returned := make(chan error, 1)
+	go func() {
+		returned <- runServeGroup(ctx, []func(context.Context) error{
+			func(runCtx context.Context) error { <-runCtx.Done(); return nil },
+			func(runCtx context.Context) error { <-runCtx.Done(); <-release; return nil },
+		})
+	}()
+	cancel()
+	select {
+	case err := <-returned:
+		t.Fatalf("serve group returned before every participant joined: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case err := <-returned:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("serve group did not return after every participant joined")
+	}
+}
+
 func TestServeCapabilitySelection(t *testing.T) {
+	if status := servedFreshness(nil); status.IndexCurrent || status.WatchReady {
+		t.Fatalf("API-only serve claimed unobserved freshness: %+v", status)
+	}
 	if got := selectServeCapabilities(false, false, false, false, false); got != (serveCapabilities{mcp: true, watch: true, api: true}) {
 		t.Fatalf("bare serve = %+v", got)
 	}

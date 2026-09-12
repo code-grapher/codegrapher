@@ -9,16 +9,24 @@ Run `pnpm generate:contract` from the repository root to regenerate:
 `pnpm check:contract` regenerates both outputs and fails when the checked-in
 artifacts drift. `pnpm build:client` type-checks and builds the generated client.
 
-The generated `@code-grapher/browser-api-client` accepts a bearer credential and
-an `endpoint` option:
+The generated `@code-grapher/browser-api-client` plugs directly into the
+confining `{ baseUrl, fetch }` transport already landed in the browser UI:
 
 ```ts
-const credential = { getBearerToken: async () => fragmentSecret }
-const client = new V1Client(credential, {
-  endpoint: 'http://127.0.0.1:7331/codegrapher/v1',
-  allowInsecureConnection: true,
+import { createV1ClientFromTransport } from '@code-grapher/browser-api-client'
+import { createLiveDaemonTransport } from '@codegrapher/ui'
+
+const transport = createLiveDaemonTransport(authority, fragmentSecret, {
+  allowInsecureLoopback: true,
 })
+const client = createV1ClientFromTransport(transport)
 ```
+
+The adapter never receives the browser secret. Authentication and origin/path
+confinement remain owned by the caller-supplied `fetch`, while the generated
+client owns paths, parameters, and wire DTOs. Low-level callers may instead
+construct `V1Client` with a bearer credential plus `endpoint` and
+`allowInsecureConnection` options.
 
 The generation command applies two checked, deterministic compatibility fixes
 to the preview TypeSpec JavaScript emitter/runtime: it makes the advertised
