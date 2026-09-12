@@ -1,11 +1,11 @@
 ---
 format: https://specscore.md/plan-specification
-status: Approved
+status: Implemented
 ---
 
 # Plan: Automatic index freshness
 
-**Status:** Approved
+**Status:** Implemented
 **Source Feature:** automatic-index-freshness
 **Date:** 2026-09-12
 **Owner:** alex
@@ -108,12 +108,16 @@ mode and leave platform/event permutations to unit tests.
 
 **Verifies:** automatic-index-freshness#ac:foreground-watch-reconciles-real-edit, automatic-index-freshness#ac:burst-is-coalesced, automatic-index-freshness#ac:verbose-reports-event-and-operation-timing, automatic-index-freshness#ac:default-output-is-not-event-level, automatic-index-freshness#ac:failure-remains-dirty-and-visible, automatic-index-freshness#ac:lock-contention-retries-without-clearing, automatic-index-freshness#ac:watch-coverage-is-complete-or-start-fails, automatic-index-freshness#ac:worktree-index-is-local, automatic-index-freshness#ac:populated-directory-move-is-reconciled, automatic-index-freshness#ac:graceful-cancellation
 **Depends-On:** 4
-**Status:** planning
+**Status:** complete
 
 Run focused tests during implementation, the repository's required Go gates
 once, SpecScore lint, and an independent adversarial review of spec, plan,
 implementation, and tests. Fix or explicitly record every finding, then use
 SpecScore lifecycle commands to derive the implemented plan/feature state.
+
+Evidence: `go vet ./...`, `CGO_ENABLED=0 go build ./...`,
+`CGO_ENABLED=0 go test -count=1 ./...`, focused race tests, and an independent
+adversarial re-review all passed at `bd7f492`.
 
 ## Open Questions
 
