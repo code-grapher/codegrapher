@@ -394,10 +394,14 @@ func hashFile(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
 	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
+	_, copyErr := io.Copy(h, f)
+	closeErr := f.Close()
+	if copyErr != nil {
+		return "", copyErr
+	}
+	if closeErr != nil {
+		return "", closeErr
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
