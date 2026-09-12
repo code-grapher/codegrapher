@@ -895,3 +895,21 @@ func TestSyncHashesSameSizeSameMillisecondFileChanges(t *testing.T) {
 		t.Fatalf("Sync result = %+v; New indexed = %v, want changed file indexed", res, hasNodeNamed(t, idx, "New"))
 	}
 }
+
+func TestGetChangedFilesHashesSameMtimeNonGitEdit(t *testing.T) {
+	dir, idx := newSyncProject(t)
+	path := filepath.Join(dir, "src", "index.ts")
+	rec, err := idx.fileRecord("src/index.ts")
+	if err != nil || rec == nil {
+		t.Fatalf("record: %+v %v", rec, err)
+	}
+	writeFile(t, path, "export function cello() { return 'world'; }")
+	tm := time.UnixMilli(rec.ModifiedAt)
+	if err := os.Chtimes(path, tm, tm); err != nil {
+		t.Fatal(err)
+	}
+	changes := idx.GetChangedFiles()
+	if !slices.Contains(changes.Modified, "src/index.ts") {
+		t.Fatalf("non-git same-mtime changes = %+v", changes)
+	}
+}

@@ -106,6 +106,28 @@ func TestRefreshForReadHonorsStaleExtractionVersion(t *testing.T) {
 	}
 }
 
+func TestRefreshForReadRebuildsWhenAnyScopeVersionIsStale(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "package.json"), `{"devDependencies":{"typescript":"5.0.0"}}`)
+	writeFile(t, filepath.Join(dir, "src", "a.ts"), "export function A() {}")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	stores := idx.Stores()
+	if len(stores) < 2 {
+		t.Skip("fixture did not create multiple scopes")
+	}
+	if err := stores[1].SetMetadata("indexed_with_extraction_version", "0"); err != nil {
+		t.Fatal(err)
+	}
+	res, err := idx.RefreshForRead(Options{})
+	if err != nil || !res.FullReindex {
+		t.Fatalf("multi-scope refresh = %+v, %v", res, err)
+	}
+}
+
 func TestStaleVersionRebuildStampsUsableIndexWithSkipWarning(t *testing.T) {
 	dir, idx := newSyncProject(t)
 	setMeta(t, idx, "indexed_with_extraction_version", "0")

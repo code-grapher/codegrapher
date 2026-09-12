@@ -376,15 +376,23 @@ func (idx *Indexer) restoreIncomingEdges(backups []incomingEdgeBackup) error {
 		}
 	}
 	restore := make(map[*store.Store][]model.Edge)
+	existing := make(map[*store.Store]map[string]bool)
+	byStoreSources := make(map[*store.Store][]string)
+	for _, backup := range backups {
+		byStoreSources[backup.store] = append(byStoreSources[backup.store], backup.edge.Source)
+	}
+	for s, sources := range byStoreSources {
+		keys, err := s.ExistingEdgeKeys(sources)
+		if err != nil {
+			return fmt.Errorf("read preserved edges: %w", err)
+		}
+		existing[s] = keys
+	}
 	for _, backup := range backups {
 		// Node IDs can remain stable for a body-only edit even though deleting
 		// the file cascaded its incoming edges. The edge, not the node ID, is
 		// the authoritative indication that restoration is needed.
-		survived, err := backup.store.EdgeExists(backup.edge)
-		if err != nil {
-			return fmt.Errorf("check preserved edge for %s: %w", backup.target.ID, err)
-		}
-		if survived {
+		if existing[backup.store][store.EdgeKey(backup.edge)] {
 			continue
 		}
 		for _, candidate := range byStoreFile[backup.store][backup.target.FilePath] {
@@ -412,13 +420,21 @@ const indexedGitHeadKey = "indexed_git_head"
 // catching clean commits made after indexing. Non-git projects, and old
 // indexes without a revision stamp, retain the filesystem/hash fallback.
 func (idx *Indexer) GetChangedFiles() ChangedFiles {
+	changes, _ := idx.changedFilesForRead()
+	return changes
+}
+
+func (idx *Indexer) changedFilesForRead() (ChangedFiles, error) {
 	if tracked, err := idx.allTrackedFiles(); err == nil && idx.hasEmbeddedRepository(tracked) {
 		return idx.getChangedFilesByScan(true)
+	} else if err != nil {
+		return ChangedFiles{}, err
 	}
 	if changed, ok := idx.gitChangedFilesSinceIndex(); ok {
-		return changed
+		return changed, nil
 	}
-	return idx.getChangedFilesByScan(false)
+	// Non-git and legacy indexes must not trust coarse filesystem timestamps.
+	return idx.getChangedFilesByScan(true)
 }
 
 // RefreshForRead is the strict freshness boundary for symbol consumers. It
@@ -437,7 +453,10 @@ func (idx *Indexer) RefreshForRead(opts Options) (SyncResult, error) {
 		return result, nil
 	}
 	observedHead, gitRepo := gitHead(idx.root)
-	changes := idx.GetChangedFiles()
+	changes, err := idx.changedFilesForRead()
+	if err != nil {
+		return SyncResult{}, fmt.Errorf("inspect index freshness: %w", err)
+	}
 	paths := append(append([]string{}, changes.Added...), changes.Modified...)
 	paths = append(paths, changes.Removed...)
 	if len(paths) == 0 {
@@ -463,7 +482,7 @@ func (idx *Indexer) RefreshForRead(opts Options) (SyncResult, error) {
 	return result, nil
 }
 
-func (idx *Indexer) getChangedFilesByScan(forceHash bool) ChangedFiles {
+func (idx *Indexer) getChangedFilesByScan(forceHash bool) (ChangedFiles, error) {
 	currentFiles := ScanDirectory(idx.root)
 	currentSet := make(map[string]bool, len(currentFiles))
 	for _, f := range currentFiles {
@@ -471,7 +490,7 @@ func (idx *Indexer) getChangedFilesByScan(forceHash bool) ChangedFiles {
 	}
 	tracked, err := idx.allTrackedFiles()
 	if err != nil {
-		return ChangedFiles{}
+		return ChangedFiles{}, err
 	}
 	out := ChangedFiles{}
 	for _, rec := range tracked {
@@ -499,7 +518,7 @@ func (idx *Indexer) getChangedFilesByScan(forceHash bool) ChangedFiles {
 		}
 		fi, err := os.Stat(filepath.Join(idx.root, filepath.FromSlash(filePath)))
 		if err != nil {
-			continue
+			return ChangedFiles{}, err
 		}
 		_, gitDirty := dirty[filePath]
 		if !forceHash && !gitDirty && fi.Size() == rec.Size && statMtimeMs(fi) == rec.ModifiedAt {
@@ -507,7 +526,7 @@ func (idx *Indexer) getChangedFilesByScan(forceHash bool) ChangedFiles {
 		}
 		content, err := os.ReadFile(filepath.Join(idx.root, filepath.FromSlash(filePath)))
 		if err != nil {
-			continue
+			return ChangedFiles{}, err
 		}
 		if rec.ContentHash != HashContent(content) {
 			out.Modified = append(out.Modified, filePath)
@@ -516,13 +535,23 @@ func (idx *Indexer) getChangedFilesByScan(forceHash bool) ChangedFiles {
 	sort.Strings(out.Added)
 	sort.Strings(out.Modified)
 	sort.Strings(out.Removed)
-	return out
+	return out, nil
 }
 
 func (idx *Indexer) gitChangedFilesSinceIndex() (ChangedFiles, bool) {
-	indexedHead, err := idx.Store().GetMetadata(indexedGitHeadKey)
+	stores := idx.Stores()
+	if len(stores) == 0 {
+		return ChangedFiles{}, false
+	}
+	indexedHead, err := stores[0].GetMetadata(indexedGitHeadKey)
 	if err != nil || indexedHead == "" {
 		return ChangedFiles{}, false
+	}
+	for _, s := range stores[1:] {
+		head, err := s.GetMetadata(indexedGitHeadKey)
+		if err != nil || head != indexedHead {
+			return ChangedFiles{}, false
+		}
 	}
 	currentHead, ok := gitHead(idx.root)
 	if !ok {

@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/specscore/codegrapher/model"
@@ -75,6 +76,35 @@ func (s *Store) EdgeExists(e model.Edge) (bool, error) {
 		return false, nil
 	}
 	return err == nil, err
+}
+
+// ExistingEdgeKeys loads persisted edge identities for all sources in one
+// query, avoiding one existence probe per restored incoming edge.
+func (s *Store) ExistingEdgeKeys(sourceIDs []string) (map[string]bool, error) {
+	if len(sourceIDs) == 0 {
+		return map[string]bool{}, nil
+	}
+	data, err := json.Marshal(sourceIDs)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(`SELECT `+edgeColumns+` FROM edges WHERE source IN (SELECT value FROM json_each(?))`, string(data))
+	if err != nil {
+		return nil, err
+	}
+	edges, err := scanEdges(rows)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(edges))
+	for _, edge := range edges {
+		out[EdgeKey(edge)] = true
+	}
+	return out, nil
+}
+
+func EdgeKey(e model.Edge) string {
+	return strings.Join([]string{e.Source, e.Target, string(e.Kind), strconv.Itoa(e.Line), strconv.Itoa(e.Column), e.Provenance}, "\x00")
 }
 
 // AllEdges returns every edge in the store.

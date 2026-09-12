@@ -105,10 +105,21 @@ func (idx *Indexer) IndexAll(opts Options) IndexResult {
 // stamping entirely (missing metadata reads as ""). Read from the primary
 // scope store, which carries the same stamp as every other scope.
 func (idx *Indexer) indexVersionStale() bool {
-	s := idx.Store()
-	v, _ := s.GetMetadata("indexed_with_version")
-	ev, _ := s.GetMetadata("indexed_with_extraction_version")
-	return v != PackageVersion || ev != strconv.Itoa(ExtractionVersion)
+	stores := idx.Stores()
+	if len(stores) == 0 {
+		return true
+	}
+	for _, s := range stores {
+		v, err := s.GetMetadata("indexed_with_version")
+		if err != nil || v != PackageVersion {
+			return true
+		}
+		ev, err := s.GetMetadata("indexed_with_extraction_version")
+		if err != nil || ev != strconv.Itoa(ExtractionVersion) {
+			return true
+		}
+	}
+	return false
 }
 
 // indexAllLocked indexes every source file. The caller MUST already hold
