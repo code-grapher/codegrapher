@@ -31,7 +31,7 @@ func TestStateUsesProtectedSingleUserDACL(t *testing.T) {
 	if err := windows.GetAce(dacl, 0, &ace); err != nil {
 		t.Fatal(err)
 	}
-	if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || ace.Mask == 0 {
+	if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || ace.Mask != userFileAccess {
 		t.Fatalf("state ACE = type %d mask %x, want current-user access", ace.Header.AceType, ace.Mask)
 	}
 	currentUser, err := windows.GetCurrentProcessToken().GetTokenUser()
