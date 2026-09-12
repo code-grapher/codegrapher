@@ -23,6 +23,31 @@ func TestCombinedServeCancelsAndJoinsWatchWhenMCPCompletes(t *testing.T) {
 	}
 }
 
+func TestRunServeGroupAllowsNoParticipants(t *testing.T) {
+	if err := runServeGroup(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestServeCapabilitySelection(t *testing.T) {
+	if got := selectServeCapabilities(false, false, false, false, false); got != (serveCapabilities{mcp: true, watch: true, api: true}) {
+		t.Fatalf("bare serve = %+v", got)
+	}
+	if got := selectServeCapabilities(false, false, false, false, true); got != (serveCapabilities{mcp: true, api: true}) {
+		t.Fatalf("bare --no-watch = %+v", got)
+	}
+	for mask := 1; mask < 8; mask++ {
+		want := serveCapabilities{mcp: mask&1 != 0, watch: mask&2 != 0, api: mask&4 != 0}
+		got := selectServeCapabilities(true, want.mcp, want.watch, want.api, false)
+		if got != want {
+			t.Fatalf("explicit mask %03b = %+v, want %+v", mask, got, want)
+		}
+	}
+	if got := selectServeCapabilities(true, true, true, true, true); got != (serveCapabilities{mcp: true, api: true}) {
+		t.Fatalf("deprecated no-watch override = %+v", got)
+	}
+}
+
 type fakeFreshnessSession struct {
 	closed   atomic.Bool
 	waitDone chan struct{}

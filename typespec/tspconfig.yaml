@@ -1,0 +1,18 @@
+emit:
+  - "@typespec/openapi3"
+  - "@typespec/http-client-js"
+
+options:
+  "@typespec/openapi3":
+    emitter-output-dir: "{project-root}/../api/openapi/v1"
+    output-file: "openapi.yaml"
+    file-type: "yaml"
+    openapi-versions:
+      - "3.0.0"
+    omit-unreachable-types: true
+    operation-id-strategy: "explicit-only"
+  "@typespec/http-client-js":
+    emitter-output-dir: "{project-root}/../clients/typescript"
+    package-name: "@code-grapher/browser-api-client"
+
+warn-as-error: true

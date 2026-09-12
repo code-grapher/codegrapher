@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,13 +16,16 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
+	"github.com/specscore/codegrapher/browserapi"
 	"github.com/specscore/codegrapher/indexer"
 )
 
 const (
-	envStateDir = "CODEGRAPH_DAEMON_DIR"
-	envNonce    = "CODEGRAPH_DAEMON_NONCE"
-	envToken    = "CODEGRAPH_DAEMON_TOKEN"
+	envStateDir       = "CODEGRAPH_DAEMON_DIR"
+	envNonce          = "CODEGRAPH_DAEMON_NONCE"
+	envToken          = "CODEGRAPH_DAEMON_TOKEN"
+	envBrowserToken   = "CODEGRAPH_DAEMON_BROWSER_TOKEN"
+	envBrowserOrigins = "CODEGRAPH_BROWSER_CORS_ORIGINS"
 )
 
 // Manager coordinates the one daemon owned by the current user.
@@ -78,6 +84,58 @@ func (m *Manager) Start(ctx context.Context, projectPath string) (Status, error)
 	return m.start(ctx, projectPath, false)
 }
 
+// BrowserLink returns the fragment-secret URL intended for the local user.
+// Neither control status nor the public API contains this secret.
+func (m *Manager) BrowserLink(ctx context.Context) (string, error) {
+	if err := m.defaults(); err != nil {
+		return "", err
+	}
+	state, err := readState(m.StateDir)
+	if err != nil {
+		return "", err
+	}
+	status, err := m.liveStatus(ctx, state)
+	if err != nil {
+		return "", err
+	}
+	if status.BrowserEndpoint == "" || state.BrowserToken == "" {
+		return "", errors.New("daemon browser service is not ready")
+	}
+	parsed, err := url.Parse(status.BrowserEndpoint)
+	if err != nil {
+		return "", errors.New("daemon browser endpoint is invalid")
+	}
+	address := net.ParseIP(parsed.Hostname())
+	if parsed.Scheme != "http" || parsed.Host == "" || (parsed.Hostname() != "localhost" && (address == nil || !address.IsLoopback())) {
+		return "", errors.New("daemon browser endpoint is invalid")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(status.BrowserEndpoint, "/")+"/repositories", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+state.BrowserToken)
+	response, err := m.HTTPClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("read daemon browser repository: %w", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+		return "", fmt.Errorf("read daemon browser repository: status %d", response.StatusCode)
+	}
+	var repositories struct {
+		Repositories []browserapi.Repository `json:"repositories"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&repositories); err != nil {
+		return "", fmt.Errorf("decode daemon browser repository: %w", err)
+	}
+	if len(repositories.Repositories) != 1 || repositories.Repositories[0].ID == "" || repositories.Repositories[0].Revision == "" {
+		return "", errors.New("daemon browser repository metadata is incomplete")
+	}
+	repository := repositories.Repositories[0]
+	return "https://codegrapher.dev/browse/" + url.QueryEscape(parsed.Host) + "/repos/" + url.PathEscape(repository.ID) + "/revisions/" + url.PathEscape(repository.Revision) + "/tree#secret=" + url.QueryEscape(state.BrowserToken), nil
+}
+
 func (m *Manager) start(ctx context.Context, projectPath string, lockHeld bool) (Status, error) {
 	if err := m.defaults(); err != nil {
 		return Status{}, err
@@ -132,6 +190,10 @@ func (m *Manager) start(ctx context.Context, projectPath string, lockHeld bool) 
 	if err != nil {
 		return Status{}, err
 	}
+	browserToken, err := browserapi.GenerateCredential()
+	if err != nil {
+		return Status{}, err
+	}
 	logFile, logPath, err := openDaemonLog(m.StateDir)
 	if err != nil {
 		return Status{}, err
@@ -146,15 +208,16 @@ func (m *Manager) start(ctx context.Context, projectPath string, lockHeld bool) 
 			LogPath:     logPath,
 			Health:      Health{},
 		},
-		Nonce: nonce,
-		Token: token,
+		Nonce:        nonce,
+		Token:        token,
+		BrowserToken: browserToken,
 	}
 	if err := writeState(m.StateDir, initial); err != nil {
 		return Status{}, err
 	}
 
 	child := exec.Command(m.Executable, "daemon", "_run", projectPath)
-	child.Env = append(os.Environ(), envStateDir+"="+m.StateDir, envNonce+"="+nonce, envToken+"="+token)
+	child.Env = append(os.Environ(), envStateDir+"="+m.StateDir, envNonce+"="+nonce, envToken+"="+token, envBrowserToken+"="+browserToken)
 	child.Stdin = nil
 	// Bootstrap errors and panics still reach the durable log. Once Run starts,
 	// structured daemon logging uses the size-aware rotating writer.
@@ -290,7 +353,9 @@ func (m *Manager) stop(ctx context.Context, lockHeld bool) (Status, error) {
 		state.StoppedAt = time.Now().UTC()
 		state.Health = Health{}
 		state.Endpoint = ""
+		state.BrowserEndpoint = ""
 		state.PID = 0
+		state.BrowserToken = ""
 		if err := writeState(m.StateDir, state); err != nil {
 			return Status{}, err
 		}

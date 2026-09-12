@@ -4,7 +4,12 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/specscore/codegrapher/browserapi"
+	"github.com/specscore/codegrapher/indexer"
 )
 
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:daemon-control-rejects-unauthenticated-callers
@@ -56,6 +61,39 @@ func TestControlAPIRequiresTokenAndNonce(t *testing.T) {
 	}
 	if ctx.Err() == nil {
 		t.Fatal("authenticated stop did not cancel runtime context")
+	}
+}
+
+func TestBrowserAndControlCredentialsAreNotInterchangeable(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package sample\nfunc Alpha() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, result, err := indexer.Init(root, indexer.Options{})
+	if err != nil || !result.Success {
+		t.Fatalf("init: %v %+v", err, result)
+	}
+	defer func() { _ = idx.Close() }()
+	api, err := browserapi.New(idx, browserapi.Config{Token: "browser-token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicRequest := httptest.NewRequest(http.MethodGet, browserapi.BasePath+"/status", nil)
+	publicRequest.Header.Set("Authorization", "Bearer control-token")
+	publicResponse := httptest.NewRecorder()
+	api.Handler().ServeHTTP(publicResponse, publicRequest)
+	if publicResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("control token authorized public API: %d", publicResponse.Code)
+	}
+
+	_, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runtime := &serviceRuntime{state: diskState{Status: Status{Lifecycle: LifecycleReady}}, nonce: "nonce", token: "control-token", stopCh: make(chan struct{}), cancel: cancel}
+	controlRequest := authorizedRequest(http.MethodGet, "/control/v1/status", "browser-token", "nonce")
+	controlResponse := httptest.NewRecorder()
+	runtime.controlHandler().ServeHTTP(controlResponse, controlRequest)
+	if controlResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("browser token authorized control API: %d", controlResponse.Code)
 	}
 }
 

@@ -57,6 +57,7 @@ type Status struct {
 	PID               int       `json:"pid,omitempty"`
 	ProjectPath       string    `json:"projectPath,omitempty"`
 	Endpoint          string    `json:"endpoint,omitempty"`
+	BrowserEndpoint   string    `json:"browserEndpoint,omitempty"`
 	StartedAt         time.Time `json:"startedAt,omitempty"`
 	ReadyAt           time.Time `json:"readyAt,omitempty"`
 	StoppedAt         time.Time `json:"stoppedAt,omitempty"`
@@ -66,8 +67,9 @@ type Status struct {
 
 type diskState struct {
 	Status
-	Nonce string `json:"nonce,omitempty"`
-	Token string `json:"token,omitempty"`
+	Nonce        string `json:"nonce,omitempty"`
+	Token        string `json:"token,omitempty"`
+	BrowserToken string `json:"browserToken,omitempty"`
 }
 
 func defaultStateDir() (string, error) {

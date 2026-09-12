@@ -1,14 +1,14 @@
 ---
 format: https://specscore.md/idea-specification
-status: Draft
+status: Specified
 ---
 
 # Idea: Live daemon repository browser
 
-**Status:** Draft
+**Status:** Specified
 **Date:** 2026-09-12
 **Owner:** alex
-**Promotes To:** —
+**Promotes To:** live-daemon-api
 **Supersedes:** —
 **Related Ideas:** —
 

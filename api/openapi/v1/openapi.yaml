@@ -1,0 +1,1052 @@
+openapi: 3.0.0
+info:
+  title: CodeGrapher Browser API
+  version: 1.0.0
+tags: []
+paths:
+  /repositories:
+    get:
+      operationId: listRepositories
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryList'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: Access is forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request conflicts with the current state of the server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '413':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: Service unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /repositories/{repositoryId}:
+    get:
+      operationId: getRepository
+      parameters:
+        - name: repositoryId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositorySummary'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: Access is forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request conflicts with the current state of the server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '413':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: Service unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /repositories/{repositoryId}/revisions/{revision}/files:
+    get:
+      operationId: getFile
+      parameters:
+        - name: repositoryId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: revision
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          explode: false
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileResponse'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: Access is forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request conflicts with the current state of the server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '413':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: Service unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /repositories/{repositoryId}/revisions/{revision}/search:
+    get:
+      operationId: searchSymbols
+      parameters:
+        - name: repositoryId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: revision
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+          explode: false
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+          explode: false
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: Access is forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request conflicts with the current state of the server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '413':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: Service unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /repositories/{repositoryId}/revisions/{revision}/symbols/{symbolId}:
+    get:
+      operationId: getSymbol
+      parameters:
+        - name: repositoryId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: revision
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: symbolId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SymbolResponse'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: Access is forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request conflicts with the current state of the server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '413':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: Service unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /repositories/{repositoryId}/revisions/{revision}/symbols/{symbolId}/graph:
+    get:
+      operationId: getSymbolGraph
+      parameters:
+        - name: repositoryId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: revision
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: symbolId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: direction
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/GraphDirection'
+          explode: false
+        - name: depth
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+          explode: false
+        - name: maxNodes
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+          explode: false
+        - name: maxEdges
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+          explode: false
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphResponse'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: Access is forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request conflicts with the current state of the server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '413':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: Service unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /repositories/{repositoryId}/revisions/{revision}/tree:
+    get:
+      operationId: getTree
+      parameters:
+        - name: repositoryId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: revision
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+          explode: false
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TreeResponse'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: Access is forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request conflicts with the current state of the server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '413':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: Service unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /status:
+    get:
+      operationId: getStatus
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiStatus'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Access is unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: Access is forbidden.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: The server cannot find the requested resource.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: The request conflicts with the current state of the server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '413':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: Client error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          description: Service unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+security:
+  - BearerAuth: []
+components:
+  schemas:
+    ApiError:
+      type: object
+      required:
+        - code
+        - message
+        - requestId
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        requestId:
+          type: string
+    ApiLimits:
+      type: object
+      required:
+        - maxTreeEntries
+        - maxFileBytes
+        - maxSearchResults
+        - maxGraphDepth
+        - maxGraphNodes
+        - maxGraphEdges
+      properties:
+        maxTreeEntries:
+          type: integer
+          format: int32
+        maxFileBytes:
+          type: integer
+          format: int32
+        maxSearchResults:
+          type: integer
+          format: int32
+        maxGraphDepth:
+          type: integer
+          format: int32
+        maxGraphNodes:
+          type: integer
+          format: int32
+        maxGraphEdges:
+          type: integer
+          format: int32
+    ApiStatus:
+      type: object
+      required:
+        - apiVersion
+        - serverVersion
+        - capabilities
+        - repositoryCount
+        - freshness
+        - limits
+      properties:
+        apiVersion:
+          type: string
+          enum:
+            - v1
+        serverVersion:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        repositoryCount:
+          type: integer
+          format: int32
+        freshness:
+          $ref: '#/components/schemas/Freshness'
+        limits:
+          $ref: '#/components/schemas/ApiLimits'
+    FileResponse:
+      type: object
+      required:
+        - repositoryId
+        - revision
+        - path
+        - language
+        - size
+        - lineCount
+        - contentHash
+        - content
+        - freshness
+      properties:
+        repositoryId:
+          type: string
+        revision:
+          type: string
+        path:
+          type: string
+        language:
+          type: string
+        size:
+          type: integer
+          format: int64
+        lineCount:
+          type: integer
+          format: int32
+        contentHash:
+          type: string
+        content:
+          type: string
+        freshness:
+          $ref: '#/components/schemas/Freshness'
+    Freshness:
+      type: object
+      required:
+        - state
+      properties:
+        state:
+          $ref: '#/components/schemas/FreshnessState'
+        indexedAt:
+          type: string
+          format: date-time
+        lastSuccessfulSync:
+          type: string
+          format: date-time
+        lastError:
+          type: string
+    FreshnessState:
+      type: string
+      enum:
+        - ready
+        - updating
+        - stale
+        - not-indexed
+    GraphDirection:
+      type: string
+      enum:
+        - incoming
+        - outgoing
+        - both
+    GraphEdge:
+      type: object
+      required:
+        - sourceId
+        - targetId
+        - kind
+      properties:
+        sourceId:
+          type: string
+        targetId:
+          type: string
+        kind:
+          type: string
+        line:
+          type: integer
+          format: int32
+        column:
+          type: integer
+          format: int32
+    GraphResponse:
+      type: object
+      required:
+        - repositoryId
+        - revision
+        - rootSymbolId
+        - direction
+        - depth
+        - maxNodes
+        - maxEdges
+        - nodes
+        - edges
+        - truncated
+        - freshness
+      properties:
+        repositoryId:
+          type: string
+        revision:
+          type: string
+        rootSymbolId:
+          type: string
+        direction:
+          $ref: '#/components/schemas/GraphDirection'
+        depth:
+          type: integer
+          format: int32
+        maxNodes:
+          type: integer
+          format: int32
+        maxEdges:
+          type: integer
+          format: int32
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Symbol'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/GraphEdge'
+        truncated:
+          type: boolean
+        freshness:
+          $ref: '#/components/schemas/Freshness'
+    RepositoryList:
+      type: object
+      required:
+        - repositories
+      properties:
+        repositories:
+          type: array
+          items:
+            $ref: '#/components/schemas/RepositorySummary'
+    RepositorySummary:
+      type: object
+      required:
+        - id
+        - label
+        - freshness
+        - fileCount
+        - symbolCount
+        - edgeCount
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        remote:
+          type: string
+        branch:
+          type: string
+        headCommit:
+          type: string
+        revision:
+          type: string
+        freshness:
+          $ref: '#/components/schemas/Freshness'
+        fileCount:
+          type: integer
+          format: int32
+        symbolCount:
+          type: integer
+          format: int32
+        edgeCount:
+          type: integer
+          format: int32
+    SearchResponse:
+      type: object
+      required:
+        - repositoryId
+        - revision
+        - query
+        - results
+        - limit
+        - truncated
+        - freshness
+      properties:
+        repositoryId:
+          type: string
+        revision:
+          type: string
+        query:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchResult'
+        limit:
+          type: integer
+          format: int32
+        truncated:
+          type: boolean
+        freshness:
+          $ref: '#/components/schemas/Freshness'
+    SearchResult:
+      type: object
+      required:
+        - score
+        - symbol
+      properties:
+        score:
+          type: number
+          format: double
+        symbol:
+          $ref: '#/components/schemas/Symbol'
+    SourceRange:
+      type: object
+      required:
+        - startLine
+        - endLine
+        - startColumn
+        - endColumn
+      properties:
+        startLine:
+          type: integer
+          format: int32
+        endLine:
+          type: integer
+          format: int32
+        startColumn:
+          type: integer
+          format: int32
+        endColumn:
+          type: integer
+          format: int32
+    Symbol:
+      type: object
+      required:
+        - id
+        - kind
+        - name
+        - qualifiedName
+        - filePath
+        - language
+        - range
+        - exported
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        name:
+          type: string
+        qualifiedName:
+          type: string
+        filePath:
+          type: string
+        language:
+          type: string
+        range:
+          $ref: '#/components/schemas/SourceRange'
+        signature:
+          type: string
+        docstring:
+          type: string
+        visibility:
+          type: string
+        exported:
+          type: boolean
+    SymbolResponse:
+      type: object
+      required:
+        - repositoryId
+        - revision
+        - symbol
+        - freshness
+      properties:
+        repositoryId:
+          type: string
+        revision:
+          type: string
+        symbol:
+          $ref: '#/components/schemas/Symbol'
+        freshness:
+          $ref: '#/components/schemas/Freshness'
+    TreeEntry:
+      type: object
+      required:
+        - name
+        - path
+        - kind
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        kind:
+          $ref: '#/components/schemas/TreeEntryKind'
+        size:
+          type: integer
+          format: int64
+        language:
+          type: string
+        contentHash:
+          type: string
+    TreeEntryKind:
+      type: string
+      enum:
+        - file
+        - directory
+        - symlink
+    TreeResponse:
+      type: object
+      required:
+        - repositoryId
+        - revision
+        - path
+        - entries
+        - limit
+        - truncated
+        - freshness
+      properties:
+        repositoryId:
+          type: string
+        revision:
+          type: string
+        path:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/TreeEntry'
+        limit:
+          type: integer
+          format: int32
+        truncated:
+          type: boolean
+        freshness:
+          $ref: '#/components/schemas/Freshness'
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: Bearer
+servers:
+  - url: http://127.0.0.1:7331/codegrapher/v1
+    description: CodeGrapher daemon browser API
+    variables: {}
