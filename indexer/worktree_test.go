@@ -52,6 +52,18 @@ func TestDetectWorktreeMismatchFlagsBorrowedIndex(t *testing.T) {
 	}
 }
 
+func TestDetectWorktreeMismatchFlagsBorrowedMonorepoSubprojectIndex(t *testing.T) {
+	mainRepo, worktree := newWorktreePair(t)
+	indexRoot := filepath.Join(mainRepo, "services", "api")
+	if err := os.MkdirAll(indexRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := DetectWorktreeIndexMismatch(worktree, indexRoot)
+	if m == nil || m.IndexRoot != realpathOrAbs(indexRoot) {
+		t.Fatalf("mismatch = %+v, want borrowed subproject index", m)
+	}
+}
+
 func TestDetectWorktreeMismatchSameTree(t *testing.T) {
 	mainRepo, _ := newWorktreePair(t)
 	if m := DetectWorktreeIndexMismatch(mainRepo, mainRepo); m != nil {

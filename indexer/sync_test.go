@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	graphlock "github.com/specscore/codegrapher/lock"
 	"github.com/specscore/codegrapher/model"
 	"github.com/specscore/codegrapher/scope"
 	"github.com/specscore/codegrapher/trace"
@@ -226,7 +227,7 @@ Not defined yet.
 	}
 }
 
-func TestSyncLockConflictReturnsZeroResult(t *testing.T) {
+func TestSyncLockConflictReturnsExplicitSignal(t *testing.T) {
 	dir, idx := newSyncProject(t)
 	other, err := Open(dir, Options{})
 	if err != nil {
@@ -238,8 +239,22 @@ func TestSyncLockConflictReturnsZeroResult(t *testing.T) {
 	}
 
 	res := idx.Sync(Options{})
-	if res.FilesChecked != 0 || res.DurationMs != 0 {
-		t.Errorf("SyncResult = %+v, want zero-value (lock signal)", res)
+	if !res.LockUnavailable || res.FilesChecked != 0 || res.DurationMs != 0 {
+		t.Errorf("SyncResult = %+v, want explicit lock-unavailable signal", res)
+	}
+	writeFile(t, filepath.Join(dir, "main.go"), "package main\nfunc main() { println(1) }\n")
+	res, refreshErr := idx.RefreshForRead(Options{})
+	if refreshErr == nil || !strings.Contains(refreshErr.Error(), "locked") || !res.LockUnavailable {
+		t.Fatalf("RefreshForRead = %+v, %v; want explicit lock error", res, refreshErr)
+	}
+}
+
+func TestSyncUnexpectedLockIOErrorIsNotClassifiedAsContention(t *testing.T) {
+	dir, idx := newSyncProject(t)
+	idx.lock = graphlock.New(filepath.Join(dir, "missing-parent", "codegraph.lock"))
+	res := idx.Sync(Options{})
+	if res.LockUnavailable || len(res.Errors) != 1 || res.Errors[0].Code != "lock_error" {
+		t.Fatalf("SyncResult = %+v, want visible lock I/O error", res)
 	}
 }
 
@@ -477,6 +492,80 @@ func TestSyncFilesRebuildsWhenPackageManifestCanChangeScopes(t *testing.T) {
 	res := idx.SyncFiles([]string{"package.json"}, Options{})
 	if !res.FullReindex || len(res.Errors) != 0 {
 		t.Fatalf("manifest sync = %+v, want successful rebuild", res)
+	}
+}
+
+func TestSyncFilesRebuildsWhenGitignoreChangesAdmission(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "generated", "stale.go"), "package generated\nfunc Stale() {}\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, filepath.Join(dir, ".gitignore"), "generated/\n")
+
+	res := idx.SyncFiles([]string{".gitignore"}, Options{})
+	if !res.FullReindex || len(res.Errors) != 0 {
+		t.Fatalf(".gitignore sync = %+v, want successful rebuild", res)
+	}
+	if nodes, err := idx.Store().GetNodesByName("Stale"); err != nil || len(nodes) != 0 {
+		t.Fatalf("ignored symbol remains: nodes=%+v err=%v", nodes, err)
+	}
+}
+
+func TestSyncFilesMissingDirectoryHintRemovesTrackedDescendants(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "obsolete", "one.go"), "package obsolete\nfunc One() {}\n")
+	writeFile(t, filepath.Join(dir, "obsolete", "nested", "two.go"), "package nested\nfunc Two() {}\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	if err := os.RemoveAll(filepath.Join(dir, "obsolete")); err != nil {
+		t.Fatal(err)
+	}
+
+	res := idx.SyncFiles([]string{"obsolete"}, Options{})
+	if res.FilesRemoved != 2 || len(res.Errors) != 0 {
+		t.Fatalf("directory removal = %+v, want two removed files", res)
+	}
+	if got := strings.Join(res.ChangedFilePaths, ","); got != "obsolete/nested/two.go,obsolete/one.go" {
+		t.Fatalf("ChangedFilePaths = %q", got)
+	}
+	for _, name := range []string{"One", "Two"} {
+		for _, store := range idx.Stores() {
+			if nodes, getErr := store.GetNodesByName(name); getErr != nil || len(nodes) != 0 {
+				t.Fatalf("%s remains after directory removal: nodes=%+v err=%v", name, nodes, getErr)
+			}
+		}
+	}
+}
+
+func TestSyncFilesDoesNotAdmitGitExcludedNewPath(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	mustGit(t, dir, "init")
+	writeFile(t, filepath.Join(dir, "main.go"), "package main\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, filepath.Join(dir, ".git", "info", "exclude"), "private/\n")
+	writeFile(t, filepath.Join(dir, "private", "hidden.go"), "package private\nfunc Hidden() {}\n")
+
+	res := idx.SyncFiles([]string{"private/hidden.go"}, Options{})
+	if res.FilesAdded != 0 || len(res.Errors) != 0 {
+		t.Fatalf("excluded sync = %+v", res)
+	}
+	for _, graphStore := range idx.Stores() {
+		if nodes, getErr := graphStore.GetNodesByName("Hidden"); getErr != nil || len(nodes) != 0 {
+			t.Fatalf("excluded symbol indexed: nodes=%+v err=%v", nodes, getErr)
+		}
 	}
 }
 

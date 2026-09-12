@@ -2,8 +2,11 @@ package watch_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -119,6 +122,415 @@ func TestDebounceCoalesces(t *testing.T) {
 		t.Errorf("expected 1 sync call, got %d", n)
 	}
 	w.Stop()
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:burst-is-coalesced
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:verbose-reports-event-and-operation-timing
+func TestObservationsDescribeCoalescedOperation(t *testing.T) {
+	dir := t.TempDir()
+	var mu sync.Mutex
+	var observations []watch.Observation
+	w := newInertWatcher(t, dir, func() (watch.SyncResult, error) {
+		return watch.SyncResult{
+			FilesChanged:  2,
+			FilesChecked:  7,
+			FilesAdded:    1,
+			FilesModified: 1,
+			NodesUpdated:  5,
+		}, nil
+	}, watch.Options{
+		DebounceMs: 50,
+		IsIgnored: func(path string) bool {
+			return path == "ignored.go"
+		},
+		OnObservation: func(observation watch.Observation) {
+			mu.Lock()
+			observations = append(observations, observation)
+			mu.Unlock()
+		},
+	})
+	if !w.Start() {
+		t.Fatal("Start returned false")
+	}
+	t.Cleanup(w.Stop)
+
+	w.IngestEventForTests("src/one.go")
+	w.IngestEventForTests("src/one.go")
+	w.IngestEventForTests("src/two.go")
+	w.IngestEventForTests("ignored.go")
+
+	waitFor(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, observation := range observations {
+			if observation.Kind == watch.ObservationOperationCompleted {
+				return true
+			}
+		}
+		return false
+	}, 2*time.Second)
+
+	mu.Lock()
+	got := append([]watch.Observation(nil), observations...)
+	mu.Unlock()
+
+	var received int
+	var started, completed *watch.Observation
+	for i := range got {
+		switch got[i].Kind {
+		case watch.ObservationEventReceived:
+			received++
+		case watch.ObservationOperationStarted:
+			started = &got[i]
+		case watch.ObservationOperationCompleted:
+			completed = &got[i]
+		}
+	}
+	if received != 4 {
+		t.Fatalf("received observations = %d, want 4: %+v", received, got)
+	}
+	if started == nil || completed == nil {
+		t.Fatalf("missing operation lifecycle: %+v", got)
+	}
+	if started.OperationID == 0 || completed.OperationID != started.OperationID {
+		t.Fatalf("operation ids start=%v complete=%v", started.OperationID, completed.OperationID)
+	}
+	if started.EventsReceived != 3 || started.DirtyPaths != 2 || started.CoalescedEvents != 1 {
+		t.Errorf("started stats = %+v", *started)
+	}
+	if started.IgnoredEvents != 1 || started.Debounce != 50*time.Millisecond || started.QueuedFor < 50*time.Millisecond {
+		t.Errorf("started timing/filter stats = %+v", *started)
+	}
+	if completed.Duration < 0 {
+		t.Errorf("completion duration = %v", completed.Duration)
+	}
+	if completed.TotalDuration < completed.Duration || completed.NoOp {
+		t.Errorf("completion total/no-op = %+v", *completed)
+	}
+	if completed.Result.FilesChecked != 7 || completed.Result.FilesAdded != 1 ||
+		completed.Result.FilesModified != 1 || completed.Result.NodesUpdated != 5 {
+		t.Errorf("completion result = %+v", completed.Result)
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:failure-remains-dirty-and-visible
+func TestFailedOperationObservationRetainsDirtyPath(t *testing.T) {
+	dir := t.TempDir()
+	var attempts atomic.Int32
+	observedFailure := make(chan watch.Observation, 1)
+	w := newInertWatcher(t, dir, func() (watch.SyncResult, error) {
+		if attempts.Add(1) == 1 {
+			return watch.SyncResult{}, errors.New("broken index")
+		}
+		return watch.SyncResult{FilesChanged: 1}, nil
+	}, watch.Options{
+		DebounceMs: 50,
+		OnObservation: func(observation watch.Observation) {
+			if observation.Kind == watch.ObservationOperationFailed {
+				select {
+				case observedFailure <- observation:
+				default:
+				}
+			}
+		},
+	})
+	if !w.Start() {
+		t.Fatal("Start returned false")
+	}
+	t.Cleanup(w.Stop)
+	w.IngestEventForTests("src/fail.go")
+
+	select {
+	case failure := <-observedFailure:
+		if failure.Err == nil || failure.Err.Error() != "broken index" {
+			t.Fatalf("failure = %+v", failure)
+		}
+		if failure.DirtyPaths != 1 || failure.EventsReceived != 1 {
+			t.Errorf("failure stats = %+v", failure)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for failure observation")
+	}
+
+	pending := w.PendingFiles()
+	if len(pending) != 1 || pending[0].Path != "src/fail.go" {
+		t.Fatalf("pending after failure = %+v", pending)
+	}
+}
+
+func TestNewWithPathsReceivesSortedDirtyBatch(t *testing.T) {
+	dir := t.TempDir()
+	received := make(chan []string, 1)
+	w := watch.NewWithPaths(dir, func(paths []string) (watch.SyncResult, error) {
+		received <- append([]string(nil), paths...)
+		return watch.SyncResult{FilesChanged: len(paths)}, nil
+	}, watch.Options{DebounceMs: 20, InertForTests: true})
+	if err := w.StartWithError(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(w.Stop)
+	w.IngestEventForTests("z.go")
+	w.IngestEventForTests("a.go")
+	w.IngestEventForTests("z.go")
+
+	select {
+	case paths := <-received:
+		if got, want := strings.Join(paths, ","), "a.go,z.go"; got != want {
+			t.Fatalf("paths = %q, want %q", got, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for dirty batch")
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:graceful-cancellation
+func TestStopAndWaitWaitsForActiveSync(t *testing.T) {
+	dir := t.TempDir()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	w := newInertWatcher(t, dir, func() (watch.SyncResult, error) {
+		close(started)
+		<-release
+		return watch.SyncResult{FilesChanged: 1}, nil
+	}, watch.Options{DebounceMs: 20})
+	if err := w.StartWithError(); err != nil {
+		t.Fatal(err)
+	}
+	w.IngestEventForTests("active.go")
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("sync did not start")
+	}
+
+	stopped := make(chan struct{})
+	go func() {
+		w.StopAndWait()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+		t.Fatal("StopAndWait returned while sync was active")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("StopAndWait did not return after sync completed")
+	}
+}
+
+func TestOperationStartObservationCanStopWatcherWithoutDeadlock(t *testing.T) {
+	dir := t.TempDir()
+	stopped := make(chan struct{})
+	var calls atomic.Int32
+	var w *watch.FileWatcher
+	w = newInertWatcher(t, dir, func() (watch.SyncResult, error) {
+		calls.Add(1)
+		return watch.SyncResult{}, nil
+	}, watch.Options{
+		DebounceMs: 20,
+		OnObservation: func(observation watch.Observation) {
+			if observation.Kind == watch.ObservationOperationStarted {
+				w.Stop()
+				close(stopped)
+			}
+		},
+	})
+	if err := w.StartWithError(); err != nil {
+		t.Fatal(err)
+	}
+	w.IngestEventForTests("stop.go")
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("operation-start observation could not stop watcher")
+	}
+	w.StopAndWait()
+	if calls.Load() != 0 {
+		t.Fatalf("sync calls = %d, want 0 after operation-start stop", calls.Load())
+	}
+}
+
+func TestNativeEventObservationCanStopWatcherWithoutDeadlock(t *testing.T) {
+	dir := t.TempDir()
+	stopped := make(chan struct{})
+	var once sync.Once
+	var w *watch.FileWatcher
+	w = watch.New(dir, func() (watch.SyncResult, error) {
+		return watch.SyncResult{}, nil
+	}, watch.Options{
+		DebounceMs: 20,
+		OnObservation: func(observation watch.Observation) {
+			if observation.Kind == watch.ObservationEventReceived {
+				w.Stop()
+				once.Do(func() { close(stopped) })
+			}
+		},
+	})
+	if err := w.StartWithError(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "event.go"), []byte("package event\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("native-event observation could not stop watcher")
+	}
+	w.StopAndWait()
+}
+
+func TestStopAndWaitJoinsExpiredDebounceBeforeRestart(t *testing.T) {
+	dir := t.TempDir()
+	var calls atomic.Int32
+	w := newInertWatcher(t, dir, func() (watch.SyncResult, error) {
+		calls.Add(1)
+		return watch.SyncResult{}, nil
+	}, watch.Options{DebounceMs: 1})
+
+	for i := range 25 {
+		if err := w.StartWithError(); err != nil {
+			t.Fatal(err)
+		}
+		w.IngestEventForTests(fmt.Sprintf("iteration-%d.go", i))
+		time.Sleep(time.Millisecond)
+		w.StopAndWait()
+		joinedCalls := calls.Load()
+
+		if err := w.StartWithError(); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(3 * time.Millisecond)
+		if got := calls.Load(); got != joinedCalls {
+			t.Fatalf("stale debounce ran after restart: calls=%d, want %d", got, joinedCalls)
+		}
+		w.StopAndWait()
+	}
+}
+
+func TestSyncCallbackCanStopWatcherWithoutDeadlock(t *testing.T) {
+	dir := t.TempDir()
+	stopped := make(chan struct{})
+	var w *watch.FileWatcher
+	w = newInertWatcher(t, dir, func() (watch.SyncResult, error) {
+		return watch.SyncResult{FilesChanged: 1}, nil
+	}, watch.Options{
+		DebounceMs: 20,
+		OnSyncComplete: func(watch.SyncResult) {
+			w.Stop()
+			close(stopped)
+		},
+	})
+	if err := w.StartWithError(); err != nil {
+		t.Fatal(err)
+	}
+	w.IngestEventForTests("stop.go")
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("callback-triggered Stop deadlocked")
+	}
+	w.StopAndWait()
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:watch-coverage-is-complete-or-start-fails
+func TestStartFailsWhenDirectoryWatchCapWouldLeavePartialCoverage(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	w := watch.New(dir, func() (watch.SyncResult, error) { return watch.SyncResult{}, nil }, watch.Options{
+		MaxDirWatches: 1,
+	})
+	err := w.StartWithError()
+	if err == nil || !strings.Contains(err.Error(), "directory-watch cap reached") {
+		t.Fatalf("StartWithError() = %v, want directory-watch cap error", err)
+	}
+	if w.IsActive() {
+		t.Fatal("watcher must not report active with partial directory coverage")
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:populated-directory-move-is-reconciled
+func TestPopulatedDirectoryMoveSchedulesDirtyPathBatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping real-watcher test in short mode")
+	}
+	watchedRoot := t.TempDir()
+	stagingRoot := t.TempDir()
+	incoming := filepath.Join(stagingRoot, "incoming")
+	if err := os.Mkdir(incoming, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(incoming, "moved.go"), []byte("package moved\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pathsCh := make(chan []string, 1)
+	w := watch.NewWithPaths(watchedRoot, func(paths []string) (watch.SyncResult, error) {
+		select {
+		case pathsCh <- append([]string(nil), paths...):
+		default:
+		}
+		return watch.SyncResult{FilesChanged: len(paths)}, nil
+	}, watch.Options{DebounceMs: 50})
+	if err := w.StartWithError(); err != nil {
+		t.Skipf("watcher could not start: %v", err)
+	}
+	t.Cleanup(w.Stop)
+	if err := os.Rename(incoming, filepath.Join(watchedRoot, "incoming")); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case paths := <-pathsCh:
+		if got, want := strings.Join(paths, ","), "incoming/moved.go"; got != want {
+			t.Fatalf("paths = %q, want %q", got, want)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("populated directory move did not schedule reconciliation")
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:watch-coverage-is-complete-or-start-fails
+func TestRuntimeDirectoryWatchCapFailsClosed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping real-watcher test in short mode")
+	}
+	watchedRoot := t.TempDir()
+	stagingRoot := t.TempDir()
+	incoming := filepath.Join(stagingRoot, "incoming")
+	if err := os.MkdirAll(filepath.Join(incoming, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(incoming, "nested", "deep.go"), []byte("package deep\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w := watch.New(watchedRoot, func() (watch.SyncResult, error) {
+		return watch.SyncResult{}, nil
+	}, watch.Options{DebounceMs: 50, MaxDirWatches: 2})
+	if err := w.StartWithError(); err != nil {
+		t.Skipf("watcher could not start: %v", err)
+	}
+	t.Cleanup(w.Stop)
+	fatalErrors := w.FatalErrors()
+	if err := os.Rename(incoming, filepath.Join(watchedRoot, "incoming")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-fatalErrors:
+		if err == nil || !strings.Contains(err.Error(), "directory-watch cap reached") {
+			t.Fatalf("fatal error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("runtime directory cap did not fail closed")
+	}
+	if w.IsActive() {
+		t.Fatal("watcher remained active after incomplete runtime coverage")
+	}
 }
 
 // TestAdmitUnknownLanguageFile verifies that a non-gitignored file with an
@@ -305,6 +717,7 @@ func TestPendingFilesRetainedOnSyncError(t *testing.T) {
 	w.Stop()
 }
 
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:lock-contention-retries-without-clearing
 // TestLockUnavailableReschedules verifies the LockUnavailableError path:
 // no onSyncError called, pendingFiles preserved, retry succeeds.
 func TestLockUnavailableReschedules(t *testing.T) {
@@ -369,6 +782,13 @@ func TestLockUnavailableReschedules(t *testing.T) {
 		t.Errorf("onSyncError should not be called at all, got %d", errorCallbacks.Load())
 	}
 	w.Stop()
+}
+
+func TestWrappedLockUnavailableIsRecognized(t *testing.T) {
+	err := fmt.Errorf("sync failed: %w", watch.NewLockUnavailableError("busy"))
+	if !watch.IsLockUnavailableError(err) {
+		t.Fatal("wrapped LockUnavailableError was not recognized")
+	}
 }
 
 // TestOnSyncComplete verifies the callback is invoked with the correct result.

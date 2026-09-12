@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/specscore/codegrapher/internal/extract"
 	"github.com/specscore/codegrapher/model"
@@ -234,6 +235,127 @@ func buildDefaultIgnore(rootDir string) *ignoreMatcher {
 	return m
 }
 
+// PathFilter applies the same built-in and layered .gitignore admission rules
+// as the filesystem scanner. It is safe for concurrent watcher callbacks.
+type PathFilter struct {
+	root        string
+	mu          sync.Mutex
+	base        *ignoreMatcher
+	nested      map[string]*ignoreMatcher
+	git         bool
+	visible     map[string]struct{}
+	visibleDirs map[string]struct{}
+}
+
+// NewPathFilter creates a watcher-friendly path filter for rootDir.
+func NewPathFilter(rootDir string) *PathFilter {
+	abs, err := filepath.Abs(rootDir)
+	if err != nil {
+		abs = rootDir
+	}
+	f := &PathFilter{root: abs}
+	f.refreshLocked()
+	return f
+}
+
+// Refresh reloads Git and ignore admission state after an ignore file or
+// repository revision changes.
+func (f *PathFilter) Refresh() {
+	f.mu.Lock()
+	f.refreshLocked()
+	f.mu.Unlock()
+}
+
+func (f *PathFilter) refreshLocked() {
+	f.base = buildDefaultIgnore(f.root)
+	f.nested = make(map[string]*ignoreMatcher)
+	f.visible = make(map[string]struct{})
+	f.visibleDirs = make(map[string]struct{})
+	files := gitVisibleFiles(f.root)
+	f.git = files != nil
+	for _, file := range files {
+		f.visible[file] = struct{}{}
+		for dir := filepath.ToSlash(filepath.Dir(file)); dir != "." && dir != ""; dir = filepath.ToSlash(filepath.Dir(dir)) {
+			f.visibleDirs[dir] = struct{}{}
+		}
+	}
+}
+
+// IsIgnored reports whether a project-relative path is excluded. A trailing
+// slash marks a directory. Seeing a .gitignore event invalidates the relevant
+// cached matcher before the event is admitted for reconciliation.
+func (f *PathFilter) IsIgnored(relPath string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	isDir := strings.HasSuffix(relPath, "/")
+	relPath = filepath.ToSlash(filepath.Clean(strings.TrimSuffix(relPath, "/")))
+	if relPath == "." || relPath == "" || strings.HasPrefix(relPath, "../") {
+		return false
+	}
+	if filepath.Base(relPath) == ".gitignore" {
+		f.refreshLocked()
+		return false
+	}
+	if f.git {
+		if isDir {
+			if _, ok := f.visibleDirs[relPath]; ok {
+				return false
+			}
+		} else if _, ok := f.visible[relPath]; ok {
+			return false
+		}
+		if f.base.Ignored(relPath, isDir) {
+			return true
+		}
+		// Unknown paths were created after the snapshot. Ask Git so nested
+		// patterns, info/exclude, global excludes, and tracked-file semantics
+		// exactly match --exclude-standard.
+		return exec.Command("git", "-C", f.root, "check-ignore", "-q", "--", filepath.FromSlash(relPath)).Run() == nil
+	}
+	if f.base.Ignored(relPath, isDir) {
+		return true
+	}
+
+	segs := strings.Split(relPath, "/")
+	limit := len(segs) - 1
+	for i := 1; i <= limit; i++ {
+		dirRel := strings.Join(segs[:i], "/")
+		matcher, ok := f.nested[dirRel]
+		if !ok {
+			matcher = &ignoreMatcher{}
+			if data, err := os.ReadFile(filepath.Join(f.root, filepath.FromSlash(dirRel), ".gitignore")); err == nil {
+				for line := range strings.SplitSeq(string(data), "\n") {
+					matcher.addPattern(strings.TrimSuffix(line, "\r"))
+				}
+			}
+			f.nested[dirRel] = matcher
+		}
+		candidate := strings.Join(segs[i:], "/")
+		if candidate != "" && matcher.Ignored(candidate, isDir) {
+			return true
+		}
+	}
+	return false
+}
+
+// isIgnoredSyncPath performs exact admission for a small dirty-path batch
+// without building the watcher's whole-repository visibility snapshot.
+func isIgnoredSyncPath(root, relPath string) bool {
+	isDir := strings.HasSuffix(relPath, "/")
+	relPath = filepath.ToSlash(filepath.Clean(strings.TrimSuffix(relPath, "/")))
+	if relPath == "." || relPath == "" || strings.HasPrefix(relPath, "../") {
+		return false
+	}
+	if buildDefaultIgnore(root).Ignored(relPath, isDir) {
+		return true
+	}
+	if IsGitRepo(root) {
+		return exec.Command("git", "-C", root, "check-ignore", "-q", "--", filepath.FromSlash(relPath)).Run() == nil
+	}
+	return NewPathFilter(root).IsIgnored(relPath)
+}
+
 // --- scanning ----------------------------------------------------------------
 
 // ScanDirectory enumerates the project's source files as project-relative
@@ -302,9 +424,19 @@ func collectGitFiles(repoDir, prefix string, files map[string]bool) bool {
 		return false
 	}
 	for rel := range strings.SplitSeq(tracked, "\x00") {
-		if rel != "" {
-			files[prefix+filepath.ToSlash(rel)] = true
+		if rel == "" {
+			continue
 		}
+		// The cached list still contains paths deleted or renamed only in the
+		// working tree. Index the filesystem that queries will serve, not the
+		// stale index entry; otherwise a rebuild tries to read a missing file.
+		// Other stat failures remain candidates so extraction reports them
+		// instead of silently certifying an incomplete graph.
+		info, statErr := os.Lstat(filepath.Join(repoDir, filepath.FromSlash(rel)))
+		if os.IsNotExist(statErr) || (statErr == nil && info.IsDir()) {
+			continue
+		}
+		files[prefix+filepath.ToSlash(rel)] = true
 	}
 	untracked, err := gitOutput(repoDir, "ls-files", "-z", "-o", "--exclude-standard")
 	if err != nil {

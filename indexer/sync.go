@@ -1,12 +1,14 @@
 package indexer
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	graphlock "github.com/specscore/codegrapher/lock"
 	"github.com/specscore/codegrapher/model"
 	"github.com/specscore/codegrapher/store"
 )
@@ -16,15 +18,15 @@ import (
 // skips unchanged files, then a content-hash compare confirms real changes.
 // Changed files are deleted and re-extracted, references are re-resolved, and
 // maintenance runs when anything changed. When the cross-process file lock is
-// held elsewhere, the zero-value SyncResult is returned (not an error), so
-// callers like the file watcher can detect the lock case by FilesChecked==0
-// && DurationMs==0. Mirrors ExtractionOrchestrator.sync + CodeGraph.sync.
+// held elsewhere, SyncResult.LockUnavailable is returned so callers can retry
+// without confusing an empty, fast repository with contention. Mirrors
+// ExtractionOrchestrator.sync + CodeGraph.sync.
 func (idx *Indexer) Sync(opts Options) SyncResult {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
 	if err := idx.lock.Acquire(); err != nil {
-		return SyncResult{}
+		return syncLockFailure(err)
 	}
 	defer idx.lock.Release()
 	if err := idx.invalidateGitHead(); err != nil {
@@ -170,7 +172,7 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 	defer idx.mu.Unlock()
 
 	if err := idx.lock.Acquire(); err != nil {
-		return SyncResult{}
+		return syncLockFailure(err)
 	}
 	defer idx.lock.Release()
 	if err := idx.invalidateGitHead(); err != nil {
@@ -204,6 +206,24 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 					result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), FilePath: filePath, Severity: "error", Code: "delete_error"})
 				} else if deleted {
 					result.FilesRemoved++
+					result.ChangedFilePaths = append(result.ChangedFilePaths, filePath)
+				}
+			} else if removed, removeErrs := idx.deleteTrackedPrefix(filePath); len(removeErrs) > 0 {
+				result.Errors = append(result.Errors, removeErrs...)
+			} else {
+				result.FilesRemoved += len(removed)
+				result.ChangedFilePaths = append(result.ChangedFilePaths, removed...)
+			}
+			continue
+		}
+		if isIgnoredSyncPath(idx.root, filePath) {
+			if rec != nil {
+				deleted, deleteErr := idx.deleteFileEverywhere(filePath)
+				if deleteErr != nil {
+					result.Errors = append(result.Errors, model.ExtractionError{Message: deleteErr.Error(), FilePath: filePath, Severity: "error", Code: "delete_error"})
+				} else if deleted {
+					result.FilesRemoved++
+					result.ChangedFilePaths = append(result.ChangedFilePaths, filePath)
 				}
 			}
 			continue
@@ -247,13 +267,39 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 	return result
 }
 
+func (idx *Indexer) deleteTrackedPrefix(prefix string) ([]string, []model.ExtractionError) {
+	if prefix == "" || prefix == "." {
+		return nil, nil
+	}
+	tracked, err := idx.allTrackedFiles()
+	if err != nil {
+		return nil, []model.ExtractionError{{Message: err.Error(), FilePath: prefix, Severity: "error", Code: "files_read_error"}}
+	}
+	prefix += "/"
+	var removed []string
+	var errs []model.ExtractionError
+	for _, file := range tracked {
+		if !strings.HasPrefix(file.Path, prefix) {
+			continue
+		}
+		deleted, deleteErr := idx.deleteFileEverywhere(file.Path)
+		if deleteErr != nil {
+			errs = append(errs, model.ExtractionError{Message: deleteErr.Error(), FilePath: file.Path, Severity: "error", Code: "delete_error"})
+		} else if deleted {
+			removed = append(removed, file.Path)
+		}
+	}
+	sort.Strings(removed)
+	return removed, errs
+}
+
 // Rebuild performs a strict from-scratch reconstruction. It is used when a
 // manifest can move many files between versioned scopes.
 func (idx *Indexer) Rebuild(opts Options) SyncResult {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	if err := idx.lock.Acquire(); err != nil {
-		return SyncResult{}
+		return syncLockFailure(err)
 	}
 	defer idx.lock.Release()
 	if err := idx.invalidateGitHead(); err != nil {
@@ -262,6 +308,15 @@ func (idx *Indexer) Rebuild(opts Options) SyncResult {
 	now := opts.clock()
 	start := now()
 	return idx.fullRebuildLocked(opts, start, now)
+}
+
+func syncLockFailure(err error) SyncResult {
+	if errors.Is(err, graphlock.ErrLockUnavailable) {
+		return SyncResult{LockUnavailable: true}
+	}
+	return SyncResult{Errors: []model.ExtractionError{{
+		Message: err.Error(), Severity: "error", Code: "lock_error",
+	}}}
 }
 
 func (idx *Indexer) fullRebuildLocked(opts Options, start int64, now func() int64) SyncResult {
@@ -284,7 +339,7 @@ func (idx *Indexer) fullRebuildLocked(opts Options, start int64, now func() int6
 func requiresScopeRebuild(paths []string) bool {
 	for _, path := range paths {
 		switch filepath.Base(filepath.ToSlash(path)) {
-		case "package.json", "go.mod", "pom.xml", "build.gradle", "build.gradle.kts":
+		case ".gitignore", "package.json", "go.mod", "pom.xml", "build.gradle", "build.gradle.kts":
 			return true
 		}
 	}
@@ -468,7 +523,7 @@ func (idx *Indexer) RefreshForRead(opts Options) (SyncResult, error) {
 			return SyncResult{}, err
 		}
 		result := idx.Sync(opts)
-		if result.FilesChecked == 0 && result.DurationMs == 0 {
+		if result.LockUnavailable {
 			return result, fmt.Errorf("index is locked; cannot safely rebuild symbol data")
 		}
 		if len(result.Errors) > 0 || !result.FullReindex {
@@ -504,7 +559,7 @@ func (idx *Indexer) RefreshForRead(opts Options) (SyncResult, error) {
 		return SyncResult{}, err
 	}
 	result := idx.SyncFiles(paths, opts)
-	if result.FilesChecked == 0 && result.DurationMs == 0 {
+	if result.LockUnavailable {
 		return result, fmt.Errorf("index is locked; cannot safely refresh symbol data")
 	}
 	if len(result.Errors) > 0 {

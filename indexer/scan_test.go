@@ -87,6 +87,71 @@ func TestScanDirectoryNestedGitignore(t *testing.T) {
 	}
 }
 
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:watch-coverage-is-complete-or-start-fails
+func TestPathFilterMatchesBuiltInAndNestedIgnoreRules(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "pkg", ".gitignore"), "generated/\n")
+	filter := NewPathFilter(dir)
+
+	for _, path := range []string{"node_modules/", "node_modules/dep/x.js", "pkg/generated/", "pkg/generated/x.go"} {
+		if !filter.IsIgnored(path) {
+			t.Errorf("IsIgnored(%q) = false, want true", path)
+		}
+	}
+	for _, path := range []string{"pkg/.gitignore", "pkg/real.go"} {
+		if filter.IsIgnored(path) {
+			t.Errorf("IsIgnored(%q) = true, want false", path)
+		}
+	}
+}
+
+func TestPathFilterReloadsChangedGitignore(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "pkg", ".gitignore"), "old/\n")
+	filter := NewPathFilter(dir)
+	if !filter.IsIgnored("pkg/old/x.go") {
+		t.Fatal("old rule was not applied")
+	}
+	writeFile(t, filepath.Join(dir, "pkg", ".gitignore"), "new/\n")
+	if filter.IsIgnored("pkg/.gitignore") {
+		t.Fatal(".gitignore event must remain admitted")
+	}
+	if !filter.IsIgnored("pkg/new/x.go") || filter.IsIgnored("pkg/old/x.go") {
+		t.Fatal("nested matcher was not refreshed after .gitignore event")
+	}
+}
+
+func TestGitPathFilterUsesExcludeStandardAndKeepsTrackedFiles(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	if output, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, output)
+	}
+	writeFile(t, filepath.Join(dir, "pkg", ".gitignore"), "tracked.go\n")
+	writeFile(t, filepath.Join(dir, "pkg", "tracked.go"), "package pkg\n")
+	if output, err := exec.Command("git", "-C", dir, "add", "pkg/.gitignore").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, output)
+	}
+	if output, err := exec.Command("git", "-C", dir, "add", "-f", "pkg/tracked.go").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, output)
+	}
+	writeFile(t, filepath.Join(dir, ".git", "info", "exclude"), "private/\n")
+	writeFile(t, filepath.Join(dir, "private", "hidden.go"), "package private\n")
+	filter := NewPathFilter(dir)
+
+	if filter.IsIgnored("pkg/tracked.go") {
+		t.Fatal("tracked file covered by nested .gitignore must remain admitted")
+	}
+	if !filter.IsIgnored("private/") || !filter.IsIgnored("private/hidden.go") {
+		t.Fatal(".git/info/exclude was not honored")
+	}
+	if filter.IsIgnored("new-visible.go") {
+		t.Fatal("unignored new path was rejected")
+	}
+}
+
 func TestScanDirectorySkipsCodeGraphDataDirs(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, ".codegraph", "x.go"), "package x\n")
@@ -120,6 +185,26 @@ func TestScanDirectoryGitRepo(t *testing.T) {
 	want := []string{".gitignore", "src/a.go", "untracked.ts"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ScanDirectory = %v, want %v", got, want)
+	}
+}
+
+func TestScanDirectoryGitRepoSkipsMissingCachedPathAfterUnstagedRename(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	dir := t.TempDir()
+	oldPath := filepath.Join(dir, "old.go")
+	writeFile(t, oldPath, "package sample\n")
+	mustGit(t, dir, "init")
+	mustGit(t, dir, "add", "old.go")
+	if err := os.Rename(oldPath, filepath.Join(dir, "new.go")); err != nil {
+		t.Fatal(err)
+	}
+
+	got := ScanDirectory(dir)
+	want := []string{"new.go"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ScanDirectory after unstaged rename = %v, want %v", got, want)
 	}
 }
 

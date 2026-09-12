@@ -55,6 +55,9 @@ type IndexResult struct {
 
 // SyncResult is the outcome of an incremental sync.
 type SyncResult struct {
+	// LockUnavailable is true when another process owns the cross-process
+	// writer lock and no reconciliation was attempted.
+	LockUnavailable  bool
 	FilesChecked     int
 	FilesAdded       int
 	FilesModified    int
