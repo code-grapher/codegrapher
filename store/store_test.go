@@ -247,6 +247,23 @@ func TestEdges_LimitedQueriesAreOrderedAndBoundedInSQL(t *testing.T) {
 	}
 }
 
+func TestEdges_LimitedQueriesBreakTiesDeterministically(t *testing.T) {
+	s := newTestStore(t)
+	if err := s.InsertNodes([]model.Node{testNode("s", "s", "s.go", 1), testNode("t", "t", "t.go", 1)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InsertEdges([]model.Edge{
+		{Source: "s", Target: "t", Kind: model.EdgeCalls, Line: 1, Provenance: "z"},
+		{Source: "s", Target: "t", Kind: model.EdgeCalls, Line: 1, Provenance: "a"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetOutgoingEdgesLimited("s", 1)
+	if err != nil || len(got) != 1 || got[0].Provenance != "a" {
+		t.Fatalf("tied limited edges = %+v, %v", got, err)
+	}
+}
+
 func TestNodeDeletion_CascadesEdges(t *testing.T) {
 	s := newTestStore(t)
 	_ = s.InsertNodes([]model.Node{

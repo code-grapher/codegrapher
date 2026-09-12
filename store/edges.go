@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"strings"
 
 	"github.com/specscore/codegrapher/model"
 )
@@ -60,6 +61,22 @@ func (s *Store) InsertEdges(edges []model.Edge) error {
 	})
 }
 
+// EdgeExists reports whether this exact persisted relationship survived a
+// replacement. It is used by incremental reindexing to distinguish a stable
+// node ID reinserted after cascading edge deletion from an unchanged edge.
+func (s *Store) EdgeExists(e model.Edge) (bool, error) {
+	var one int
+	err := s.db.QueryRow(`SELECT 1 FROM edges
+		WHERE source = ? AND target = ? AND kind = ?
+		  AND COALESCE(line, 0) = ? AND COALESCE(col, 0) = ?
+		  AND COALESCE(provenance, '') = ?
+		LIMIT 1`, e.Source, e.Target, string(e.Kind), e.Line, e.Column, e.Provenance).Scan(&one)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 // AllEdges returns every edge in the store.
 func (s *Store) AllEdges() ([]model.Edge, error) {
 	rows, err := s.db.Query(`SELECT ` + edgeColumns + ` FROM edges`)
@@ -103,7 +120,7 @@ func (s *Store) GetIncomingEdges(targetID string, kinds []model.EdgeKind) ([]mod
 // GetOutgoingEdgesLimited returns deterministic immediate edges without
 // loading an unbounded adjacency list.
 func (s *Store) GetOutgoingEdgesLimited(sourceID string, limit int) ([]model.Edge, error) {
-	rows, err := s.db.Query(`SELECT `+edgeColumns+` FROM edges WHERE source = ? ORDER BY kind, target, line, col LIMIT ?`, sourceID, limit)
+	rows, err := s.db.Query(`SELECT `+edgeColumns+` FROM edges WHERE source = ? ORDER BY kind, target, line, col, COALESCE(provenance, ''), COALESCE(metadata, ''), id LIMIT ?`, sourceID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +128,28 @@ func (s *Store) GetOutgoingEdgesLimited(sourceID string, limit int) ([]model.Edg
 }
 
 func (s *Store) GetIncomingEdgesLimited(targetID string, limit int) ([]model.Edge, error) {
-	rows, err := s.db.Query(`SELECT `+edgeColumns+` FROM edges WHERE target = ? ORDER BY kind, source, line, col LIMIT ?`, targetID, limit)
+	rows, err := s.db.Query(`SELECT `+edgeColumns+` FROM edges WHERE target = ? ORDER BY kind, source, line, col, COALESCE(provenance, ''), COALESCE(metadata, ''), id LIMIT ?`, targetID, limit)
+	if err != nil {
+		return nil, err
+	}
+	return scanEdges(rows)
+}
+
+// GetIncomingEdgesForTargetFiles loads all incoming edges for a changed-file
+// batch in one joined query. Incremental sync uses this instead of one query
+// per target symbol (and then one per source edge).
+func (s *Store) GetIncomingEdgesForTargetFiles(paths []string) ([]model.Edge, error) {
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	data, err := json.Marshal(paths)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(`SELECT e.`+strings.ReplaceAll(edgeColumns, ", ", ", e.")+` FROM edges e
+		JOIN nodes target ON target.id = e.target
+		WHERE target.file_path IN (SELECT value FROM json_each(?))
+		ORDER BY e.id`, string(data))
 	if err != nil {
 		return nil, err
 	}

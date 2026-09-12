@@ -342,6 +342,36 @@ func TestGetChangedFilesDetectsCleanCommittedRenameAgainstIndex(t *testing.T) {
 	}
 }
 
+func TestGetChangedFilesFallsBackForCleanEmbeddedRepoRename(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	root := t.TempDir()
+	mustGit(t, root, "init")
+	inner := filepath.Join(root, "inner")
+	if err := os.MkdirAll(inner, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, inner, "init")
+	writeFile(t, filepath.Join(inner, "old.go"), "package inner\nfunc Old() {}\n")
+	mustGit(t, inner, "add", "-A")
+	mustGit(t, inner, "commit", "-m", "initial")
+	idx, result, err := Init(root, Options{})
+	if err != nil || !result.Success {
+		t.Fatalf("Init: %+v %v", result, err)
+	}
+	defer func() { _ = idx.Close() }()
+	if err := os.Rename(filepath.Join(inner, "old.go"), filepath.Join(inner, "new.go")); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, inner, "add", "-A")
+	mustGit(t, inner, "commit", "-m", "rename")
+	changes := idx.GetChangedFiles()
+	if !slices.Contains(changes.Removed, "inner/old.go") || !slices.Contains(changes.Added, "inner/new.go") {
+		t.Fatalf("embedded rename changes = %+v", changes)
+	}
+}
+
 func TestSyncFilesRemovesDeletedIndexedUnknownFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "notes.txt")
@@ -357,6 +387,59 @@ func TestSyncFilesRemovesDeletedIndexedUnknownFile(t *testing.T) {
 	res := idx.SyncFiles([]string{"notes.txt"}, Options{})
 	if res.FilesRemoved != 1 {
 		t.Fatalf("deleted indexed unknown = %+v, want removed", res)
+	}
+}
+
+func TestSyncFilesMovesContentDetectedSpecScoreBetweenScopes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "spec", "features", "example", "README.md")
+	writeFile(t, path, "plain notes\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, path, "---\nformat: https://specscore.md/feature-specification\n---\n\n# Feature: Example\n")
+	if res := idx.SyncFiles([]string{"spec/features/example/README.md"}, Options{}); len(res.Errors) != 0 {
+		t.Fatalf("to specscore: %+v", res.Errors)
+	}
+	for _, s := range idx.Stores() {
+		rec, err := s.GetFileByPath("spec/features/example/README.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rec != nil && rec.Language != model.LangSpecScore {
+			t.Fatalf("old scope retained %q", rec.Language)
+		}
+	}
+	writeFile(t, path, "plain notes again\n")
+	if res := idx.SyncFiles([]string{"spec/features/example/README.md"}, Options{}); len(res.Errors) != 0 {
+		t.Fatalf("to unknown: %+v", res.Errors)
+	}
+	count := 0
+	for _, s := range idx.Stores() {
+		if rec, _ := s.GetFileByPath("spec/features/example/README.md"); rec != nil {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("scope transition left %d file records, want one", count)
+	}
+}
+
+func TestSyncFilesRebuildsWhenPackageManifestCanChangeScopes(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "package.json"), `{"devDependencies":{"typescript":"5.0.0"}}`)
+	writeFile(t, filepath.Join(dir, "src", "a.ts"), "export function A() {}")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, filepath.Join(dir, "package.json"), `{"devDependencies":{"typescript":"4.0.0"}}`)
+	res := idx.SyncFiles([]string{"package.json"}, Options{})
+	if !res.FullReindex || len(res.Errors) != 0 {
+		t.Fatalf("manifest sync = %+v, want successful rebuild", res)
 	}
 }
 
@@ -569,6 +652,34 @@ func TestSyncChangedCalleePreservesIncomingCallerEdges(t *testing.T) {
 	}
 }
 
+func TestSyncBodyOnlyCalleeEditPreservesSameIDIncomingEdge(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "callee.go"), "package main\n\nfunc Helper() { _ = 1 }\n")
+	writeFile(t, filepath.Join(dir, "caller.go"), "package main\n\nfunc main() { Helper() }\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	caller, err := idx.Store().GetNodesByName("main")
+	if err != nil || len(caller) != 1 {
+		t.Fatalf("caller: %v %d", err, len(caller))
+	}
+	writeFile(t, filepath.Join(dir, "callee.go"), "package main\n\nfunc Helper() { _ = 2 }\n")
+	res := idx.SyncFiles([]string{"callee.go"}, Options{})
+	if len(res.Errors) != 0 {
+		t.Fatalf("sync: %+v", res.Errors)
+	}
+	edges, err := idx.Store().GetOutgoingEdges(caller[0].ID, []model.EdgeKind{model.EdgeCalls}, "")
+	if err != nil || len(edges) != 1 {
+		t.Fatalf("caller edges = %+v, %v; want one", edges, err)
+	}
+	target, err := idx.Store().GetNodeByID(edges[0].Target)
+	if err != nil || target == nil || target.Name != "Helper" {
+		t.Fatalf("target = %+v, %v", target, err)
+	}
+}
+
 func TestSyncChangedCalleeFailureDoesNotRestoreDuplicateEdges(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "lib.go"), "package main\n\nfunc Helper() {}\n")
@@ -596,6 +707,29 @@ func TestSyncChangedCalleeFailureDoesNotRestoreDuplicateEdges(t *testing.T) {
 		if err != nil || len(edges) != 1 {
 			t.Fatalf("attempt %d edges = %+v, %v; want exactly one original edge", attempt, edges, err)
 		}
+	}
+}
+
+func TestSyncMixedBatchPreservesSuccessfulCalleeRelationships(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "lib.go"), "package main\nfunc Helper() {}\n")
+	writeFile(t, filepath.Join(dir, "main.go"), "package main\nfunc main() { Helper() }\n")
+	writeFile(t, filepath.Join(dir, "bad.go"), "package main\nfunc Bad() {}\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	caller, _ := idx.Store().GetNodesByName("main")
+	writeFile(t, filepath.Join(dir, "lib.go"), "package main\n\nfunc Helper() {}\n")
+	writeFile(t, filepath.Join(dir, "bad.go"), strings.Repeat("x", MaxFileSize+1))
+	res := idx.SyncFiles([]string{"lib.go", "bad.go"}, Options{})
+	if len(res.Errors) == 0 {
+		t.Fatal("mixed sync should report failed file")
+	}
+	edges, err := idx.Store().GetOutgoingEdges(caller[0].ID, []model.EdgeKind{model.EdgeCalls}, "")
+	if err != nil || len(edges) != 1 {
+		t.Fatalf("successful callee edge = %+v, %v", edges, err)
 	}
 }
 

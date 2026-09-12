@@ -38,15 +38,7 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 	// silently inconsistent graph. Rebuild from scratch instead. indexAllLocked
 	// re-stamps the current version metadata when it finishes.
 	if idx.indexVersionStale() {
-		for _, s := range idx.Stores() {
-			_ = s.Clear()
-		}
-		ir := idx.indexAllLocked(opts)
-		result.FullReindex = true
-		result.FilesChecked = ir.FilesIndexed
-		result.NodesUpdated = ir.NodesCreated
-		result.DurationMs = now() - start
-		return result
+		return idx.fullRebuildLocked(opts, start, now)
 	}
 
 	opts.progress(IndexProgress{Phase: PhaseScanning})
@@ -60,6 +52,7 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 
 	tracked, err := idx.allTrackedFiles()
 	if err != nil {
+		result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "files_read_error"})
 		result.DurationMs = now() - start
 		return result
 	}
@@ -80,10 +73,19 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 	for _, rec := range tracked {
 		exists := true
 		if _, err := os.Stat(filepath.Join(idx.root, filepath.FromSlash(rec.Path))); err != nil {
+			if !os.IsNotExist(err) {
+				result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), FilePath: rec.Path, Severity: "error", Code: "stat_error"})
+				continue
+			}
 			exists = false
 		}
 		if !currentSet[rec.Path] || !exists {
-			if idx.deleteFileEverywhere(rec.Path) {
+			deleted, err := idx.deleteFileEverywhere(rec.Path)
+			if err != nil {
+				result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), FilePath: rec.Path, Severity: "error", Code: "delete_error"})
+				continue
+			}
+			if deleted {
 				result.FilesRemoved++
 			}
 		}
@@ -97,6 +99,7 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 		if isTracked {
 			fi, err := os.Stat(fullPath)
 			if err != nil {
+				result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), FilePath: filePath, Severity: "error", Code: "stat_error"})
 				continue
 			}
 			if fi.Size() == rec.Size && statMtimeMs(fi) == rec.ModifiedAt {
@@ -110,7 +113,8 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 
 		content, err := os.ReadFile(fullPath)
 		if err != nil {
-			continue // unreadable — skip
+			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), FilePath: filePath, Severity: "error", Code: "read_error"})
+			continue
 		}
 		hash := HashContent(content)
 
@@ -128,7 +132,9 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 	idx.syncChangedFiles(filesToIndex, opts, &result)
 	// Keep the cross-scope trace projection aligned with the exact working tree
 	// revision even when only directives or spec files changed.
-	_ = idx.indexTrace()
+	if err := idx.indexTrace(); err != nil {
+		result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "trace_error"})
+	}
 
 	if result.FilesAdded > 0 || result.FilesModified > 0 || result.FilesRemoved > 0 {
 		idx.runMaintenanceAll()
@@ -149,6 +155,9 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 // gone, and re-resolves references. Paths are project-relative (POSIX or
 // native separators).
 func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
+	if requiresScopeRebuild(changed) {
+		return idx.Rebuild(opts)
+	}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
@@ -167,13 +176,21 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 		fullPath := filepath.Join(idx.root, filepath.FromSlash(filePath))
 		rec, err := idx.fileRecord(filePath)
 		if err != nil {
+			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), FilePath: filePath, Severity: "error", Code: "file_record_error"})
 			continue
 		}
 
 		if _, statErr := os.Stat(fullPath); statErr != nil {
 			// Gone from disk — drop it from the index if tracked.
+			if !os.IsNotExist(statErr) {
+				result.Errors = append(result.Errors, model.ExtractionError{Message: statErr.Error(), FilePath: filePath, Severity: "error", Code: "stat_error"})
+				continue
+			}
 			if rec != nil {
-				if idx.deleteFileEverywhere(filePath) {
+				deleted, err := idx.deleteFileEverywhere(filePath)
+				if err != nil {
+					result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), FilePath: filePath, Severity: "error", Code: "delete_error"})
+				} else if deleted {
 					result.FilesRemoved++
 				}
 			}
@@ -181,6 +198,7 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 		}
 		content, err := os.ReadFile(fullPath)
 		if err != nil {
+			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), FilePath: filePath, Severity: "error", Code: "read_error"})
 			continue
 		}
 		hash := HashContent(content)
@@ -197,7 +215,9 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 	}
 
 	idx.syncChangedFiles(filesToIndex, opts, &result)
-	_ = idx.indexTrace()
+	if err := idx.indexTrace(); err != nil {
+		result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "trace_error"})
+	}
 
 	if result.FilesAdded > 0 || result.FilesModified > 0 || result.FilesRemoved > 0 {
 		idx.runMaintenanceAll()
@@ -205,6 +225,47 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 
 	result.DurationMs = now() - start
 	return result
+}
+
+// Rebuild performs a strict from-scratch reconstruction. It is used when a
+// manifest can move many files between versioned scopes.
+func (idx *Indexer) Rebuild(opts Options) SyncResult {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	if err := idx.lock.Acquire(); err != nil {
+		return SyncResult{}
+	}
+	defer idx.lock.Release()
+	now := opts.clock()
+	start := now()
+	return idx.fullRebuildLocked(opts, start, now)
+}
+
+func (idx *Indexer) fullRebuildLocked(opts Options, start int64, now func() int64) SyncResult {
+	result := SyncResult{FullReindex: true}
+	for _, s := range idx.Stores() {
+		if err := s.Clear(); err != nil {
+			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "clear_error"})
+			result.DurationMs = now() - start
+			return result
+		}
+	}
+	ir := idx.indexAllLocked(opts)
+	result.FilesChecked = ir.FilesIndexed
+	result.NodesUpdated = ir.NodesCreated
+	result.Errors = append(result.Errors, ir.Errors...)
+	result.DurationMs = now() - start
+	return result
+}
+
+func requiresScopeRebuild(paths []string) bool {
+	for _, path := range paths {
+		switch filepath.Base(filepath.ToSlash(path)) {
+		case "package.json", "go.mod", "pom.xml", "build.gradle", "build.gradle.kts":
+			return true
+		}
+	}
+	return false
 }
 
 // syncChangedFiles extracts + stores the changed files and re-resolves the
@@ -272,30 +333,28 @@ func (idx *Indexer) captureIncomingEdges(changedFiles []string) ([]incomingEdgeB
 	}
 	var out []incomingEdgeBackup
 	for _, s := range idx.Stores() {
-		for _, file := range changedFiles {
-			nodes, err := s.GetNodesByFile(file)
-			if err != nil {
-				return nil, fmt.Errorf("read changed nodes for %s: %w", file, err)
+		edges, err := s.GetIncomingEdgesForTargetFiles(changedFiles)
+		if err != nil {
+			return nil, fmt.Errorf("read incoming edges: %w", err)
+		}
+		ids := make([]string, 0, len(edges)*2)
+		for _, edge := range edges {
+			ids = append(ids, edge.Source, edge.Target)
+		}
+		nodes, err := s.GetNodesByIDs(ids)
+		if err != nil {
+			return nil, fmt.Errorf("read edge endpoints: %w", err)
+		}
+		for _, edge := range edges {
+			source, sourceOK := nodes[edge.Source]
+			target, targetOK := nodes[edge.Target]
+			if !sourceOK || !targetOK {
+				continue
 			}
-			for _, target := range nodes {
-				edges, err := s.GetIncomingEdges(target.ID, nil)
-				if err != nil {
-					return nil, fmt.Errorf("read incoming edges for %s: %w", target.ID, err)
-				}
-				for _, edge := range edges {
-					source, err := s.GetNodeByID(edge.Source)
-					if err != nil {
-						return nil, fmt.Errorf("read edge source %s: %w", edge.Source, err)
-					}
-					if source == nil {
-						continue
-					}
-					if _, isChanging := changed[source.FilePath]; isChanging {
-						continue
-					}
-					out = append(out, incomingEdgeBackup{store: s, target: target, edge: edge})
-				}
+			if _, isChanging := changed[source.FilePath]; isChanging {
+				continue
 			}
+			out = append(out, incomingEdgeBackup{store: s, target: target, edge: edge})
 		}
 	}
 	return out, nil
@@ -319,14 +378,14 @@ func (idx *Indexer) restoreIncomingEdges(backups []incomingEdgeBackup) error {
 	}
 	restore := make(map[*store.Store][]model.Edge)
 	for _, backup := range backups {
-		// extractAndStore can fail after capture (for example a parse/read
-		// failure) and intentionally leaves the old file record intact. Only
-		// restore an edge when its original target was actually replaced.
-		old, err := backup.store.GetNodeByID(backup.target.ID)
+		// Node IDs can remain stable for a body-only edit even though deleting
+		// the file cascaded its incoming edges. The edge, not the node ID, is
+		// the authoritative indication that restoration is needed.
+		survived, err := backup.store.EdgeExists(backup.edge)
 		if err != nil {
-			return fmt.Errorf("check replaced target %s: %w", backup.target.ID, err)
+			return fmt.Errorf("check preserved edge for %s: %w", backup.target.ID, err)
 		}
-		if old != nil {
+		if survived {
 			continue
 		}
 		for _, candidate := range byStoreFile[backup.store][backup.target.FilePath] {
@@ -358,6 +417,48 @@ func (idx *Indexer) GetChangedFiles() ChangedFiles {
 		return changed
 	}
 	return idx.getChangedFilesByScan()
+}
+
+// RefreshForRead is the strict freshness boundary for symbol consumers. It
+// honors the extraction-version gate, refreshes only the Git/metadata
+// candidates, and stamps the observed revision only when HEAD did not move
+// during the operation.
+func (idx *Indexer) RefreshForRead(opts Options) (SyncResult, error) {
+	if idx.indexVersionStale() {
+		result := idx.Sync(opts)
+		if result.FilesChecked == 0 && result.DurationMs == 0 {
+			return result, fmt.Errorf("index is locked; cannot safely rebuild symbol data")
+		}
+		if len(result.Errors) > 0 || !result.FullReindex {
+			return result, fmt.Errorf("full index rebuild failed")
+		}
+		return result, nil
+	}
+	observedHead, gitRepo := gitHead(idx.root)
+	changes := idx.GetChangedFiles()
+	paths := append(append([]string{}, changes.Added...), changes.Modified...)
+	paths = append(paths, changes.Removed...)
+	if len(paths) == 0 {
+		if gitRepo {
+			if err := idx.markGitHeadIfCurrent(observedHead); err != nil {
+				return SyncResult{}, err
+			}
+		}
+		return SyncResult{}, nil
+	}
+	result := idx.SyncFiles(paths, opts)
+	if result.FilesChecked == 0 && result.DurationMs == 0 {
+		return result, fmt.Errorf("index is locked; cannot safely refresh symbol data")
+	}
+	if len(result.Errors) > 0 {
+		return result, fmt.Errorf("incremental refresh failed: %s", result.Errors[0].Message)
+	}
+	if gitRepo {
+		if err := idx.markGitHeadIfCurrent(observedHead); err != nil {
+			return result, err
+		}
+	}
+	return result, nil
 }
 
 func (idx *Indexer) getChangedFilesByScan() ChangedFiles {
@@ -433,6 +534,12 @@ func (idx *Indexer) gitChangedFilesSinceIndex() (ChangedFiles, bool) {
 	if err != nil {
 		return ChangedFiles{}, false
 	}
+	if idx.hasEmbeddedRepository(tracked) {
+		// Root git cannot describe clean commits made inside an embedded repo.
+		// Its scan already recurses into those repositories, so use the exact
+		// scan/hash fallback only for this exceptional topology.
+		return ChangedFiles{}, false
+	}
 	candidates := newChangedFilesSet()
 	if indexedHead != currentHead {
 		committed, ok := gitDiffFiles(idx.root, indexedHead, currentHead)
@@ -501,6 +608,24 @@ func (idx *Indexer) gitChangedFilesSinceIndex() (ChangedFiles, bool) {
 	return changes.result(), true
 }
 
+func (idx *Indexer) hasEmbeddedRepository(records []model.FileRecord) bool {
+	seen := map[string]struct{}{}
+	for _, rec := range records {
+		first, _, _ := strings.Cut(filepath.ToSlash(rec.Path), "/")
+		if first == "" {
+			continue
+		}
+		if _, ok := seen[first]; ok {
+			continue
+		}
+		seen[first] = struct{}{}
+		if _, err := os.Stat(filepath.Join(idx.root, filepath.FromSlash(first), ".git")); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // MarkCurrentGitHead records the repository revision only after a caller has
 // successfully refreshed every candidate it chose. It is public so the CLI's
 // freshness path can make that completion explicit without making SyncFiles
@@ -518,6 +643,14 @@ func (idx *Indexer) markCurrentGitHead() error {
 		}
 	}
 	return nil
+}
+
+func (idx *Indexer) markGitHeadIfCurrent(observed string) error {
+	current, ok := gitHead(idx.root)
+	if !ok || current != observed {
+		return fmt.Errorf("repository HEAD changed during refresh; no freshness stamp written")
+	}
+	return idx.markCurrentGitHead()
 }
 
 type changedFilesSet struct {
@@ -602,14 +735,22 @@ func (idx *Indexer) fileRecord(path string) (*model.FileRecord, error) {
 
 // deleteFileEverywhere removes path from every scope store that tracks it,
 // reporting whether any deletion succeeded.
-func (idx *Indexer) deleteFileEverywhere(path string) bool {
+func (idx *Indexer) deleteFileEverywhere(path string) (bool, error) {
 	deleted := false
 	for _, s := range idx.Stores() {
-		if err := s.DeleteFile(path); err == nil {
-			deleted = true
+		rec, err := s.GetFileByPath(path)
+		if err != nil {
+			return false, err
 		}
+		if rec == nil {
+			continue
+		}
+		if err := s.DeleteFile(path); err != nil {
+			return false, err
+		}
+		deleted = true
 	}
-	return deleted
+	return deleted, nil
 }
 
 // nodesByFile returns the nodes recorded for path across all scope stores.

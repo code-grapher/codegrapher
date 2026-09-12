@@ -135,25 +135,39 @@ func (idx *Indexer) indexAllLocked(opts Options) IndexResult {
 	// Phase 2: concurrent extraction, serialized store writes.
 	idx.extractAndStore(files, opts, &result)
 
-	result.Success = result.FilesIndexed > 0 || !hasSevereError(result.Errors)
+	result.Success = !hasSevereError(result.Errors)
 
 	// Phase 3: resolution.
 	if result.Success && result.FilesIndexed > 0 {
 		idx.resolveAll(opts, &result)
+		result.Success = !hasSevereError(result.Errors)
 	}
 
-	// Phase 4: maintenance + metadata stamp (advisory — never fails a run).
+	// Phase 4: maintenance, trace projection, then metadata. A revision stamp
+	// is a freshness certificate, so write it only after the whole rebuild.
 	if result.Success && result.FilesIndexed > 0 {
 		for _, s := range idx.Stores() {
 			s.RunMaintenance()
-			_ = s.SetMetadata("indexed_with_version", PackageVersion)
-			_ = s.SetMetadata("indexed_with_extraction_version", strconv.Itoa(ExtractionVersion))
 		}
-		_ = idx.markCurrentGitHead()
 		if err := idx.indexTrace(); err != nil {
 			result.Errors = append(result.Errors, model.ExtractionError{
-				Message: err.Error(), Severity: "warning", Code: "trace_index_error",
+				Message: err.Error(), Severity: "error", Code: "trace_index_error",
 			})
+		}
+		result.Success = !hasSevereError(result.Errors)
+		if result.Success && len(result.Errors) == 0 {
+			for _, s := range idx.Stores() {
+				if err := s.SetMetadata("indexed_with_version", PackageVersion); err != nil {
+					result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "metadata_error"})
+				}
+				if err := s.SetMetadata("indexed_with_extraction_version", strconv.Itoa(ExtractionVersion)); err != nil {
+					result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "metadata_error"})
+				}
+			}
+			if err := idx.markCurrentGitHead(); err != nil {
+				result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "git_head_metadata_error"})
+			}
+			result.Success = !hasSevereError(result.Errors)
 		}
 
 		if after, err := idx.aggregateStats(); err == nil {
@@ -285,6 +299,9 @@ func (idx *Indexer) extractAndStore(files []string, opts Options, result *IndexR
 						s, job.path, job.content, lang,
 						job.size, job.mtimeMs, job.result, now,
 					)
+					if serr == nil {
+						serr = idx.removeFileFromOtherStores(job.path, s)
+					}
 				}
 				if serr != nil {
 					result.FilesErrored++
@@ -316,6 +333,27 @@ func (idx *Indexer) extractAndStore(files []string, opts Options, result *IndexR
 	}
 
 	opts.progress(IndexProgress{Phase: PhaseParsing, Current: total, Total: total})
+}
+
+// removeFileFromOtherStores completes a successful scope transition. A path
+// may move from unknown to content-detected SpecScore (or back); leaving its
+// old file node behind would make every freshness pass rediscover it.
+func (idx *Indexer) removeFileFromOtherStores(path string, keep *store.Store) error {
+	for _, s := range idx.Stores() {
+		if s == keep {
+			continue
+		}
+		rec, err := s.GetFileByPath(path)
+		if err != nil {
+			return err
+		}
+		if rec != nil {
+			if err := s.DeleteFile(path); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // extractOne reads and parses a single file (no store access — safe to run

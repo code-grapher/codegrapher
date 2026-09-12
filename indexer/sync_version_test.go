@@ -3,6 +3,7 @@ package indexer
 import (
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -89,5 +90,31 @@ func TestSyncEscalatesWhenVersionMetadataMissing(t *testing.T) {
 
 	if !res.FullReindex {
 		t.Fatalf("FullReindex = false, want true when version metadata is missing")
+	}
+}
+
+func TestRefreshForReadHonorsStaleExtractionVersion(t *testing.T) {
+	dir, idx := newSyncProject(t)
+	setMeta(t, idx, "indexed_with_extraction_version", "0")
+	writeFile(t, filepath.Join(dir, "src", "index.ts"), "export function refreshed() {}")
+	res, err := idx.RefreshForRead(Options{})
+	if err != nil || !res.FullReindex {
+		t.Fatalf("RefreshForRead = %+v, %v; want successful full rebuild", res, err)
+	}
+	if !hasNodeNamed(t, idx, "refreshed") {
+		t.Fatal("stale-version refresh did not rebuild current source")
+	}
+}
+
+func TestStaleVersionRebuildDoesNotStampPartialExtraction(t *testing.T) {
+	dir, idx := newSyncProject(t)
+	setMeta(t, idx, "indexed_with_extraction_version", "0")
+	writeFile(t, filepath.Join(dir, "src", "index.ts"), strings.Repeat("x", MaxFileSize+1))
+	res := idx.Sync(Options{})
+	if len(res.Errors) == 0 {
+		t.Fatal("partial rebuild errors = none")
+	}
+	if got := storedMeta(t, idx, "indexed_with_extraction_version"); got != "0" {
+		t.Fatalf("partial rebuild stamped version %q, want stale value retained", got)
 	}
 }
