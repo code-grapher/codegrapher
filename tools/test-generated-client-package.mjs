@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const packageDirectory = join(root, "clients", "typescript");
@@ -54,11 +54,15 @@ try {
     join(consumer, "package.json"),
     '{"name":"generated-client-consumer","private":true,"type":"module"}\n',
   );
-  execFileSync(
-    "pnpm",
-    ["add", "--prefer-offline", join(destination, archive)],
-    { cwd: consumer, stdio: "inherit" },
-  );
+  const revision = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+  }).trim();
+  const gitDependency = `git+${pathToFileURL(root).href}#${revision}&path:/clients/typescript`;
+  execFileSync("pnpm", ["add", "--prefer-offline", gitDependency], {
+    cwd: consumer,
+    stdio: "inherit",
+  });
   execFileSync(
     process.execPath,
     [
@@ -69,7 +73,9 @@ try {
     { cwd: consumer, stdio: "inherit" },
   );
 
-  console.log("generated client package contains and imports its runtime and type exports");
+  console.log(
+    "generated client package contains and imports its runtime and type exports from Git",
+  );
 } finally {
   rmSync(destination, { recursive: true, force: true });
 }
