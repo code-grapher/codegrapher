@@ -128,6 +128,9 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 			result.FilesModified++
 		}
 	}
+	if requiresScopeRebuild(result.ChangedFilePaths) {
+		return idx.fullRebuildLocked(opts, start, now)
+	}
 
 	idx.syncChangedFiles(filesToIndex, opts, &result)
 	// Keep the cross-scope trace projection aligned with the exact working tree
@@ -289,15 +292,6 @@ func (idx *Indexer) syncChangedFiles(filesToIndex []string, opts Options, result
 		result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "edge_restore_error"})
 		return
 	}
-	if len(ir.Errors) > 0 {
-		// Surface every extraction warning/error to freshness callers. Restore
-		// still ran, but only for targets proven replaced; that preserves
-		// unchanged callers when a parser returned a partial valid result while
-		// avoiding duplicate edges when it left the old nodes intact.
-		result.Errors = append(result.Errors, ir.Errors...)
-		return
-	}
-
 	// nodesUpdated is the sum of nodes now stored for the changed files
 	// (the original's `nodesUpdated += result.nodes.length`).
 	nodesUpdated := 0
@@ -312,7 +306,12 @@ func (idx *Indexer) syncChangedFiles(filesToIndex []string, opts Options, result
 	if ir.FilesIndexed > 0 {
 		var dummy IndexResult
 		idx.resolveAll(opts, &dummy)
+		result.Errors = append(result.Errors, dummy.Errors...)
 	}
+	// Report failed files only after resolving every successfully stored file.
+	// Otherwise a later retry of an unrelated failed file leaves valid callers'
+	// unresolved references stranded indefinitely.
+	result.Errors = append(result.Errors, ir.Errors...)
 }
 
 // incomingEdgeBackup retains an edge from an unchanged source while its target
@@ -413,10 +412,13 @@ const indexedGitHeadKey = "indexed_git_head"
 // catching clean commits made after indexing. Non-git projects, and old
 // indexes without a revision stamp, retain the filesystem/hash fallback.
 func (idx *Indexer) GetChangedFiles() ChangedFiles {
+	if tracked, err := idx.allTrackedFiles(); err == nil && idx.hasEmbeddedRepository(tracked) {
+		return idx.getChangedFilesByScan(true)
+	}
 	if changed, ok := idx.gitChangedFilesSinceIndex(); ok {
 		return changed
 	}
-	return idx.getChangedFilesByScan()
+	return idx.getChangedFilesByScan(false)
 }
 
 // RefreshForRead is the strict freshness boundary for symbol consumers. It
@@ -461,7 +463,7 @@ func (idx *Indexer) RefreshForRead(opts Options) (SyncResult, error) {
 	return result, nil
 }
 
-func (idx *Indexer) getChangedFilesByScan() ChangedFiles {
+func (idx *Indexer) getChangedFilesByScan(forceHash bool) ChangedFiles {
 	currentFiles := ScanDirectory(idx.root)
 	currentSet := make(map[string]bool, len(currentFiles))
 	for _, f := range currentFiles {
@@ -499,8 +501,8 @@ func (idx *Indexer) getChangedFilesByScan() ChangedFiles {
 		if err != nil {
 			continue
 		}
-		_, forceHash := dirty[filePath]
-		if !forceHash && fi.Size() == rec.Size && statMtimeMs(fi) == rec.ModifiedAt {
+		_, gitDirty := dirty[filePath]
+		if !forceHash && !gitDirty && fi.Size() == rec.Size && statMtimeMs(fi) == rec.ModifiedAt {
 			continue
 		}
 		content, err := os.ReadFile(filepath.Join(idx.root, filepath.FromSlash(filePath)))
@@ -611,16 +613,15 @@ func (idx *Indexer) gitChangedFilesSinceIndex() (ChangedFiles, bool) {
 func (idx *Indexer) hasEmbeddedRepository(records []model.FileRecord) bool {
 	seen := map[string]struct{}{}
 	for _, rec := range records {
-		first, _, _ := strings.Cut(filepath.ToSlash(rec.Path), "/")
-		if first == "" {
-			continue
-		}
-		if _, ok := seen[first]; ok {
-			continue
-		}
-		seen[first] = struct{}{}
-		if _, err := os.Stat(filepath.Join(idx.root, filepath.FromSlash(first), ".git")); err == nil {
-			return true
+		path := filepath.ToSlash(rec.Path)
+		for dir := filepath.Dir(path); dir != "." && dir != "/"; dir = filepath.Dir(dir) {
+			if _, ok := seen[dir]; ok {
+				continue
+			}
+			seen[dir] = struct{}{}
+			if _, err := os.Stat(filepath.Join(idx.root, filepath.FromSlash(dir), ".git")); err == nil {
+				return true
+			}
 		}
 	}
 	return false
@@ -637,6 +638,10 @@ func (idx *Indexer) markCurrentGitHead() error {
 	if !ok {
 		return nil
 	}
+	return idx.markGitHead(head)
+}
+
+func (idx *Indexer) markGitHead(head string) error {
 	for _, s := range idx.Stores() {
 		if err := s.SetMetadata(indexedGitHeadKey, head); err != nil {
 			return err
@@ -650,7 +655,7 @@ func (idx *Indexer) markGitHeadIfCurrent(observed string) error {
 	if !ok || current != observed {
 		return fmt.Errorf("repository HEAD changed during refresh; no freshness stamp written")
 	}
-	return idx.markCurrentGitHead()
+	return idx.markGitHead(observed)
 }
 
 type changedFilesSet struct {

@@ -372,6 +372,43 @@ func TestGetChangedFilesFallsBackForCleanEmbeddedRepoRename(t *testing.T) {
 	}
 }
 
+func TestGetChangedFilesHashesSameMtimeNestedEmbeddedRepoEdit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	root := t.TempDir()
+	mustGit(t, root, "init")
+	inner := filepath.Join(root, "modules", "inner")
+	if err := os.MkdirAll(inner, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, inner, "init")
+	path := filepath.Join(inner, "same.go")
+	writeFile(t, path, "package inner\nfunc Old() {}\n")
+	mustGit(t, inner, "add", "-A")
+	mustGit(t, inner, "commit", "-m", "initial")
+	idx, result, err := Init(root, Options{})
+	if err != nil || !result.Success {
+		t.Fatalf("Init: %+v %v", result, err)
+	}
+	defer func() { _ = idx.Close() }()
+	rec, err := idx.fileRecord("modules/inner/same.go")
+	if err != nil || rec == nil {
+		t.Fatalf("record: %+v %v", rec, err)
+	}
+	writeFile(t, path, "package inner\nfunc New() {}\n")
+	tm := time.UnixMilli(rec.ModifiedAt)
+	if err := os.Chtimes(path, tm, tm); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, inner, "add", "-A")
+	mustGit(t, inner, "commit", "-m", "edit")
+	changes := idx.GetChangedFiles()
+	if !slices.Contains(changes.Modified, "modules/inner/same.go") {
+		t.Fatalf("nested same-mtime changes = %+v", changes)
+	}
+}
+
 func TestSyncFilesRemovesDeletedIndexedUnknownFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "notes.txt")
@@ -440,6 +477,22 @@ func TestSyncFilesRebuildsWhenPackageManifestCanChangeScopes(t *testing.T) {
 	res := idx.SyncFiles([]string{"package.json"}, Options{})
 	if !res.FullReindex || len(res.Errors) != 0 {
 		t.Fatalf("manifest sync = %+v, want successful rebuild", res)
+	}
+}
+
+func TestSyncRebuildsWhenPackageManifestCanChangeScopes(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "package.json"), `{"devDependencies":{"typescript":"5.0.0"}}`)
+	writeFile(t, filepath.Join(dir, "src", "a.ts"), "export function A() {}")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, filepath.Join(dir, "package.json"), `{"devDependencies":{"typescript":"4.0.0"}}`)
+	res := idx.Sync(Options{})
+	if !res.FullReindex || len(res.Errors) != 0 {
+		t.Fatalf("manifest full Sync = %+v, want successful rebuild", res)
 	}
 }
 
@@ -730,6 +783,41 @@ func TestSyncMixedBatchPreservesSuccessfulCalleeRelationships(t *testing.T) {
 	edges, err := idx.Store().GetOutgoingEdges(caller[0].ID, []model.EdgeKind{model.EdgeCalls}, "")
 	if err != nil || len(edges) != 1 {
 		t.Fatalf("successful callee edge = %+v, %v", edges, err)
+	}
+}
+
+func TestSyncMixedBatchResolvesSuccessfulCallerDespiteFailedFile(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "lib.go"), "package main\nfunc Helper() {}\nfunc Other() {}\n")
+	writeFile(t, filepath.Join(dir, "caller.go"), "package main\nfunc Caller() { Helper() }\n")
+	writeFile(t, filepath.Join(dir, "bad.go"), "package main\nfunc Bad() {}\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, filepath.Join(dir, "caller.go"), "package main\nfunc Caller() { Other() }\n")
+	writeFile(t, filepath.Join(dir, "bad.go"), strings.Repeat("x", MaxFileSize+1))
+	for attempt := 0; attempt < 2; attempt++ {
+		res := idx.SyncFiles([]string{"caller.go", "bad.go"}, Options{})
+		if len(res.Errors) == 0 {
+			t.Fatalf("attempt %d should report bad.go", attempt)
+		}
+		caller, err := idx.Store().GetNodesByName("Caller")
+		if err != nil || len(caller) != 1 {
+			t.Fatalf("caller: %v %d", err, len(caller))
+		}
+		edges, err := idx.Store().GetOutgoingEdges(caller[0].ID, []model.EdgeKind{model.EdgeCalls}, "")
+		if err != nil || len(edges) != 1 {
+			t.Fatalf("attempt %d edges = %+v, %v", attempt, edges, err)
+		}
+		target, err := idx.Store().GetNodeByID(edges[0].Target)
+		if err != nil || target == nil || target.Name != "Other" {
+			t.Fatalf("attempt %d target = %+v, %v", attempt, target, err)
+		}
+		if unresolved, err := idx.Store().GetUnresolvedReferencesCount(); err != nil || unresolved != 0 {
+			t.Fatalf("attempt %d unresolved = %d, %v", attempt, unresolved, err)
+		}
 	}
 }
 

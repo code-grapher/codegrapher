@@ -155,7 +155,7 @@ func (idx *Indexer) indexAllLocked(opts Options) IndexResult {
 			})
 		}
 		result.Success = !hasSevereError(result.Errors)
-		if result.Success && len(result.Errors) == 0 {
+		if result.Success {
 			for _, s := range idx.Stores() {
 				if err := s.SetMetadata("indexed_with_version", PackageVersion); err != nil {
 					result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "metadata_error"})

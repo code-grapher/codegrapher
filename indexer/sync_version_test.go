@@ -106,15 +106,16 @@ func TestRefreshForReadHonorsStaleExtractionVersion(t *testing.T) {
 	}
 }
 
-func TestStaleVersionRebuildDoesNotStampPartialExtraction(t *testing.T) {
+func TestStaleVersionRebuildStampsUsableIndexWithSkipWarning(t *testing.T) {
 	dir, idx := newSyncProject(t)
 	setMeta(t, idx, "indexed_with_extraction_version", "0")
+	writeFile(t, filepath.Join(dir, "src", "good.ts"), "export function Good() {}")
 	writeFile(t, filepath.Join(dir, "src", "index.ts"), strings.Repeat("x", MaxFileSize+1))
 	res := idx.Sync(Options{})
 	if len(res.Errors) == 0 {
 		t.Fatal("partial rebuild errors = none")
 	}
-	if got := storedMeta(t, idx, "indexed_with_extraction_version"); got != "0" {
-		t.Fatalf("partial rebuild stamped version %q, want stale value retained", got)
+	if got := storedMeta(t, idx, "indexed_with_extraction_version"); got != strconv.Itoa(ExtractionVersion) {
+		t.Fatalf("usable rebuild version = %q, want current", got)
 	}
 }
