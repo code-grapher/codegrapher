@@ -142,12 +142,6 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 	if result.FilesAdded > 0 || result.FilesModified > 0 || result.FilesRemoved > 0 {
 		idx.runMaintenanceAll()
 	}
-	if len(result.Errors) == 0 {
-		if err := idx.markCurrentGitHead(); err != nil {
-			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "git_head_metadata_error"})
-		}
-	}
-
 	result.DurationMs = now() - start
 	return result
 }

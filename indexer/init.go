@@ -1,7 +1,10 @@
 package indexer
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -165,9 +168,6 @@ func (idx *Indexer) indexAllLocked(opts Options) IndexResult {
 				result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "metadata_error"})
 			}
 		}
-		if err := idx.markCurrentGitHead(); err != nil {
-			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "git_head_metadata_error"})
-		}
 		result.Success = !hasSevereError(result.Errors)
 	}
 
@@ -191,9 +191,6 @@ func (idx *Indexer) indexAllLocked(opts Options) IndexResult {
 				if err := s.SetMetadata("indexed_with_extraction_version", strconv.Itoa(ExtractionVersion)); err != nil {
 					result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "metadata_error"})
 				}
-			}
-			if err := idx.markCurrentGitHead(); err != nil {
-				result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "git_head_metadata_error"})
 			}
 			result.Success = !hasSevereError(result.Errors)
 		}
@@ -319,7 +316,7 @@ func (idx *Indexer) extractAndStore(files []string, opts Options, result *IndexR
 				// Keep a content fingerprint for policy-skipped source files. Without
 				// it, every freshness pass treats an unchanged generated file as a
 				// new candidate and makes normal symbol reads fail forever.
-				content, readErr := os.ReadFile(filepath.Join(idx.root, job.path))
+				hash, readErr := hashFile(filepath.Join(idx.root, job.path))
 				if readErr != nil {
 					result.FilesErrored++
 					result.Errors = append(result.Errors, model.ExtractionError{Message: fmt.Sprintf("Failed to read file: %v", readErr), FilePath: job.path, Severity: "error", Code: "read_error"})
@@ -334,7 +331,7 @@ func (idx *Indexer) extractAndStore(files []string, opts Options, result *IndexR
 					}
 				}
 				if serr == nil {
-					serr = s.UpsertFile(model.FileRecord{Path: job.path, ContentHash: HashContent(content), Language: job.lang, Size: job.size, ModifiedAt: job.mtimeMs, IndexedAt: now(), Errors: []model.ExtractionError{skipErr}})
+					serr = s.UpsertFile(model.FileRecord{Path: job.path, ContentHash: hash, Language: job.lang, Size: job.size, ModifiedAt: job.mtimeMs, IndexedAt: now(), Errors: []model.ExtractionError{skipErr}})
 				}
 				if serr != nil {
 					result.FilesErrored++
@@ -387,6 +384,19 @@ func (idx *Indexer) extractAndStore(files []string, opts Options, result *IndexR
 	}
 
 	opts.progress(IndexProgress{Phase: PhaseParsing, Current: total, Total: total})
+}
+
+func hashFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // removeFileFromOtherStores completes a successful scope transition. A path
