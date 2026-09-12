@@ -1,0 +1,8 @@
+export interface File {
+    contents: FileContents;
+    contentType?: string;
+    filename?: string;
+}
+export type FileContents = string | NodeJS.ReadableStream | ReadableStream<Uint8Array> | Uint8Array | Blob;
+export declare function createFilePartDescriptor(partName: string, fileInput: any, defaultContentType?: string): any;
+//# sourceMappingURL=multipart-helpers.d.ts.map

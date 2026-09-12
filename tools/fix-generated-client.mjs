@@ -100,6 +100,7 @@ packageJson.files = ['dist']
 packageJson.types = './dist/index.d.ts'
 packageJson.scripts = {
   ...packageJson.scripts,
+  build: 'node scripts/build.mjs',
   prepare: 'pnpm run build',
 }
 packageJson.exports = {

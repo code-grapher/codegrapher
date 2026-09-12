@@ -11,7 +11,7 @@
     "typescript": "^5.5.2"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/build.mjs",
     "prepare": "pnpm run build"
   },
   "exports": {

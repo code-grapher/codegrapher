@@ -16,6 +16,7 @@ const generatedStatus = () => execFileSync(
 
 const statusBeforeGeneration = generatedStatus()
 execFileSync('pnpm', ['generate:contract'], { stdio: 'inherit' })
+execFileSync('pnpm', ['build:client'], { stdio: 'inherit' })
 const context = readFileSync('clients/typescript/src/api/v1ClientContext.ts', 'utf8')
 if (!context.includes('options?.endpoint ?? "http://127.0.0.1:7331/codegrapher/v1"')) {
   throw new Error('generated client does not honor its endpoint option')
