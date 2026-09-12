@@ -25,7 +25,7 @@ We build with our own tooling:
 codegrapher init [path]      Initialize .codegraph/ and build the initial index
 codegrapher uninit [path]    Remove .codegraph/ from a project
 codegrapher index [path]     Full re-index
-codegrapher sync [path]      Incremental re-index since last index
+codegrapher sync [path]      Incremental re-index (`--init` initializes when missing)
 codegrapher status [path]    Index stats                         (--json)
 codegrapher query <search>   Symbol search                       (-l limit, -k kind, --brief, --json)
 codegrapher node <symbol>    Symbol metadata/source/relations    (--source[=footer|inline], --relations, --file, --line, --json)
