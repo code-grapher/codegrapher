@@ -6,11 +6,11 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/specscore/codegrapher/freshness"
 	"github.com/specscore/codegrapher/indexer"
 	"github.com/specscore/codegrapher/watch"
 	"github.com/spf13/cobra"
@@ -32,55 +32,37 @@ func newWatchCmd() *cobra.Command {
 			if mismatch := indexer.DetectWorktreeIndexMismatch(startPath, projectPath); mismatch != nil {
 				return fmt.Errorf("cannot watch a different git worktree's index:\n%s", indexer.WorktreeMismatchWarning(*mismatch))
 			}
-			if !indexer.IsInitialized(projectPath) {
-				return fmt.Errorf("CodeGraph not initialized in %s; run 'codegrapher init' there first", projectPath)
-			}
-
-			idx, err := indexer.Open(projectPath, indexer.Options{})
-			if err != nil {
-				return fmt.Errorf("open index: %w", err)
-			}
-			defer func() { _ = idx.Close() }()
-
 			output := newWatchOutput(cmd.OutOrStdout(), cmd.ErrOrStderr(), verbose)
-			pathFilter := indexer.NewPathFilter(projectPath)
-			watcher := watch.NewWithPaths(projectPath, func(paths []string) (watch.SyncResult, error) {
-				return reconcilePathsForWatch(idx, paths)
-			}, watch.Options{
-				IsIgnored:     pathFilter.IsIgnored,
-				OnObservation: output.observe,
-			})
-			if err := watcher.StartWithError(); err != nil {
-				return fmt.Errorf("cannot watch %s: %w", projectPath, err)
-			}
-			defer watcher.StopAndWait()
-
-			// Establish the native watch set first, then reconcile. Events arriving
-			// during startup remain pending for the normal debounced path, closing
-			// the otherwise unavoidable scan-to-watch race.
-			started := time.Now()
 			const startupOperationID = 0
-			output.startupStarted(started, startupOperationID)
-			startupResult, err := reconcileStartupForWatch(idx)
+			owner, _, err := freshness.Start(ctx, projectPath, freshness.Options{
+				Watch: watch.Options{OnObservation: output.observe},
+				OnStartupStarted: func(at time.Time) {
+					output.startupStarted(at, startupOperationID)
+				},
+				OnStartupDone: func(at time.Time, duration time.Duration, result watch.SyncResult, startupErr error) {
+					if startupErr == nil {
+						output.startupCompleted(at, startupOperationID, duration, result)
+					}
+				},
+			})
 			if err != nil {
-				return fmt.Errorf("startup reconciliation: %w", err)
+				if ctx.Err() != nil {
+					return nil
+				}
+				return err
 			}
-			output.startupCompleted(time.Now(), startupOperationID, time.Since(started), startupResult)
-			if ctx.Err() != nil {
-				watcher.StopAndWait()
-				return nil
-			}
+			defer func() { _ = owner.Close() }()
 			output.watching(projectPath)
 
-			select {
-			case <-ctx.Done():
-				watcher.StopAndWait()
+			err = owner.Wait(ctx)
+			if closeErr := owner.Close(); err == nil {
+				err = closeErr
+			}
+			if ctx.Err() != nil {
 				output.stopped(projectPath)
 				return nil
-			case fatalErr := <-watcher.FatalErrors():
-				watcher.StopAndWait()
-				return fmt.Errorf("watch failed: %w", fatalErr)
 			}
+			return err
 		},
 	}
 
@@ -103,42 +85,15 @@ func watchStartPath(args []string) string {
 }
 
 func reconcilePathsForWatch(idx *indexer.Indexer, paths []string) (watch.SyncResult, error) {
-	if paths == nil {
-		return mapReconcileResult(idx.Rebuild(indexer.Options{}))
-	}
-	return mapReconcileResult(idx.SyncFiles(paths, indexer.Options{}))
+	return freshness.ReconcilePaths(idx, paths)
 }
 
 func reconcileStartupForWatch(idx *indexer.Indexer) (watch.SyncResult, error) {
-	return mapReconcileResult(idx.Sync(indexer.Options{}))
+	return freshness.ReconcileStartup(idx)
 }
 
 func mapReconcileResult(result indexer.SyncResult) (watch.SyncResult, error) {
-	mapped := watch.SyncResult{
-		FilesChanged:  result.FilesAdded + result.FilesModified + result.FilesRemoved,
-		FilesChecked:  result.FilesChecked,
-		FilesAdded:    result.FilesAdded,
-		FilesModified: result.FilesModified,
-		FilesRemoved:  result.FilesRemoved,
-		NodesUpdated:  result.NodesUpdated,
-		DurationMs:    result.DurationMs,
-		FullReindex:   result.FullReindex,
-	}
-	if len(result.Errors) > 0 {
-		messages := make([]string, 0, len(result.Errors))
-		for _, extractionErr := range result.Errors {
-			message := extractionErr.Message
-			if extractionErr.FilePath != "" {
-				message = extractionErr.FilePath + ": " + message
-			}
-			messages = append(messages, message)
-		}
-		return mapped, fmt.Errorf("index reconciliation failed: %s", strings.Join(messages, "; "))
-	}
-	if result.LockUnavailable {
-		return mapped, watch.NewLockUnavailableError("")
-	}
-	return mapped, nil
+	return freshness.MapSyncResult(result)
 }
 
 type watchOutput struct {

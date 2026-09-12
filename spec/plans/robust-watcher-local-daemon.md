@@ -100,7 +100,7 @@ development baselines, not portable CI pass/fail thresholds.
 
 **Verifies:** automatic-index-freshness#ac:daemon-lifecycle-keeps-an-index-current
 **Depends-On:** 2
-**Status:** in_progress
+**Status:** complete
 
 Move index open, watcher construction, startup reconciliation, observation
 tracking, wait, and joined shutdown into a library owner used by both
@@ -113,7 +113,7 @@ regression tests, including an edit during blocked startup reconciliation.
 
 **Verifies:** automatic-index-freshness#ac:daemon-lifecycle-keeps-an-index-current, automatic-index-freshness#ac:duplicate-daemon-ownership-is-rejected, automatic-index-freshness#ac:daemon-control-rejects-unauthenticated-callers
 **Depends-On:** 3
-**Status:** queued
+**Status:** in_progress
 
 Implement atomic user-private state, PID/liveness ownership, loopback-only
 versioned status/stop endpoints with random bearer authentication, startup

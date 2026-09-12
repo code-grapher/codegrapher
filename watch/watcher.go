@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -225,6 +226,8 @@ type FileWatcher struct {
 	eventWG                  sync.WaitGroup
 	timerWG                  sync.WaitGroup
 	fatalCh                  chan error
+	fatalErr                 error
+	progressCh               chan struct{}
 	stopDone                 chan struct{}
 	timerSeq                 uint64
 
@@ -298,6 +301,7 @@ func NewWithPaths(root string, syncFn SyncPathsFunc, opts Options) *FileWatcher 
 		pending:     make(map[string]*pendingEntry),
 		readyCh:     make(chan struct{}),
 		fatalCh:     make(chan error, 1),
+		progressCh:  make(chan struct{}),
 		watchedDirs: make(map[string]struct{}),
 	}
 }
@@ -330,6 +334,7 @@ func (fw *FileWatcher) StartWithError() error {
 		return nil // already started
 	}
 	fw.stopped = false
+	fw.fatalErr = nil
 
 	// Check watch-disabled policy.
 	if reason := WatchDisabledReason(fw.root, WatchProbe{}); reason != "" {
@@ -732,6 +737,7 @@ func (fw *FileWatcher) flush(sequence uint64) {
 			fw.fullReconcileReason = ""
 		}
 		onComplete = fw.opts.OnSyncComplete
+		fw.signalProgressLocked()
 	} else if IsLockUnavailableError(err) {
 		// Lock-busy: keep pendingFiles intact, reschedule quietly.
 		observationKind = ObservationOperationRetry
@@ -792,6 +798,7 @@ func (fw *FileWatcher) Stop() {
 		fw.timer = nil
 	}
 	fw.timerSeq++
+	fw.signalProgressLocked()
 	fsw := fw.fsw
 	fw.fsw = nil
 	stopDone := make(chan struct{})
@@ -842,12 +849,19 @@ func (fw *FileWatcher) FatalErrors() <-chan error {
 func (fw *FileWatcher) reportFatal(err error) {
 	fw.mu.Lock()
 	fatalCh := fw.fatalCh
+	fw.fatalErr = err
+	fw.signalProgressLocked()
 	fw.mu.Unlock()
 	select {
 	case fatalCh <- err:
 	default:
 	}
 	fw.Stop()
+}
+
+func (fw *FileWatcher) signalProgressLocked() {
+	close(fw.progressCh)
+	fw.progressCh = make(chan struct{})
 }
 
 // StopAndWait shuts down the watcher and waits for final observations and
@@ -878,6 +892,39 @@ func (fw *FileWatcher) WaitUntilReady(timeout time.Duration) error {
 		return nil
 	case <-time.After(timeout):
 		return fmt.Errorf("FileWatcher.WaitUntilReady timed out after %v", timeout)
+	}
+}
+
+// Drain captures the current accepted event generation and waits until a
+// successful reconciliation has absorbed at least that generation. Events
+// accepted after the capture belong to normal subsequent work and do not move
+// this barrier.
+func (fw *FileWatcher) Drain(ctx context.Context) error {
+	fw.mu.Lock()
+	target := fw.eventSeq
+	fw.mu.Unlock()
+	for {
+		fw.mu.Lock()
+		if fw.completedEventSeq >= target {
+			fw.mu.Unlock()
+			return nil
+		}
+		if fw.fatalErr != nil {
+			err := fw.fatalErr
+			fw.mu.Unlock()
+			return fmt.Errorf("watcher failed before generation %d was reconciled: %w", target, err)
+		}
+		if fw.stopped {
+			fw.mu.Unlock()
+			return fmt.Errorf("watcher stopped before generation %d was reconciled", target)
+		}
+		progressCh := fw.progressCh
+		fw.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-progressCh:
+		}
 	}
 }
 
