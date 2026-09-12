@@ -22,8 +22,44 @@ const DefaultMaxDirWatches = 50_000
 
 // SyncResult is the value returned by a successful sync callback.
 type SyncResult struct {
-	FilesChanged int
-	DurationMs   int
+	FilesChanged  int
+	FilesChecked  int
+	FilesAdded    int
+	FilesModified int
+	FilesRemoved  int
+	NodesUpdated  int
+	DurationMs    int64
+	FullReindex   bool
+}
+
+// ObservationKind identifies one point in the watcher event or reconciliation
+// lifecycle. Observations are diagnostics only and never drive graph updates.
+type ObservationKind string
+
+const (
+	ObservationEventReceived      ObservationKind = "event_received"
+	ObservationOperationStarted   ObservationKind = "operation_started"
+	ObservationOperationCompleted ObservationKind = "operation_completed"
+	ObservationOperationFailed    ObservationKind = "operation_failed"
+	ObservationOperationRetry     ObservationKind = "operation_retry"
+	ObservationWatcherError       ObservationKind = "watcher_error"
+)
+
+// Observation is a structured, optional diagnostic emitted by FileWatcher.
+// It lets CLI and daemon callers render their own logs without coupling this
+// package to a terminal or logging framework.
+type Observation struct {
+	Kind            ObservationKind
+	At              time.Time
+	Path            string
+	Operation       string
+	OperationID     uint64
+	EventsReceived  uint64
+	DirtyPaths      int
+	CoalescedEvents uint64
+	Duration        time.Duration
+	Result          SyncResult
+	Err             error
 }
 
 // SyncFunc is the callback the watcher invokes after each debounce window.
@@ -88,8 +124,9 @@ type PendingFile struct {
 }
 
 type pendingEntry struct {
-	firstSeenMs int64
-	lastSeenMs  int64
+	firstSeenMs  int64
+	lastSeenMs   int64
+	lastEventSeq uint64
 }
 
 // Options configures a [FileWatcher].
@@ -104,6 +141,11 @@ type Options struct {
 	// OnSyncError is called when syncFn returns an error that is NOT
 	// ErrLockUnavailable.
 	OnSyncError func(error)
+
+	// OnObservation receives structured event and reconciliation diagnostics.
+	// It must return promptly. The callback is never invoked while the watcher
+	// mutex is held.
+	OnObservation func(Observation)
 
 	// IsSourceFile decides whether a project-relative path should be tracked.
 	// Defaults to a built-in set of Go/TS/JS extensions.
@@ -133,15 +175,18 @@ type FileWatcher struct {
 	opts     Options
 	debounce time.Duration
 
-	mu          sync.Mutex
-	pending     map[string]*pendingEntry
-	timer       *time.Timer
-	syncing     bool
-	syncStarted time.Time
-	stopped     bool
-	ready       bool
-	readyCh     chan struct{}
-	dirCapWarn  bool
+	mu                sync.Mutex
+	pending           map[string]*pendingEntry
+	timer             *time.Timer
+	syncing           bool
+	syncStarted       time.Time
+	stopped           bool
+	ready             bool
+	readyCh           chan struct{}
+	dirCapWarn        bool
+	eventSeq          uint64
+	completedEventSeq uint64
+	operationSeq      uint64
 
 	// fsnotify watcher (nil until Start is called).
 	fsw *fsnotify.Watcher
@@ -309,7 +354,7 @@ func (fw *FileWatcher) readEvents(fsw *fsnotify.Watcher) {
 			if !ok {
 				return
 			}
-			_ = err // log if needed
+			fw.observe(Observation{Kind: ObservationWatcherError, Err: err})
 		}
 	}
 }
@@ -323,6 +368,11 @@ func (fw *FileWatcher) handleFSNotifyEvent(event fsnotify.Event) {
 	if rel == "" || rel == "." || strings.HasPrefix(rel, "..") {
 		return
 	}
+	fw.observe(Observation{
+		Kind:      ObservationEventReceived,
+		Path:      rel,
+		Operation: event.Op.String(),
+	})
 
 	// A newly-created directory needs its own watch (per-directory strategy on
 	// all platforms, since fsnotify v1.10 has no public recursive API).
@@ -370,10 +420,16 @@ func (fw *FileWatcher) handleChange(rel string) {
 
 func (fw *FileWatcher) recordPendingLocked(rel string) {
 	now := fw.opts.Now().UnixMilli()
+	fw.eventSeq++
 	if e, ok := fw.pending[rel]; ok {
 		e.lastSeenMs = now
+		e.lastEventSeq = fw.eventSeq
 	} else {
-		fw.pending[rel] = &pendingEntry{firstSeenMs: now, lastSeenMs: now}
+		fw.pending[rel] = &pendingEntry{
+			firstSeenMs:  now,
+			lastSeenMs:   now,
+			lastEventSeq: fw.eventSeq,
+		}
 	}
 }
 
@@ -395,34 +451,85 @@ func (fw *FileWatcher) flush() {
 	fw.syncing = true
 	fw.timer = nil
 	fw.syncStarted = fw.opts.Now()
+	fw.operationSeq++
+	operationID := fw.operationSeq
+	batchEndSeq := fw.eventSeq
+	eventsReceived := batchEndSeq - fw.completedEventSeq
+	dirtyPaths := 0
+	for _, entry := range fw.pending {
+		if entry.lastEventSeq <= batchEndSeq {
+			dirtyPaths++
+		}
+	}
+	coalescedEvents := uint64(0)
+	if eventsReceived > uint64(dirtyPaths) {
+		coalescedEvents = eventsReceived - uint64(dirtyPaths)
+	}
+	startedAt := fw.syncStarted
 	fw.mu.Unlock()
 
+	fw.observe(Observation{
+		Kind:            ObservationOperationStarted,
+		Operation:       "reconcile",
+		OperationID:     operationID,
+		EventsReceived:  eventsReceived,
+		DirtyPaths:      dirtyPaths,
+		CoalescedEvents: coalescedEvents,
+		At:              startedAt,
+	})
+
 	result, err := fw.syncFn()
+	finishedAt := fw.opts.Now()
+	duration := finishedAt.Sub(startedAt)
+	if duration < 0 {
+		duration = 0
+	}
 
 	fw.mu.Lock()
 	fw.syncing = false
+	var onComplete func(SyncResult)
+	var onError func(error)
+	observationKind := ObservationOperationCompleted
 	if err == nil {
 		// Remove entries whose most recent event predates this sync start.
 		for path, e := range fw.pending {
-			if time.UnixMilli(e.lastSeenMs).Compare(fw.syncStarted) <= 0 {
+			if e.lastEventSeq <= batchEndSeq {
 				delete(fw.pending, path)
 			}
 		}
-		if fw.opts.OnSyncComplete != nil {
-			fw.opts.OnSyncComplete(result)
-		}
+		fw.completedEventSeq = batchEndSeq
+		onComplete = fw.opts.OnSyncComplete
 	} else if IsLockUnavailableError(err) {
 		// Lock-busy: keep pendingFiles intact, reschedule quietly.
+		observationKind = ObservationOperationRetry
 	} else {
-		if fw.opts.OnSyncError != nil {
-			fw.opts.OnSyncError(err)
-		}
+		observationKind = ObservationOperationFailed
+		onError = fw.opts.OnSyncError
 	}
 	// Re-schedule if there are still pending files.
 	if len(fw.pending) > 0 && !fw.stopped {
 		fw.scheduleSyncLocked()
 	}
 	fw.mu.Unlock()
+
+	fw.observe(Observation{
+		Kind:            observationKind,
+		Operation:       "reconcile",
+		OperationID:     operationID,
+		EventsReceived:  eventsReceived,
+		DirtyPaths:      dirtyPaths,
+		CoalescedEvents: coalescedEvents,
+		Duration:        duration,
+		Result:          result,
+		Err:             err,
+		At:              finishedAt,
+	})
+	if onComplete != nil {
+		onComplete(result)
+	}
+	if onError != nil {
+		onError(err)
+	}
 }
 
 // Stop shuts down the watcher and clears state.
@@ -443,6 +550,9 @@ func (fw *FileWatcher) Stop() {
 	fw.dirCapWarn = false
 	fw.inert = false
 	fw.pending = make(map[string]*pendingEntry)
+	fw.eventSeq = 0
+	fw.completedEventSeq = 0
+	fw.operationSeq = 0
 	// Reset ready state so the watcher can be re-started.
 	fw.ready = false
 	fw.readyCh = make(chan struct{})
@@ -490,7 +600,23 @@ func (fw *FileWatcher) PendingFiles() []PendingFile {
 // IngestEventForTests feeds a synthetic project-relative path through the
 // full filter → pendingFiles → debounce pipeline. Only for use in tests.
 func (fw *FileWatcher) IngestEventForTests(relPath string) {
-	fw.handleChange(toRelPOSIX("", relPath))
+	rel := toRelPOSIX("", relPath)
+	fw.observe(Observation{
+		Kind:      ObservationEventReceived,
+		Path:      rel,
+		Operation: "SYNTHETIC",
+	})
+	fw.handleChange(rel)
+}
+
+func (fw *FileWatcher) observe(observation Observation) {
+	if fw.opts.OnObservation == nil {
+		return
+	}
+	if observation.At.IsZero() {
+		observation.At = fw.opts.Now()
+	}
+	fw.opts.OnObservation(observation)
 }
 
 // isAlwaysIgnored reports whether rel (a project-relative POSIX path) is a

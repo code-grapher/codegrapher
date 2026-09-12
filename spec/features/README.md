@@ -14,6 +14,7 @@ Feature specifications for this project.
 | [Whole-repo file-node indexing](whole-repo-file-nodes/README.md) | Stable | Emit a file-level node for every non-gitignored file, not only files in recognized source languages. |
 | [WB Fleet Integration](wb-fleet-integration/README.md) | Draft | Fleet-safe CodeGrapher behavior for WB-managed repositories and worktrees. |
 | [SpecScore Source Traceability](specscore-source-traceability/README.md) | Implementing | Connect accepted SpecScore source directives to canonical Feature, REQ, AC, and scenario nodes. |
+| [Automatic index freshness](automatic-index-freshness/README.md) | Implementing | Keep CodeGrapher indexes current automatically through one observable incremental reconciliation engine, beginning with a foreground watch command. |
 
 ## Open Questions
 

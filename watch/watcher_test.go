@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -119,6 +120,130 @@ func TestDebounceCoalesces(t *testing.T) {
 		t.Errorf("expected 1 sync call, got %d", n)
 	}
 	w.Stop()
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:burst-is-coalesced
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:verbose-reports-event-and-operation-timing
+func TestObservationsDescribeCoalescedOperation(t *testing.T) {
+	dir := t.TempDir()
+	var mu sync.Mutex
+	var observations []watch.Observation
+	w := newInertWatcher(t, dir, func() (watch.SyncResult, error) {
+		return watch.SyncResult{
+			FilesChanged:  2,
+			FilesChecked:  7,
+			FilesAdded:    1,
+			FilesModified: 1,
+			NodesUpdated:  5,
+		}, nil
+	}, watch.Options{
+		DebounceMs: 50,
+		OnObservation: func(observation watch.Observation) {
+			mu.Lock()
+			observations = append(observations, observation)
+			mu.Unlock()
+		},
+	})
+	if !w.Start() {
+		t.Fatal("Start returned false")
+	}
+	t.Cleanup(w.Stop)
+
+	w.IngestEventForTests("src/one.go")
+	w.IngestEventForTests("src/one.go")
+	w.IngestEventForTests("src/two.go")
+
+	waitFor(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, observation := range observations {
+			if observation.Kind == watch.ObservationOperationCompleted {
+				return true
+			}
+		}
+		return false
+	}, 2*time.Second)
+
+	mu.Lock()
+	got := append([]watch.Observation(nil), observations...)
+	mu.Unlock()
+
+	var received int
+	var started, completed *watch.Observation
+	for i := range got {
+		switch got[i].Kind {
+		case watch.ObservationEventReceived:
+			received++
+		case watch.ObservationOperationStarted:
+			started = &got[i]
+		case watch.ObservationOperationCompleted:
+			completed = &got[i]
+		}
+	}
+	if received != 3 {
+		t.Fatalf("received observations = %d, want 3: %+v", received, got)
+	}
+	if started == nil || completed == nil {
+		t.Fatalf("missing operation lifecycle: %+v", got)
+	}
+	if started.OperationID == 0 || completed.OperationID != started.OperationID {
+		t.Fatalf("operation ids start=%v complete=%v", started.OperationID, completed.OperationID)
+	}
+	if started.EventsReceived != 3 || started.DirtyPaths != 2 || started.CoalescedEvents != 1 {
+		t.Errorf("started stats = %+v", *started)
+	}
+	if completed.Duration < 0 {
+		t.Errorf("completion duration = %v", completed.Duration)
+	}
+	if completed.Result.FilesChecked != 7 || completed.Result.FilesAdded != 1 ||
+		completed.Result.FilesModified != 1 || completed.Result.NodesUpdated != 5 {
+		t.Errorf("completion result = %+v", completed.Result)
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:failure-remains-dirty-and-visible
+func TestFailedOperationObservationRetainsDirtyPath(t *testing.T) {
+	dir := t.TempDir()
+	var attempts atomic.Int32
+	observedFailure := make(chan watch.Observation, 1)
+	w := newInertWatcher(t, dir, func() (watch.SyncResult, error) {
+		if attempts.Add(1) == 1 {
+			return watch.SyncResult{}, errors.New("broken index")
+		}
+		return watch.SyncResult{FilesChanged: 1}, nil
+	}, watch.Options{
+		DebounceMs: 50,
+		OnObservation: func(observation watch.Observation) {
+			if observation.Kind == watch.ObservationOperationFailed {
+				select {
+				case observedFailure <- observation:
+				default:
+				}
+			}
+		},
+	})
+	if !w.Start() {
+		t.Fatal("Start returned false")
+	}
+	t.Cleanup(w.Stop)
+	w.IngestEventForTests("src/fail.go")
+
+	select {
+	case failure := <-observedFailure:
+		if failure.Err == nil || failure.Err.Error() != "broken index" {
+			t.Fatalf("failure = %+v", failure)
+		}
+		if failure.DirtyPaths != 1 || failure.EventsReceived != 1 {
+			t.Errorf("failure stats = %+v", failure)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for failure observation")
+	}
+
+	pending := w.PendingFiles()
+	if len(pending) != 1 || pending[0].Path != "src/fail.go" {
+		t.Fatalf("pending after failure = %+v", pending)
+	}
 }
 
 // TestAdmitUnknownLanguageFile verifies that a non-gitignored file with an
