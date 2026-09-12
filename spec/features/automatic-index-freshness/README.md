@@ -148,6 +148,87 @@ overflow-triggered full reconciliation, and periodic safety reconciliation are
 later robustness work, not separate indexing paths. Any native error or runtime
 watch-cap breach terminates watching instead of leaving partial coverage active.
 
+#### REQ: robust-event-fallback
+
+An event batch exceeding 2,048 accepted events by default MUST replace its
+per-path set with one bounded whole-worktree-dirty marker and perform one
+authoritative whole-worktree reconciliation. Later events advance that marker's
+generation without regrowing the path set; a successful reconcile clears only
+the marker generation it captured, so events arriving during the operation
+schedule a follow-up whole-worktree reconcile. The
+threshold MAY be lowered for deterministic tests and tuned later from recorded
+production batches. Native watcher errors MUST remain visible and fail closed;
+a daemon MUST withdraw watch readiness and exit failed rather than claim
+partial coverage, and a subsequent restart MUST reconcile the whole worktree
+before reporting ready again. The threshold is a safety boundary, not a
+performance claim. Deterministic storm and representative checkout/merge tests,
+an idle no-sync assertion, and fixed-fixture one-file/burst benchmarks MUST pass
+before daemon release.
+
+### Local daemon lifecycle
+
+#### REQ: local-daemon-commands
+
+`codegrapher daemon start [path]`, `stop`, `restart [path]`, and `status` MUST
+manage one reusable per-user daemon. The initial daemon MAY watch one registered
+worktree, but its state and versioned control model MUST admit later
+multi-worktree registration without introducing a second indexing engine.
+Concurrent starters MUST serialize through an operating-system file lock in a
+user-private daemon state directory. The winning starter records a random
+instance nonce and `starting` state before launching; the child acquires a
+separate lifetime lock and may publish `ready` only for that nonce. State moves
+through `starting`, `ready`/`degraded`, `stopping`, and `stopped`/`failed`.
+Starting the same path while a live owner exists is idempotent and reports that
+owner; starting a different path MUST fail with an instruction to stop or
+restart because the initial daemon owns one worktree. Every successful start
+MUST name `codegrapher daemon stop` as the teardown command.
+
+#### REQ: daemon-ready-means-current
+
+The daemon MUST establish complete native watch coverage and complete startup
+reconciliation, then capture and successfully drain a watcher event-generation
+barrier before publishing ready state or allowing `start` to succeed. Events
+accepted after the barrier are normal post-readiness work; every event accepted
+at or before it is part of startup readiness. It MUST retain enough durable
+state to diagnose a crash, reclaim dead ownership, and reconcile again after
+restart. An uninitialized path, worktree/index mismatch, incomplete watch
+coverage, startup reconciliation error, or barrier timeout MUST fail before
+readiness and clean up the exact starting nonce without disturbing a newer
+owner.
+
+#### REQ: authenticated-loopback-control
+
+Lifecycle control MUST bind only to loopback on an operating-system-assigned
+port and require a cryptographically random bearer token stored in a
+user-private state directory and user-readable-only state file. Status and stop
+MUST first use the authenticated control endpoint plus an instance nonce/process
+identity and MUST NOT trust a reusable PID alone. If the endpoint is unreachable
+or authentication fails, the command MUST attempt a nonblocking acquisition of
+the OS lifetime lock: lock unavailable preserves and reports an unreachable live
+owner; lock acquired proves no lifetime owner and permits durable failed/stopped
+state reporting or stale-state reclamation. The
+private lifecycle credential MUST NOT authorize browser-facing repository
+access. The browser API uses a distinct credential, is rooted at
+`/codegrapher/`, versions resources beneath that base (for example
+`/codegrapher/v1/...`), and is specified separately in TypeSpec and emitted as
+OpenAPI for Go and TypeScript consumers. Its website route is
+`/browse/<ip-address-or-domain>/...`; the earlier root-host route is superseded.
+
+#### REQ: daemon-status-observability
+
+Daemon status MUST be available as concise text and stable JSON and include at
+least lifecycle state, PID, watched path/count, watcher readiness, pending dirty
+paths, start/ready time, last successful reconciliation, last error, last
+operation duration, control API version, and log path. Logs MUST contain startup,
+reconciliation outcomes, watcher failures, and shutdown while avoiding raw event
+noise by default. The daemon MUST distinguish process liveness, complete watch
+coverage, and index currency: reconciliation failure sets `degraded` and
+`indexCurrent=false` until a successful reconciliation generation catches the
+accepted-event generation with no remaining path or whole-worktree dirtiness;
+native watcher loss sets
+`watchReady=false`, records `failed`, and exits. Logs MUST rotate at a documented
+size bound rather than grow without limit.
+
 ### Target architecture
 
 ```text
@@ -256,8 +337,9 @@ store while keeping this boundary intact.
 #### Risks and mitigations
 
 - Native APIs may duplicate, reorder, rename, or overflow events. Debounce and
-  authoritative reconciliation handle ordinary ambiguity; overflow/event-storm
-  full reconciliation remains a Phase 2 gate before daemonization.
+  authoritative reconciliation handle ordinary ambiguity; a 2,048-event batch
+  triggers full reconciliation, while a native watcher error withdraws readiness
+  and fails closed so restart recovery cannot silently retain partial coverage.
 - Directory limits or permission failures can leave partial coverage. Startup
   fails actionably instead of reporting readiness; runtime errors are emitted
   visibly and retain dirty state when reconciliation is involved.
@@ -280,7 +362,7 @@ store while keeping this boundary intact.
 | Phase | Deliverable | Depends on | Primary risk | Success criterion |
 |---|---|---|---|---|
 | 1 | Foreground watcher, exact-path reconciliation, rename-safe rebuilds, fail-closed native coverage, structured diagnostics, and bounded real-filesystem/clean-index parity tests. | Existing indexer, watcher, and released `node` command. | Native event ambiguity silently corrupts freshness. | CRUD/rename bursts converge to the same nodes/edges as a clean index; shutdown and failure tests pass under the race detector. |
-| 2 | Explicit overflow/event-storm thresholds, whole-worktree fallback, and fixed-fixture performance/idle baselines. | Phase 1 observations and production batch samples. | A threshold either rebuilds too often or misses uncertainty. | Forced overflow/storm tests converge; idle CPU/wakeups and one-file latency are recorded with regression bounds. |
+| 2 | A 2,048 accepted-event storm threshold, whole-worktree fallback, native-error fail-closed behavior, checkout/merge coverage, and fixed-fixture performance/idle baselines. | Phase 1 observations and representative synthetic batches. | A threshold either rebuilds too often or misses uncertainty. | Forced storms converge; injected native failure withdraws readiness; checkout/merge tests pass; idle no-sync and one-file/burst benchmark baselines are recorded. |
 | 3 | One reusable local daemon owning the same watcher/reconciler, versioned control/status API, PID/liveness ownership, start/stop/status, and restart recovery. | Phases 1–2 correctness and measurements. | Duplicate owners, stale PID state, or version skew serve stale data. | One daemon survives client exits, rejects duplicate ownership, reconciles before ready after restart, and is released/installed/verified. |
 | 4 | Multi-repository/worktree registration, canonical identities, disappearance/move grace policy, cleanup, backoff, and watch/resource budgets. | Phase 3 daemon lifecycle. | Deleted or moved paths leak watches or collide by name. | Register/list/remove/reappear/restart tests preserve distinct worktrees and reclaim resources deterministically. |
 | 5 | Cheapest measured same-repository/same-HEAD reuse, initially copy/hard-link/reflink or immutable store reuse without overlay sharing. | Phase 4 identity plus duplicate-storage/open benchmarks. | Reuse crosses config/version/dirty-state boundaries. | Two clean same-HEAD worktrees reuse verified immutable data and remain isolated after one becomes dirty. |
@@ -408,11 +490,80 @@ unrelated event.
 **Then** native watches and timers are released, active graph writes finish
 before index close, and the command exits cleanly.
 
+### AC: event-storm-falls-back-to-full-reconciliation
+
+**Requirements:** automatic-index-freshness#req:robust-event-fallback
+
+**Given** more accepted native events than the configured batch safety threshold
+
+**When** the debounce window closes
+
+**Then** one operation is identified as a whole-worktree reconciliation, its
+bounded whole-worktree marker remains pending until the captured generation
+succeeds, later events trigger a follow-up rather than regrowing the path set,
+and the resulting graph matches a clean rebuild.
+
+### AC: daemon-lifecycle-keeps-an-index-current
+
+**Requirements:** automatic-index-freshness#req:local-daemon-commands, automatic-index-freshness#req:daemon-ready-means-current, automatic-index-freshness#req:daemon-status-observability
+
+**Given** an initialized temporary Git repository and no running daemon
+
+**When** a user starts the daemon while a source edit arrives during a
+deliberately blocked startup reconciliation, exits the starting client, makes a
+later source edit without taking any further daemon action, checks status,
+restarts during active reconciliation, and finally stops it
+
+**Then** start returns only after the startup-generation barrier and both edits
+are current, the background watcher updates the graph, status reports the exact
+owner and reconciliation result, restart joins the old writer and reconciles
+before becoming ready, and stop leaves no live daemon or control listener.
+
+### AC: duplicate-daemon-ownership-is-rejected
+
+**Requirements:** automatic-index-freshness#req:local-daemon-commands, automatic-index-freshness#req:authenticated-loopback-control
+
+**Given** a running daemon with a valid authenticated control endpoint
+
+**When** two starters race, the same path is started again, a different path is
+requested, or state names a reused PID/unrelated live process
+
+**Then** the startup lock admits one child, the same-path request reports it,
+the different-path request fails, dead ownership is reclaimed only after the
+authenticated nonce cannot prove a live instance and the lifetime lock can be
+acquired, an unreachable endpoint with a held lifetime lock is preserved as a
+live-but-unreachable owner, and no command signals a process based only on an
+unauthenticated or reused PID.
+
+### AC: daemon-control-rejects-unauthenticated-callers
+
+**Requirements:** automatic-index-freshness#req:authenticated-loopback-control
+
+**Given** a running daemon and its loopback control address
+
+**When** a caller omits or changes the bearer token
+
+**Then** status and stop requests are rejected and the watcher continues
+running.
+
+### AC: daemon-failure-state-is-truthful
+
+**Requirements:** automatic-index-freshness#req:robust-event-fallback, automatic-index-freshness#req:daemon-status-observability
+
+**Given** a ready daemon
+
+**When** reconciliation fails, another event arrives during its retry, the old
+generation succeeds, the follow-up generation succeeds, or the native watcher
+reports a fatal coverage error
+
+**Then** status first separates live-but-degraded/index-not-current from ready
+and current, the old-generation success remains not current, only the caught-up
+generation restores currency, and native coverage loss records a failed
+non-ready state and exits for explicit restart recovery.
+
 ## Open Questions
 
-1. What measured event count and time window should switch Phase 2 from a
-   path-oriented batch to an explicit whole-worktree reconciliation signal?
-2. Should one future daemon own a shared immutable base store with worktree
+1. Should one future daemon own a shared immutable base store with worktree
    delta stores, or should it initially coordinate isolated stores behind one
    process lifecycle?
 

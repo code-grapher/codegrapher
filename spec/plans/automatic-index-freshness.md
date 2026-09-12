@@ -119,6 +119,19 @@ Evidence: `go vet ./...`, `CGO_ENABLED=0 go build ./...`,
 `CGO_ENABLED=0 go test -count=1 ./...`, focused race tests, and an independent
 adversarial re-review all passed at `bd7f492`.
 
+## Deferred AC Coverage
+
+The following acceptance criteria were added for the subsequent robust watcher
+and daemon slice and are owned by
+[`robust-watcher-local-daemon`](robust-watcher-local-daemon.md), not
+retroactively claimed by this already-implemented foreground-watcher plan:
+
+- automatic-index-freshness#ac:event-storm-falls-back-to-full-reconciliation — robust-watcher-local-daemon Tasks 2 and 7
+- automatic-index-freshness#ac:daemon-lifecycle-keeps-an-index-current — robust-watcher-local-daemon Tasks 3–7
+- automatic-index-freshness#ac:duplicate-daemon-ownership-is-rejected — robust-watcher-local-daemon Tasks 4–7
+- automatic-index-freshness#ac:daemon-control-rejects-unauthenticated-callers — robust-watcher-local-daemon Tasks 4, 6 and 7
+- automatic-index-freshness#ac:daemon-failure-state-is-truthful — robust-watcher-local-daemon Tasks 2–4, 6 and 7
+
 ## Open Questions
 
 None at this time.
