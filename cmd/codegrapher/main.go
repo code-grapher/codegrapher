@@ -4,10 +4,8 @@
 // Skipped verbs (out of scope):
 //   - install / uninstall: agent-config editors, orthogonal to code intelligence
 //   - upgrade: npm self-update logic, meaningless for a static Go binary
-//   - serve daemon/proxy modes: only direct stdio MCP mode is implemented;
-//     CODEGRAPH_DAEMON_INTERNAL is rejected with a clear error and the
-//     daemon-default transport falls back to direct mode with a stderr
-//     notice (KNOWN-BUGS.md gap C-1)
+//   - MCP daemon/proxy transport: the local repository freshness daemon is
+//     separate from the existing direct stdio MCP transport.
 //
 // CODEGRAPH_* env vars honored:
 //   - CODEGRAPH_NO_WATCH / CODEGRAPH_FORCE_WATCH (watcher policy — consumed by watch package)

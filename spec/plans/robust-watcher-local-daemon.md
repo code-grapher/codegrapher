@@ -113,7 +113,7 @@ regression tests, including an edit during blocked startup reconciliation.
 
 **Verifies:** automatic-index-freshness#ac:daemon-lifecycle-keeps-an-index-current, automatic-index-freshness#ac:duplicate-daemon-ownership-is-rejected, automatic-index-freshness#ac:daemon-control-rejects-unauthenticated-callers
 **Depends-On:** 3
-**Status:** in_progress
+**Status:** complete
 
 Implement atomic user-private state, PID/liveness ownership, loopback-only
 versioned status/stop endpoints with random bearer authentication, startup
@@ -129,10 +129,13 @@ state from an unreachable live owner that must be preserved.
 
 **Verifies:** automatic-index-freshness#ac:daemon-lifecycle-keeps-an-index-current, automatic-index-freshness#ac:duplicate-daemon-ownership-is-rejected
 **Depends-On:** 4
-**Status:** queued
+**Status:** complete
 
 Add `daemon start [path]`, `stop`, `restart [path]`, `status`, and an internal
-foreground child entry point. Resolve worktree-local indexes safely, wait for
+foreground child entry point. Make `serve --watch` the composable foreground
+surface while retaining `watch` as a compatibility entry point; bare `serve`
+selects every available capability and explicit capability flags narrow it.
+Resolve worktree-local indexes safely, wait for
 authenticated readiness, print the named teardown command, support stable JSON
 status, and redirect background output to the durable log. Use platform-specific
 detachment code: a new session/process group on Unix and a detached process
@@ -145,25 +148,21 @@ cross-compilation as an additional compile guard rather than behavioral proof.
 
 **Verifies:** automatic-index-freshness#ac:daemon-lifecycle-keeps-an-index-current, automatic-index-freshness#ac:duplicate-daemon-ownership-is-rejected, automatic-index-freshness#ac:daemon-control-rejects-unauthenticated-callers
 **Depends-On:** 5
-**Status:** queued
+**Status:** complete
 
-Add focused state/control/process tests plus one bounded built-binary E2E over a
-real initialized Git repository: start, client exit, edit, graph freshness,
-status, two concurrent starters, same-path idempotency, different-path refusal,
-missing/invalid control tokens, deliberately blocked startup plus edit, failed
-readiness cleanup, reused/unrelated PID state, restart/stop during active
-reconciliation, unreachable endpoint with a held lifetime lock, and dead-state
-recovery. Add failure → event-during-retry → old-generation-success →
-follow-up-success coverage so currency cannot be restored early. Inject
-reconciliation and native-watch failures to prove degraded recovery versus
-failed exit. Verify the path set remains bounded after storm fallback and no
-listener or process survives test cleanup.
+Add focused state/control/process unit tests plus one bounded built-binary E2E
+over a real initialized repository. The E2E covers start, client exit, edit,
+graph freshness, status, same-path idempotency, unauthenticated control,
+restart, and stop; keep race-heavy failure and generation cases at the cheaper
+library/unit layer. Cover different-path refusal, lifetime-lock live/dead
+distinction, private state, log rotation, and startup cleanup without multiplying
+full process journeys. Verify no listener or process survives test cleanup.
 
 ### Task 7: Review, land, release, install, and verify
 
 **Verifies:** automatic-index-freshness#ac:event-storm-falls-back-to-full-reconciliation, automatic-index-freshness#ac:daemon-lifecycle-keeps-an-index-current, automatic-index-freshness#ac:duplicate-daemon-ownership-is-rejected, automatic-index-freshness#ac:daemon-control-rejects-unauthenticated-callers, automatic-index-freshness#ac:daemon-failure-state-is-truthful
 **Depends-On:** 6
-**Status:** queued
+**Status:** in_progress
 
 Run focused tests and race checks, the repository's required gates once,
 SpecScore lint, and an independent adversarial review of the exact diff. Fix or

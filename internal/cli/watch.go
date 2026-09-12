@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -33,18 +34,7 @@ func newWatchCmd() *cobra.Command {
 				return fmt.Errorf("cannot watch a different git worktree's index:\n%s", indexer.WorktreeMismatchWarning(*mismatch))
 			}
 			output := newWatchOutput(cmd.OutOrStdout(), cmd.ErrOrStderr(), verbose)
-			const startupOperationID = 0
-			owner, _, err := freshness.Start(ctx, projectPath, freshness.Options{
-				Watch: watch.Options{OnObservation: output.observe},
-				OnStartupStarted: func(at time.Time) {
-					output.startupStarted(at, startupOperationID)
-				},
-				OnStartupDone: func(at time.Time, duration time.Duration, result watch.SyncResult, startupErr error) {
-					if startupErr == nil {
-						output.startupCompleted(at, startupOperationID, duration, result)
-					}
-				},
-			})
+			owner, err := startForegroundWatch(ctx, projectPath, output)
 			if err != nil {
 				if ctx.Err() != nil {
 					return nil
@@ -68,6 +58,26 @@ func newWatchCmd() *cobra.Command {
 
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show received events, operation lifecycle, timings, and batch statistics")
 	return cmd
+}
+
+func startForegroundWatch(ctx context.Context, projectPath string, output *watchOutput) (*freshness.Owner, error) {
+	const startupOperationID = 0
+	owner, _, err := freshness.Start(ctx, projectPath, freshness.Options{
+		Watch: watch.Options{OnObservation: output.observe},
+		OnStartupStarted: func(at time.Time) {
+			output.startupStarted(at, startupOperationID)
+		},
+		OnStartupDone: func(at time.Time, duration time.Duration, result watch.SyncResult, startupErr error) {
+			if startupErr == nil {
+				output.startupCompleted(at, startupOperationID, duration, result)
+			}
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	output.watching(projectPath)
+	return owner, nil
 }
 
 func watchStartPath(args []string) string {

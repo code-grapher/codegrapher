@@ -4,6 +4,7 @@ go 1.27.0
 
 require (
 	github.com/fsnotify/fsnotify v1.10.1
+	github.com/gofrs/flock v0.13.1
 	github.com/ingr-io/ingr-go v0.0.2
 	github.com/klauspost/compress v1.19.1
 	github.com/odvcencio/gotreesitter v0.20.2
@@ -27,7 +28,6 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/gofrs/flock v0.13.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/kr/text v0.2.0 // indirect

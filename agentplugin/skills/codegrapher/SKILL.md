@@ -26,6 +26,20 @@ Refresh a previously initialized index after source changes:
 codegrapher sync
 ```
 
+For continuous freshness, compose the foreground server or start the durable
+background owner:
+
+```sh
+codegrapher serve --watch
+codegrapher daemon start
+codegrapher daemon status --format json
+codegrapher daemon stop
+```
+
+`serve` without capability flags enables every capability available in that
+release; explicit flags select only those capabilities. `codegrapher watch`
+remains a compatibility entry point for foreground watching.
+
 Discover symbols with compact machine-readable metadata before loading source:
 
 ```sh

@@ -101,12 +101,25 @@ events are hints; current filesystem and index state remain authoritative.
 
 #### REQ: foreground-watch-command
 
-`codegrapher watch [path]` MUST watch the current repository/worktree by
-default, establish the watch set before startup reconciliation closes the
+`codegrapher serve [path] --watch` MUST watch the current repository/worktree
+by default, establish the watch set before startup reconciliation closes the
 race window, invoke the canonical incremental sync after a debounce window,
 remain near-idle without changes, and stop cleanly on cancellation or an
-interrupt. An uninitialized path MUST fail with an actionable `codegrapher
-init` instruction rather than silently creating policy-changing state.
+interrupt. `codegrapher watch [path]` remains a compatibility entry point for
+the same owner. An uninitialized path MUST fail with an actionable
+`codegrapher init` instruction rather than silently creating policy-changing
+state.
+
+#### REQ: serve-capability-selection
+
+`codegrapher serve` is the composable foreground server. With no capability
+flags it MUST enable every capability implemented by that release. If one or
+more capability flags are supplied, it MUST enable only the named capabilities;
+for example, `codegrapher serve --watch --api` enables repository freshness and
+the browser-facing HTTP API but not stdio MCP. Capability selection MUST share
+one repository owner and coordinated shutdown rather than starting independent
+index mutation engines. When stdio MCP is active, all non-protocol diagnostics
+MUST use stderr so stdout remains protocol-clean.
 
 #### REQ: concise-default-output
 
@@ -118,8 +131,9 @@ suppressed in normal mode.
 
 #### REQ: verbose-observation-stream
 
-`codegrapher watch --verbose` MUST print timestamped native events with their
-operation and project-relative path, then clearly report each reconciliation
+`codegrapher watch --verbose` and `codegrapher serve --watch --verbose` MUST
+print timestamped native events with their operation and project-relative path,
+then clearly report each reconciliation
 operation starting and completing or failing. Completion MUST include elapsed
 time plus queued/debounce/total time and useful batch statistics: accepted and
 ignored events, unique dirty paths, coalesced events, no-op status, checked
@@ -182,6 +196,8 @@ Starting the same path while a live owner exists is idempotent and reports that
 owner; starting a different path MUST fail with an instruction to stop or
 restart because the initial daemon owns one worktree. Every successful start
 MUST name `codegrapher daemon stop` as the teardown command.
+The background lifecycle wraps the same serving/freshness composition as the
+foreground `serve` command; it MUST NOT introduce a daemon-only reconciler.
 
 #### REQ: daemon-ready-means-current
 
