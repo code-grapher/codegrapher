@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -22,6 +23,17 @@ func TestNewSelfUpdateConfigMatchesPublishedReleaseAssets(t *testing.T) {
 	}
 	if len(cfg.Managers) != 1 || cfg.Managers[0].UpgradeCommand != codeGrapherHomebrewUpgradeCommand {
 		t.Errorf("managers = %+v", cfg.Managers)
+	}
+	manager := cfg.Managers[0]
+	if !manager.CanExecuteUpgrade() {
+		t.Fatal("Homebrew manager is redirect-only; self-update --yes must execute the managed upgrade")
+	}
+	wantSteps := []selfupdate.ManagedCommand{
+		{Executable: "brew", Args: []string{"update"}},
+		{Executable: "brew", Args: []string{"upgrade", "--cask", "codegrapher"}},
+	}
+	if !reflect.DeepEqual(manager.UpgradeSteps, wantSteps) {
+		t.Errorf("Homebrew upgrade steps = %#v, want %#v", manager.UpgradeSteps, wantSteps)
 	}
 	if len(cfg.VersionProbeArgs) != 1 || cfg.VersionProbeArgs[0] != "--version" {
 		t.Errorf("version probe = %v", cfg.VersionProbeArgs)
