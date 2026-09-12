@@ -76,6 +76,42 @@ try {
     ],
     { cwd: consumer, stdio: "inherit" },
   );
+  writeFileSync(
+    join(consumer, "consumer.ts"),
+    `import { createV1ClientFromTransport, type ApiStatus } from '@code-grapher/browser-api-client';
+import { type RepositorySummary } from '@code-grapher/browser-api-client/models';
+
+declare const status: ApiStatus;
+declare const repository: RepositorySummary;
+const factory: typeof createV1ClientFromTransport = createV1ClientFromTransport;
+const assertion: [string, string, typeof factory] = [status.apiVersion, repository.id, factory];
+void assertion;
+`,
+  );
+  writeFileSync(
+    join(consumer, "tsconfig.json"),
+    `${JSON.stringify(
+      {
+        compilerOptions: {
+          lib: ["es2020", "dom"],
+          module: "preserve",
+          moduleResolution: "bundler",
+          noEmit: true,
+          skipLibCheck: true,
+          strict: true,
+          target: "es2022",
+        },
+        files: ["consumer.ts"],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  execFileSync(
+    "pnpm",
+    ["--dir", packageDirectory, "exec", "tsc", "-p", join(consumer, "tsconfig.json")],
+    { stdio: "inherit" },
+  );
 
   console.log(
     "generated client package contains and imports its runtime and type exports from Git",
