@@ -137,15 +137,11 @@ func newStacktraceCmd() *cobra.Command {
 	return cmd
 }
 
-func stacktraceInput(in io.Reader, args []string) (string, error) {
-	return stacktraceInputLimited(in, args, defaultMaxStacktraceBytes)
-}
-
 func stacktraceInputLimited(in io.Reader, args []string, maxBytes int64) (string, error) {
 	if maxBytes < 1 {
 		return "", errors.New("--max-bytes must be positive")
 	}
-	var reader io.Reader = in
+	reader := in
 	if len(args) == 1 && args[0] != "-" {
 		file, err := os.Open(args[0])
 		if err != nil {
