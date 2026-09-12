@@ -11,6 +11,8 @@ func TestMachineOutputCommandsAcceptFormatJSON(t *testing.T) {
 		{name: "status", cmd: newStatusCmd()},
 		{name: "query", cmd: newQueryCmd()},
 		{name: "node", cmd: newNodeCmd()},
+		{name: "path", cmd: newPathCmd()},
+		{name: "stacktrace", cmd: newStacktraceCmd()},
 		{name: "callers", cmd: newCallersCmd()},
 		{name: "callees", cmd: newCalleesCmd()},
 		{name: "impact", cmd: newImpactCmd()},
