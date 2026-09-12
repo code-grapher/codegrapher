@@ -233,6 +233,24 @@ func readIndexedNodeSource(root string, match matchedNode) (nodeSource, *model.F
 	return nodeSource{all: data, node: lineBoundedSource(data, match.node.StartLine, match.node.EndLine)}, rec, nil
 }
 
+// readVerifiedIndexedNodeSource never mutates the index. Callers refresh once
+// before resolving graph identities, then use this to ensure the returned body
+// still belongs to that same indexed revision. A mismatch must be retried from
+// a fresh command rather than mixing old graph positions with new source.
+func readVerifiedIndexedNodeSource(root string, match matchedNode) (string, error) {
+	content, rec, err := readIndexedNodeSource(root, match)
+	if err != nil {
+		return "", err
+	}
+	if indexer.HashContent(content.all) != rec.ContentHash {
+		return "", fmt.Errorf("source %s changed during retrieval; rerun after refresh", match.node.FilePath)
+	}
+	if len(content.node) == 0 {
+		return "", fmt.Errorf("indexed source range %s:%d-%d is no longer readable; rerun after refresh", match.node.FilePath, match.node.StartLine, match.node.EndLine)
+	}
+	return string(content.node), nil
+}
+
 func lineBoundedSource(data []byte, start, end int) []byte {
 	if start < 1 || end < start {
 		return nil

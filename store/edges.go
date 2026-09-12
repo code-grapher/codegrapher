@@ -157,6 +157,25 @@ func (s *Store) GetOutgoingEdgesLimited(sourceID string, limit int) ([]model.Edg
 	return scanEdges(rows)
 }
 
+// GetOutgoingEdgesByKindLimited is the bounded equivalent of
+// GetOutgoingEdges for graph traversals. It keeps traversal limits meaningful
+// even for a single high-fan-out source.
+func (s *Store) GetOutgoingEdgesByKindLimited(sourceID string, kinds []model.EdgeKind, limit int) ([]model.Edge, error) {
+	if limit < 1 {
+		return []model.Edge{}, nil
+	}
+	query := `SELECT ` + edgeColumns + ` FROM edges WHERE source = ?`
+	args := []any{sourceID}
+	query, args = appendEdgeFilters(query, args, kinds, "")
+	query += ` ORDER BY kind, target, line, col, COALESCE(provenance, ''), COALESCE(metadata, ''), id LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	return scanEdges(rows)
+}
+
 func (s *Store) GetIncomingEdgesLimited(targetID string, limit int) ([]model.Edge, error) {
 	rows, err := s.db.Query(`SELECT `+edgeColumns+` FROM edges WHERE target = ? ORDER BY kind, source, line, col, COALESCE(provenance, ''), COALESCE(metadata, ''), id LIMIT ?`, targetID, limit)
 	if err != nil {

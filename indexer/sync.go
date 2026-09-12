@@ -262,7 +262,6 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 	if result.FilesAdded > 0 || result.FilesModified > 0 || result.FilesRemoved > 0 {
 		idx.runMaintenanceAll()
 	}
-
 	result.DurationMs = now() - start
 	return result
 }

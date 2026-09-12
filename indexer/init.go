@@ -203,7 +203,6 @@ func (idx *Indexer) indexAllLocked(opts Options) IndexResult {
 			result.EdgesCreated = after.EdgeCount - before.EdgeCount
 		}
 	}
-
 	result.DurationMs = now() - start
 	return result
 }
