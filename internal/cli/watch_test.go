@@ -431,5 +431,5 @@ func waitForCLI(t *testing.T, timeout time.Duration, condition func() bool) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatal(fmt.Sprintf("condition not met within %v", timeout))
+	t.Fatalf("condition not met within %v", timeout)
 }
