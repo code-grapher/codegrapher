@@ -22,6 +22,11 @@ const DefaultDebounceMS = 2000
 // on Linux (per-directory inotify path). Matches the original's 50 000.
 const DefaultMaxDirWatches = 50_000
 
+// DefaultMaxBatchEvents bounds path-level tracking within one unresolved
+// reconciliation generation. Once exceeded, one whole-worktree marker replaces
+// the path set until a successful full reconciliation catches up.
+const DefaultMaxBatchEvents = 2_048
+
 // SyncResult is the value returned by a successful sync callback.
 type SyncResult struct {
 	FilesChanged  int
@@ -51,22 +56,23 @@ const (
 // It lets CLI and daemon callers render their own logs without coupling this
 // package to a terminal or logging framework.
 type Observation struct {
-	Kind            ObservationKind
-	At              time.Time
-	Path            string
-	Operation       string
-	OperationID     uint64
-	EventsReceived  uint64
-	DirtyPaths      int
-	CoalescedEvents uint64
-	IgnoredEvents   uint64
-	QueuedFor       time.Duration
-	Debounce        time.Duration
-	Duration        time.Duration
-	TotalDuration   time.Duration
-	NoOp            bool
-	Result          SyncResult
-	Err             error
+	Kind                ObservationKind
+	At                  time.Time
+	Path                string
+	Operation           string
+	FullReconcileReason string
+	OperationID         uint64
+	EventsReceived      uint64
+	DirtyPaths          int
+	CoalescedEvents     uint64
+	IgnoredEvents       uint64
+	QueuedFor           time.Duration
+	Debounce            time.Duration
+	Duration            time.Duration
+	TotalDuration       time.Duration
+	NoOp                bool
+	Result              SyncResult
+	Err                 error
 }
 
 // SyncFunc is the callback the watcher invokes after each debounce window.
@@ -132,6 +138,16 @@ type PendingFile struct {
 	Indexing bool
 }
 
+// DirtyState is a generation-safe snapshot of unresolved watcher hints.
+// WholeTree is mutually exclusive with Paths and keeps storm/rename state
+// bounded while preserving the accepted generation through retries.
+type DirtyState struct {
+	AcceptedGeneration  uint64
+	CompletedGeneration uint64
+	WholeTree           bool
+	Paths               []PendingFile
+}
+
 type pendingEntry struct {
 	firstSeenMs  int64
 	lastSeenMs   int64
@@ -171,6 +187,10 @@ type Options struct {
 	// MaxDirWatches caps the Linux per-directory watch count. 0 = DefaultMaxDirWatches.
 	MaxDirWatches int
 
+	// MaxBatchEvents is the accepted-event count after which path precision is
+	// replaced by one whole-worktree-dirty marker. 0 = DefaultMaxBatchEvents.
+	MaxBatchEvents int
+
 	// InertForTests disables all OS-level watchers. Events are only fed
 	// through [FileWatcher.IngestEventForTests].
 	InertForTests bool
@@ -184,27 +204,29 @@ type FileWatcher struct {
 	opts     Options
 	debounce time.Duration
 
-	mu                sync.Mutex
-	pending           map[string]*pendingEntry
-	timer             *time.Timer
-	syncing           bool
-	syncStarted       time.Time
-	stopped           bool
-	ready             bool
-	readyCh           chan struct{}
-	eventSeq          uint64
-	completedEventSeq uint64
-	ignoredEventSeq   uint64
-	completedIgnored  uint64
-	operationSeq      uint64
-	forceFullEventSeq uint64
-	syncWG            sync.WaitGroup
-	observationWG     sync.WaitGroup
-	eventWG           sync.WaitGroup
-	timerWG           sync.WaitGroup
-	fatalCh           chan error
-	stopDone          chan struct{}
-	timerSeq          uint64
+	mu                       sync.Mutex
+	pending                  map[string]*pendingEntry
+	timer                    *time.Timer
+	syncing                  bool
+	syncStarted              time.Time
+	stopped                  bool
+	ready                    bool
+	readyCh                  chan struct{}
+	eventSeq                 uint64
+	completedEventSeq        uint64
+	ignoredEventSeq          uint64
+	completedIgnored         uint64
+	operationSeq             uint64
+	fullReconcileEventSeq    uint64
+	fullReconcileFirstSeenMs int64
+	fullReconcileReason      string
+	syncWG                   sync.WaitGroup
+	observationWG            sync.WaitGroup
+	eventWG                  sync.WaitGroup
+	timerWG                  sync.WaitGroup
+	fatalCh                  chan error
+	stopDone                 chan struct{}
+	timerSeq                 uint64
 
 	// fsnotify watcher (nil until Start is called).
 	fsw *fsnotify.Watcher
@@ -255,6 +277,18 @@ func NewWithPaths(root string, syncFn SyncPathsFunc, opts Options) *FileWatcher 
 		maxDirs = DefaultMaxDirWatches
 	}
 	opts.MaxDirWatches = maxDirs
+	maxBatchEvents := opts.MaxBatchEvents
+	if maxBatchEvents == 0 {
+		if raw := os.Getenv("CODEGRAPH_MAX_BATCH_EVENTS"); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+				maxBatchEvents = n
+			}
+		}
+	}
+	if maxBatchEvents == 0 {
+		maxBatchEvents = DefaultMaxBatchEvents
+	}
+	opts.MaxBatchEvents = maxBatchEvents
 
 	return &FileWatcher{
 		root:        root,
@@ -389,7 +423,7 @@ func (fw *FileWatcher) watchTreeLocked(dir string, markExisting bool) error {
 			if !fw.isAlwaysIgnored(rel) &&
 				(fw.opts.IsIgnored == nil || !fw.opts.IsIgnored(rel)) &&
 				fw.opts.IsSourceFile(rel) {
-				fw.recordPendingLocked(rel)
+				fw.recordPendingLocked(rel, false)
 			}
 		}
 	}
@@ -512,10 +546,7 @@ func (fw *FileWatcher) handleChange(rel string, forceFull bool) {
 		return
 	}
 	if fw.ready {
-		fw.recordPendingLocked(rel)
-		if forceFull {
-			fw.forceFullEventSeq = fw.eventSeq
-		}
+		fw.recordPendingLocked(rel, forceFull)
 	}
 	fw.scheduleSyncLocked()
 }
@@ -528,9 +559,20 @@ func (fw *FileWatcher) recordIgnoredEvent() {
 	fw.mu.Unlock()
 }
 
-func (fw *FileWatcher) recordPendingLocked(rel string) {
+func (fw *FileWatcher) recordPendingLocked(rel string, forceFull bool) {
 	now := fw.opts.Now().UnixMilli()
 	fw.eventSeq++
+	if fw.fullReconcileEventSeq > fw.completedEventSeq {
+		fw.fullReconcileEventSeq = fw.eventSeq
+		if forceFull && fw.fullReconcileReason == "" {
+			fw.fullReconcileReason = "rename"
+		}
+		return
+	}
+	if forceFull {
+		fw.markWholeTreeDirtyLocked(now, "rename")
+		return
+	}
 	if e, ok := fw.pending[rel]; ok {
 		e.lastSeenMs = now
 		e.lastEventSeq = fw.eventSeq
@@ -541,6 +583,22 @@ func (fw *FileWatcher) recordPendingLocked(rel string) {
 			lastEventSeq: fw.eventSeq,
 		}
 	}
+	if fw.eventSeq-fw.completedEventSeq > uint64(fw.opts.MaxBatchEvents) {
+		fw.markWholeTreeDirtyLocked(now, "event_storm")
+	}
+}
+
+func (fw *FileWatcher) markWholeTreeDirtyLocked(nowMs int64, reason string) {
+	firstSeenMs := nowMs
+	for _, entry := range fw.pending {
+		if entry.firstSeenMs < firstSeenMs {
+			firstSeenMs = entry.firstSeenMs
+		}
+	}
+	clear(fw.pending)
+	fw.fullReconcileEventSeq = fw.eventSeq
+	fw.fullReconcileFirstSeenMs = firstSeenMs
+	fw.fullReconcileReason = reason
 }
 
 func (fw *FileWatcher) scheduleSyncLocked() {
@@ -589,6 +647,9 @@ func (fw *FileWatcher) flush(sequence uint64) {
 			}
 		}
 	}
+	if fw.fullReconcileEventSeq > fw.completedEventSeq && fw.fullReconcileEventSeq <= batchEndSeq {
+		firstSeenMs = fw.fullReconcileFirstSeenMs
+	}
 	sort.Strings(paths)
 	coalescedEvents := uint64(0)
 	if eventsReceived > uint64(dirtyPaths) {
@@ -605,7 +666,11 @@ func (fw *FileWatcher) flush(sequence uint64) {
 	ignoredEvents := ignoredEndSeq - fw.completedIgnored
 	fw.syncWG.Add(1)
 	fw.observationWG.Add(1)
-	fullReconcile := fw.forceFullEventSeq > fw.completedEventSeq && fw.forceFullEventSeq <= batchEndSeq
+	fullReconcile := fw.fullReconcileEventSeq > fw.completedEventSeq && fw.fullReconcileEventSeq <= batchEndSeq
+	fullReconcileReason := ""
+	if fullReconcile {
+		fullReconcileReason = fw.fullReconcileReason
+	}
 	fw.mu.Unlock()
 	operation := "reconcile"
 	if fullReconcile {
@@ -613,16 +678,17 @@ func (fw *FileWatcher) flush(sequence uint64) {
 	}
 
 	fw.observe(Observation{
-		Kind:            ObservationOperationStarted,
-		Operation:       operation,
-		OperationID:     operationID,
-		EventsReceived:  eventsReceived,
-		DirtyPaths:      dirtyPaths,
-		CoalescedEvents: coalescedEvents,
-		IgnoredEvents:   ignoredEvents,
-		QueuedFor:       queuedFor,
-		Debounce:        fw.debounce,
-		At:              startedAt,
+		Kind:                ObservationOperationStarted,
+		Operation:           operation,
+		FullReconcileReason: fullReconcileReason,
+		OperationID:         operationID,
+		EventsReceived:      eventsReceived,
+		DirtyPaths:          dirtyPaths,
+		CoalescedEvents:     coalescedEvents,
+		IgnoredEvents:       ignoredEvents,
+		QueuedFor:           queuedFor,
+		Debounce:            fw.debounce,
+		At:                  startedAt,
 	})
 	fw.mu.Lock()
 	stopped := fw.stopped
@@ -660,6 +726,11 @@ func (fw *FileWatcher) flush(sequence uint64) {
 		}
 		fw.completedEventSeq = batchEndSeq
 		fw.completedIgnored = ignoredEndSeq
+		if fw.fullReconcileEventSeq <= batchEndSeq {
+			fw.fullReconcileEventSeq = 0
+			fw.fullReconcileFirstSeenMs = 0
+			fw.fullReconcileReason = ""
+		}
 		onComplete = fw.opts.OnSyncComplete
 	} else if IsLockUnavailableError(err) {
 		// Lock-busy: keep pendingFiles intact, reschedule quietly.
@@ -669,7 +740,7 @@ func (fw *FileWatcher) flush(sequence uint64) {
 		onError = fw.opts.OnSyncError
 	}
 	// Re-schedule if there are still pending files.
-	if len(fw.pending) > 0 && !fw.stopped {
+	if (len(fw.pending) > 0 || fw.fullReconcileEventSeq > fw.completedEventSeq) && !fw.stopped {
 		fw.scheduleSyncLocked()
 	}
 	fw.mu.Unlock()
@@ -678,21 +749,22 @@ func (fw *FileWatcher) flush(sequence uint64) {
 	fw.syncWG.Done()
 
 	fw.observe(Observation{
-		Kind:            observationKind,
-		Operation:       operation,
-		OperationID:     operationID,
-		EventsReceived:  eventsReceived,
-		DirtyPaths:      dirtyPaths,
-		CoalescedEvents: coalescedEvents,
-		IgnoredEvents:   ignoredEvents,
-		QueuedFor:       queuedFor,
-		Debounce:        fw.debounce,
-		Duration:        duration,
-		TotalDuration:   queuedFor + duration,
-		NoOp:            result.FilesChanged == 0 && !result.FullReindex,
-		Result:          result,
-		Err:             err,
-		At:              finishedAt,
+		Kind:                observationKind,
+		Operation:           operation,
+		FullReconcileReason: fullReconcileReason,
+		OperationID:         operationID,
+		EventsReceived:      eventsReceived,
+		DirtyPaths:          dirtyPaths,
+		CoalescedEvents:     coalescedEvents,
+		IgnoredEvents:       ignoredEvents,
+		QueuedFor:           queuedFor,
+		Debounce:            fw.debounce,
+		Duration:            duration,
+		TotalDuration:       queuedFor + duration,
+		NoOp:                result.FilesChanged == 0 && !result.FullReindex,
+		Result:              result,
+		Err:                 err,
+		At:                  finishedAt,
 	})
 	if onComplete != nil {
 		onComplete(result)
@@ -747,7 +819,9 @@ func (fw *FileWatcher) finishStop(stopDone chan struct{}) {
 	fw.ignoredEventSeq = 0
 	fw.completedIgnored = 0
 	fw.operationSeq = 0
-	fw.forceFullEventSeq = 0
+	fw.fullReconcileEventSeq = 0
+	fw.fullReconcileFirstSeenMs = 0
+	fw.fullReconcileReason = ""
 	// Reset ready state so the watcher can be re-started.
 	fw.ready = false
 	fw.readyCh = make(chan struct{})
@@ -809,22 +883,33 @@ func (fw *FileWatcher) WaitUntilReady(timeout time.Duration) error {
 
 // PendingFiles returns a snapshot of files seen since the last successful sync.
 func (fw *FileWatcher) PendingFiles() []PendingFile {
+	return fw.DirtyState().Paths
+}
+
+// DirtyState returns unresolved path or whole-worktree hints together with
+// the accepted and successfully completed generations.
+func (fw *FileWatcher) DirtyState() DirtyState {
 	fw.mu.Lock()
 	defer fw.mu.Unlock()
 
-	result := make([]PendingFile, 0, len(fw.pending))
+	state := DirtyState{
+		AcceptedGeneration:  fw.eventSeq,
+		CompletedGeneration: fw.completedEventSeq,
+		WholeTree:           fw.fullReconcileEventSeq > fw.completedEventSeq,
+		Paths:               make([]PendingFile, 0, len(fw.pending)),
+	}
 	for path, e := range fw.pending {
 		indexing := fw.syncing &&
 			!fw.syncStarted.IsZero() &&
 			fw.syncStarted.UnixMilli() >= e.lastSeenMs
-		result = append(result, PendingFile{
+		state.Paths = append(state.Paths, PendingFile{
 			Path:        path,
 			FirstSeenMs: e.firstSeenMs,
 			LastSeenMs:  e.lastSeenMs,
 			Indexing:    indexing,
 		})
 	}
-	return result
+	return state
 }
 
 // IngestEventForTests feeds a synthetic project-relative path through the

@@ -164,18 +164,27 @@ func (o *watchOutput) observe(observation watch.Observation) {
 		}
 	case watch.ObservationOperationStarted:
 		if o.verbose {
+			reason := observation.FullReconcileReason
+			if reason == "" {
+				reason = "none"
+			}
 			_, _ = fmt.Fprintf(o.stdout,
-				"%s operation=%d started kind=%s events=%d dirty_paths=%d coalesced=%d ignored=%d queued=%s debounce=%s\n",
+				"%s operation=%d started kind=%s reason=%s events=%d dirty_paths=%d coalesced=%d ignored=%d queued=%s debounce=%s\n",
 				prefix, observation.OperationID, observation.Operation,
+				reason,
 				observation.EventsReceived, observation.DirtyPaths, observation.CoalescedEvents,
 				observation.IgnoredEvents, observationDuration(observation.QueuedFor), observationDuration(observation.Debounce))
 		}
 	case watch.ObservationOperationCompleted:
 		if o.verbose {
+			reason := observation.FullReconcileReason
+			if reason == "" {
+				reason = "none"
+			}
 			_, _ = fmt.Fprintf(o.stdout,
-				"%s operation=%d completed kind=%s duration=%s total=%s no_op=%t events=%d dirty_paths=%d coalesced=%d ignored=%d checked=%d added=%d modified=%d removed=%d nodes_updated=%d full_reindex=%t\n",
+				"%s operation=%d completed kind=%s duration=%s total=%s no_op=%t reason=%s events=%d dirty_paths=%d coalesced=%d ignored=%d checked=%d added=%d modified=%d removed=%d nodes_updated=%d full_reindex=%t\n",
 				prefix, observation.OperationID, observation.Operation, observationDuration(observation.Duration),
-				observationDuration(observation.TotalDuration), observation.NoOp,
+				observationDuration(observation.TotalDuration), observation.NoOp, reason,
 				observation.EventsReceived, observation.DirtyPaths, observation.CoalescedEvents, observation.IgnoredEvents,
 				observation.Result.FilesChecked, observation.Result.FilesAdded,
 				observation.Result.FilesModified, observation.Result.FilesRemoved,

@@ -124,6 +124,153 @@ func TestDebounceCoalesces(t *testing.T) {
 	w.Stop()
 }
 
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:event-storm-falls-back-to-full-reconciliation
+func TestEventStormFallsBackToBoundedWholeTreeMarkerAndRetries(t *testing.T) {
+	dir := t.TempDir()
+	var calls atomic.Int32
+	failed := make(chan watch.Observation, 1)
+	completed := make(chan watch.Observation, 1)
+	w := watch.NewWithPaths(dir, func(paths []string) (watch.SyncResult, error) {
+		if paths != nil {
+			return watch.SyncResult{}, fmt.Errorf("paths = %v, want whole-worktree marker", paths)
+		}
+		if calls.Add(1) == 1 {
+			return watch.SyncResult{}, errors.New("temporary reconcile failure")
+		}
+		return watch.SyncResult{FullReindex: true}, nil
+	}, watch.Options{
+		DebounceMs:     20,
+		MaxBatchEvents: 3,
+		InertForTests:  true,
+		OnObservation: func(observation watch.Observation) {
+			switch observation.Kind {
+			case watch.ObservationOperationFailed:
+				failed <- observation
+			case watch.ObservationOperationCompleted:
+				completed <- observation
+			}
+		},
+	})
+	if err := w.StartWithError(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(w.StopAndWait)
+	for i := range 100 {
+		w.IngestEventForTests(fmt.Sprintf("src/file-%03d.go", i))
+	}
+
+	dirty := w.DirtyState()
+	if !dirty.WholeTree || len(dirty.Paths) != 0 {
+		t.Fatalf("storm dirty state = %+v, want one bounded whole-tree marker", dirty)
+	}
+	select {
+	case observation := <-failed:
+		if observation.Operation != "full_reconcile" || observation.FullReconcileReason != "event_storm" {
+			t.Fatalf("failed observation = %+v", observation)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for failed storm reconciliation")
+	}
+	if dirty = w.DirtyState(); !dirty.WholeTree || dirty.CompletedGeneration != 0 {
+		t.Fatalf("failed storm cleared dirty generation: %+v", dirty)
+	}
+	select {
+	case observation := <-completed:
+		if observation.Operation != "full_reconcile" || observation.FullReconcileReason != "event_storm" {
+			t.Fatalf("completed observation = %+v", observation)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for successful storm retry")
+	}
+	dirty = w.DirtyState()
+	if dirty.WholeTree || len(dirty.Paths) != 0 || dirty.CompletedGeneration != dirty.AcceptedGeneration {
+		t.Fatalf("successful storm retry left dirty state: %+v", dirty)
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:event-storm-falls-back-to-full-reconciliation
+func TestEventDuringFullReconcileRequiresFollowUpGeneration(t *testing.T) {
+	dir := t.TempDir()
+	started := make(chan int, 2)
+	releaseFirst := make(chan struct{})
+	var calls atomic.Int32
+	w := watch.NewWithPaths(dir, func(paths []string) (watch.SyncResult, error) {
+		if paths != nil {
+			return watch.SyncResult{}, fmt.Errorf("paths = %v, want full reconciliation", paths)
+		}
+		call := int(calls.Add(1))
+		started <- call
+		if call == 1 {
+			<-releaseFirst
+		}
+		return watch.SyncResult{FullReindex: true}, nil
+	}, watch.Options{DebounceMs: 20, MaxBatchEvents: 3, InertForTests: true})
+	if err := w.StartWithError(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(w.StopAndWait)
+	for i := range 4 {
+		w.IngestEventForTests(fmt.Sprintf("initial-%d.go", i))
+	}
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first full reconciliation did not start")
+	}
+	for i := range 20 {
+		w.IngestEventForTests(fmt.Sprintf("during-%d.go", i))
+	}
+	close(releaseFirst)
+	waitFor(t, func() bool {
+		state := w.DirtyState()
+		return state.WholeTree && state.CompletedGeneration > 0 && state.CompletedGeneration < state.AcceptedGeneration
+	}, 2*time.Second)
+	select {
+	case call := <-started:
+		if call != 2 {
+			t.Fatalf("follow-up call = %d, want 2", call)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("follow-up full reconciliation did not start")
+	}
+	waitFor(t, func() bool {
+		state := w.DirtyState()
+		return !state.WholeTree && state.CompletedGeneration == state.AcceptedGeneration
+	}, 2*time.Second)
+}
+
+func TestIdleWatcherDoesNotInvokeSync(t *testing.T) {
+	dir := t.TempDir()
+	var calls atomic.Int32
+	w := newInertWatcher(t, dir, func() (watch.SyncResult, error) {
+		calls.Add(1)
+		return watch.SyncResult{}, nil
+	}, watch.Options{DebounceMs: 10})
+	if err := w.StartWithError(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(w.StopAndWait)
+	time.Sleep(50 * time.Millisecond)
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("idle watcher sync calls = %d, want 0", got)
+	}
+}
+
+func BenchmarkWatcherEventStormAdmission(b *testing.B) {
+	dir := b.TempDir()
+	w := watch.New(dir, func() (watch.SyncResult, error) {
+		return watch.SyncResult{}, nil
+	}, watch.Options{DebounceMs: int(time.Hour / time.Millisecond), MaxBatchEvents: 64, InertForTests: true})
+	if err := w.StartWithError(); err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(w.StopAndWait)
+	b.ResetTimer()
+	for i := range b.N {
+		w.IngestEventForTests(fmt.Sprintf("src/file-%d.go", i))
+	}
+}
+
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:burst-is-coalesced
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:verbose-reports-event-and-operation-timing
 func TestObservationsDescribeCoalescedOperation(t *testing.T) {

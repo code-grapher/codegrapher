@@ -81,7 +81,7 @@ the Feature and this Plan.
 
 **Verifies:** automatic-index-freshness#ac:event-storm-falls-back-to-full-reconciliation
 **Depends-On:** 1
-**Status:** in_progress
+**Status:** complete
 
 Add a configurable accepted-event threshold to the existing debounced watcher.
 Once crossed, replace the per-path set with a bounded whole-worktree marker,
@@ -91,11 +91,16 @@ deterministic storm and checkout/merge tests. Record fixed-fixture one-file and
 burst benchmark baselines plus an idle no-sync assertion. Preserve the existing
 fail-closed native-error contract so partial coverage is never called ready.
 
+Baseline on Apple M5 Max/darwin-arm64: bounded synthetic storm admission
+`164.1 ns/op`, `168 B/op`, 4 allocations; one real Go-file `SyncFiles` edit
+`32.9 ms/op`, about `308 KB/op`, 3,035 allocations. These are directional
+development baselines, not portable CI pass/fail thresholds.
+
 ### Task 3: Extract the shared repository freshness owner
 
 **Verifies:** automatic-index-freshness#ac:daemon-lifecycle-keeps-an-index-current
 **Depends-On:** 2
-**Status:** queued
+**Status:** in_progress
 
 Move index open, watcher construction, startup reconciliation, observation
 tracking, wait, and joined shutdown into a library owner used by both
