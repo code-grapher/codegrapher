@@ -753,7 +753,7 @@ func TestSyncChangedCalleeFailureDoesNotRestoreDuplicateEdges(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "lib.go"), strings.Repeat("x", MaxFileSize+1))
 	for attempt := 0; attempt < 2; attempt++ {
 		res := idx.SyncFiles([]string{"lib.go"}, Options{})
-		if len(res.Errors) == 0 {
+		if attempt == 0 && len(res.Errors) == 0 {
 			t.Fatalf("attempt %d errors = none, want extraction failure", attempt)
 		}
 		edges, err := idx.Store().GetOutgoingEdges(caller[0].ID, []model.EdgeKind{model.EdgeCalls}, "")
@@ -800,7 +800,7 @@ func TestSyncMixedBatchResolvesSuccessfulCallerDespiteFailedFile(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "bad.go"), strings.Repeat("x", MaxFileSize+1))
 	for attempt := 0; attempt < 2; attempt++ {
 		res := idx.SyncFiles([]string{"caller.go", "bad.go"}, Options{})
-		if len(res.Errors) == 0 {
+		if attempt == 0 && len(res.Errors) == 0 {
 			t.Fatalf("attempt %d should report bad.go", attempt)
 		}
 		caller, err := idx.Store().GetNodesByName("Caller")
@@ -911,5 +911,28 @@ func TestGetChangedFilesHashesSameMtimeNonGitEdit(t *testing.T) {
 	changes := idx.GetChangedFiles()
 	if !slices.Contains(changes.Modified, "src/index.ts") {
 		t.Fatalf("non-git same-mtime changes = %+v", changes)
+	}
+}
+
+func TestRefreshForReadIgnoresUnchangedOversizedPolicySkip(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "main.go"), "package main\nfunc Good() {}\n")
+	big := filepath.Join(dir, "generated.go")
+	writeFile(t, big, strings.Repeat("x", MaxFileSize+1))
+	idx, result, err := Init(dir, Options{})
+	if err != nil || !result.Success {
+		t.Fatalf("Init: %+v %v", result, err)
+	}
+	defer func() { _ = idx.Close() }()
+	for i := 0; i < 2; i++ {
+		res, err := idx.RefreshForRead(Options{})
+		if err != nil || len(res.Errors) != 0 {
+			t.Fatalf("refresh %d: %+v %v", i, res, err)
+		}
+	}
+	writeFile(t, big, "package main\nfunc Generated() {}\n")
+	res, err := idx.RefreshForRead(Options{})
+	if err != nil || len(res.Errors) != 0 || !hasNodeNamed(t, idx, "Generated") {
+		t.Fatalf("shrunk generated refresh: %+v %v", res, err)
 	}
 }

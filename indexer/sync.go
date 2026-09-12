@@ -443,12 +443,22 @@ func (idx *Indexer) changedFilesForRead() (ChangedFiles, error) {
 // during the operation.
 func (idx *Indexer) RefreshForRead(opts Options) (SyncResult, error) {
 	if idx.indexVersionStale() {
+		observedHead, gitRepo := gitHead(idx.root)
 		result := idx.Sync(opts)
 		if result.FilesChecked == 0 && result.DurationMs == 0 {
 			return result, fmt.Errorf("index is locked; cannot safely rebuild symbol data")
 		}
 		if len(result.Errors) > 0 || !result.FullReindex {
 			return result, fmt.Errorf("full index rebuild failed")
+		}
+		if gitRepo {
+			if current, ok := gitHead(idx.root); !ok || current != observedHead {
+				_ = idx.markGitHead("") // invalidate an internally written unseen revision
+				return result, fmt.Errorf("repository HEAD changed during rebuild; no freshness stamp written")
+			}
+			if err := idx.markGitHead(observedHead); err != nil {
+				return result, err
+			}
 		}
 		return result, nil
 	}

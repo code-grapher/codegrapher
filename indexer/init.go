@@ -293,12 +293,31 @@ func (idx *Indexer) extractAndStore(files []string, opts Options, result *IndexR
 			}
 			if job.tooLarge {
 				result.FilesSkipped++
-				result.Errors = append(result.Errors, model.ExtractionError{
+				skipErr := model.ExtractionError{
 					Message:  fmt.Sprintf("File exceeds max size (%d > %d)", job.size, MaxFileSize),
 					FilePath: job.path,
 					Severity: "warning",
 					Code:     "size_exceeded",
-				})
+				}
+				// Keep a content fingerprint for policy-skipped source files. Without
+				// it, every freshness pass treats an unchanged generated file as a
+				// new candidate and makes normal symbol reads fail forever.
+				content, readErr := os.ReadFile(filepath.Join(idx.root, job.path))
+				if readErr != nil {
+					result.FilesErrored++
+					result.Errors = append(result.Errors, model.ExtractionError{Message: fmt.Sprintf("Failed to read file: %v", readErr), FilePath: job.path, Severity: "error", Code: "read_error"})
+					continue
+				}
+				s, serr := idx.scopeStoreForFile(job.path, job.lang)
+				if serr == nil {
+					serr = s.UpsertFile(model.FileRecord{Path: job.path, ContentHash: HashContent(content), Language: job.lang, Size: job.size, ModifiedAt: job.mtimeMs, IndexedAt: now(), Errors: []model.ExtractionError{skipErr}})
+				}
+				if serr != nil {
+					result.FilesErrored++
+					result.Errors = append(result.Errors, model.ExtractionError{Message: serr.Error(), FilePath: job.path, Severity: "error", Code: "store_error"})
+					continue
+				}
+				result.Errors = append(result.Errors, skipErr)
 				continue
 			}
 
@@ -393,6 +412,7 @@ func extractOne(rootDir, relPath string) extractJob {
 	// pure-unknown case — a large binary then gets a bare file-level node with
 	// no parse. Recognized-by-extension files keep the cap as before.
 	pathLang := extract.DetectLanguage(relPath)
+	job.lang = pathLang
 	if pathLang != model.LangUnknown && job.size > MaxFileSize {
 		job.tooLarge = true
 		return job
