@@ -186,6 +186,13 @@ func TestMapStacktraceNeverSilentlyAcceptsWrongNameOrOutOfRangeLocation(t *testi
 	if err != nil || len(result.Frames) != 1 || result.Frames[0].Status != "mismatch" {
 		t.Fatalf("wrong :: receiver mapping = %+v, %v", result, err)
 	}
+	for _, qualified := range []string{"Cache::Warm", "crate::Cache::Warm"} {
+		trace := "at " + qualified + " (" + path + ":24:1)"
+		result, err = mapStacktrace(idx, nil, trace, false, NodeFreshness{})
+		if err != nil || len(result.Frames) != 1 || result.Frames[0].Status != "exact" {
+			t.Fatalf("qualified %s mapping = %+v, %v", qualified, result, err)
+		}
+	}
 	stale := "example.com/go-small/internal/store.(*Cache).Warm(...)\n\t" + path + ":2 +0x1"
 	result, err = mapStacktrace(idx, nil, stale, true, NodeFreshness{})
 	if err != nil || len(result.Frames) != 1 || result.Frames[0].Status != "stale" || result.Frames[0].Source != "" {

@@ -486,7 +486,10 @@ func stackTypeQualifier(raw string) (string, bool) {
 	raw = strings.TrimSuffix(strings.TrimSpace(raw), "(...)")
 	if separator := strings.LastIndex(raw, "::"); separator > 0 {
 		prefix := raw[:separator]
-		qualifier := prefix[strings.LastIndex(prefix, "::")+2:]
+		qualifier := prefix
+		if parent := strings.LastIndex(prefix, "::"); parent >= 0 {
+			qualifier = prefix[parent+2:]
+		}
 		qualifier = strings.Trim(qualifier, "() *")
 		if qualifier != "" {
 			return qualifier, true
