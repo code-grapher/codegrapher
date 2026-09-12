@@ -22,13 +22,14 @@ import (
 // It intentionally does not infer edges between frames: a stack is runtime
 // evidence and may cross reflection, generated code, or framework callbacks.
 type StackTraceResult struct {
-	Status    string            `json:"status"`
-	Hint      string            `json:"hint,omitempty"`
-	Freshness NodeFreshness     `json:"freshness"`
-	Revision  string            `json:"revision,omitempty"`
-	MaxFrames int               `json:"maxFrames"`
-	Truncated bool              `json:"truncated,omitempty"`
-	Frames    []StackTraceFrame `json:"frames"`
+	Status          string            `json:"status"`
+	Hint            string            `json:"hint,omitempty"`
+	Freshness       NodeFreshness     `json:"freshness"`
+	Revision        string            `json:"revision,omitempty"`
+	IndexGeneration string            `json:"indexGeneration,omitempty"`
+	MaxFrames       int               `json:"maxFrames"`
+	Truncated       bool              `json:"truncated,omitempty"`
+	Frames          []StackTraceFrame `json:"frames"`
 }
 
 type StackTraceFrame struct {
@@ -106,8 +107,16 @@ func newStacktraceCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			generation, err := captureIndexGeneration(idx)
+			if err != nil {
+				return err
+			}
 			result, err := mapStacktraceWithLimit(idx, splitCSV(scope), input, maxFrames, sourceMode != "", fresh)
 			if err != nil {
+				return err
+			}
+			result.IndexGeneration = generation
+			if err := requireUnchangedIndexGeneration(idx, generation); err != nil {
 				return err
 			}
 			if expectedRevision != "" && result.Revision != expectedRevision {
@@ -404,13 +413,16 @@ func (r *stackResolver) resolveUncached(frame parsedStackFrame) (stackSelection,
 			return stackSelection{status: "ambiguous", hint: "Multiple equally specific callables contain this source location.", candidates: ranges}, nil
 		}
 		selected := ranges[0]
-		if runtimeName := stackFunctionName(frame.function); runtimeName != "" && !strings.EqualFold(runtimeName, selected.node.Name) {
+		evidence := runtimeFunctionEvidence(frame.function, selected.node)
+		if frame.function != "" && (!evidence.nameMatches || evidence.qualifierMismatch) {
 			return stackSelection{status: "mismatch", hint: "Runtime function name contradicts the callable at this source location.", match: &selected, candidates: []matchedNode{selected}}, nil
 		}
 		status := "range"
 		hint := "Matched by indexed source range."
-		if frame.function != "" {
+		if frame.function != "" && !evidence.qualifierUnverified {
 			status, hint = "exact", "Matched by runtime name and indexed source range."
+		} else if frame.function != "" {
+			hint = "Runtime name matches, but its receiver/type qualifier cannot be verified against this indexed callable."
 		}
 		return stackSelection{status: status, hint: hint, match: &selected}, nil
 	}
@@ -434,21 +446,73 @@ func (r *stackResolver) resolveUncached(frame parsedStackFrame) (stackSelection,
 func nodeSpan(n model.Node) int { return n.EndLine - n.StartLine }
 
 func matchStackFunction(stores []*store.Store, name string) ([]matchedNode, error) {
-	name = stackFunctionName(name)
-	if name == "" {
+	bare := stackFunctionName(name)
+	if bare == "" {
 		return nil, nil
 	}
-	matches, err := findNodeMatches(stores, name)
+	matches, err := findNodeMatches(stores, bare)
 	if err != nil {
 		return nil, err
 	}
 	out := matches[:0]
 	for _, m := range matches {
-		if callableNode(m.node) {
+		evidence := runtimeFunctionEvidence(name, m.node)
+		if callableNode(m.node) && evidence.nameMatches && !evidence.qualifierMismatch {
 			out = append(out, m)
 		}
 	}
 	return out, nil
+}
+
+type runtimeEvidence struct{ nameMatches, qualifierMismatch, qualifierUnverified bool }
+
+func runtimeFunctionEvidence(raw string, node model.Node) runtimeEvidence {
+	bare := stackFunctionName(raw)
+	if bare == "" || !strings.EqualFold(bare, node.Name) {
+		return runtimeEvidence{}
+	}
+	evidence := runtimeEvidence{nameMatches: true}
+	runtimeQualifier, usable := stackTypeQualifier(raw)
+	if !usable {
+		return evidence
+	}
+	targetQualifier, hasTarget := indexedTypeQualifier(node)
+	if !hasTarget {
+		evidence.qualifierUnverified = true
+		return evidence
+	}
+	if !strings.EqualFold(runtimeQualifier, targetQualifier) {
+		evidence.qualifierMismatch = true
+	}
+	return evidence
+}
+
+func stackTypeQualifier(raw string) (string, bool) {
+	raw = strings.TrimSuffix(strings.TrimSpace(raw), "(...)")
+	dot := strings.LastIndex(raw, ".")
+	if dot < 1 {
+		return "", false
+	}
+	prefix := raw[:dot]
+	part := prefix[strings.LastIndex(prefix, ".")+1:]
+	part = strings.Trim(part, "() *")
+	if part == "" {
+		return "", false
+	}
+	// Go receivers and conventional type/method stacks carry an upper-case
+	// type segment. Lower-case module/package segments are not enough evidence.
+	if strings.Contains(prefix, "(*") || (part[0] >= 'A' && part[0] <= 'Z') || strings.Contains(raw, "::") {
+		return part, true
+	}
+	return "", false
+}
+
+func indexedTypeQualifier(node model.Node) (string, bool) {
+	parts := strings.Split(node.QualifiedName, "::")
+	if len(parts) < 2 {
+		return "", false
+	}
+	return parts[len(parts)-2], true
 }
 
 func stackFunctionName(name string) string {
@@ -480,6 +544,11 @@ func printStacktraceMarkdown(w io.Writer, result StackTraceResult, inline bool) 
 			return err
 		}
 	}
+	if result.Truncated {
+		if _, err := fmt.Fprintf(w, "- Mapping truncated after %d recognizable frame(s); increase `--max-frames` to inspect more.\n", result.MaxFrames); err != nil {
+			return err
+		}
+	}
 	for _, frame := range result.Frames {
 		if frame.Symbol == nil || (frame.Status != "exact" && frame.Status != "range" && frame.Status != "name_only") {
 			if err := printUnmatchedStackFrame(w, frame); err != nil {
@@ -488,11 +557,16 @@ func printStacktraceMarkdown(w io.Writer, result StackTraceResult, inline bool) 
 			continue
 		}
 		s := *frame.Symbol
-		if _, err := fmt.Fprintf(w, "\n#%d `%s` (%s) — %s:%d\n", frame.Index, s.QualifiedName, s.Kind, s.FilePath, s.StartLine); err != nil {
+		if _, err := fmt.Fprintf(w, "\n#%d [%s] `%s` (%s) — %s:%d\n", frame.Index, frame.Status, s.QualifiedName, s.Kind, s.FilePath, s.StartLine); err != nil {
 			return err
 		}
 		if s.Signature != "" {
 			if _, err := fmt.Fprintf(w, "`%s`\n", s.Signature); err != nil {
+				return err
+			}
+		}
+		if frame.Status != "exact" && frame.Hint != "" {
+			if _, err := fmt.Fprintf(w, "> %s\n", frame.Hint); err != nil {
 				return err
 			}
 		}
@@ -573,12 +647,13 @@ func printStacktraceFooter(w io.Writer, result StackTraceResult) error {
 	}
 	seen := map[string]bool{}
 	for _, frame := range result.Frames {
-		if frame.Symbol != nil && !seen[frame.Symbol.ID] {
-			seen[frame.Symbol.ID] = true
-			if err := printStackFrameSource(w, frame); err != nil {
-				return err
-			}
+		if frame.Symbol == nil || frame.Source == "" || seen[frame.Symbol.ID] {
+			continue
 		}
+		if err := printStackFrameSource(w, frame); err != nil {
+			return err
+		}
+		seen[frame.Symbol.ID] = true
 	}
 	return nil
 }

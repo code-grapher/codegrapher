@@ -153,6 +153,25 @@ func refreshNodeIndex(idx *indexer.Indexer) (NodeFreshness, error) {
 	return NodeFreshness{Refreshed: res.FilesAdded > 0 || res.FilesModified > 0 || res.FilesRemoved > 0 || res.FullReindex}, nil
 }
 
+func captureIndexGeneration(idx *indexer.Indexer) (string, error) {
+	generation, err := idx.IndexGeneration()
+	if err != nil {
+		return "", fmt.Errorf("capture consistent index generation: %w", err)
+	}
+	return generation, nil
+}
+
+func requireUnchangedIndexGeneration(idx *indexer.Indexer, expected string) error {
+	current, err := idx.IndexGeneration()
+	if err != nil {
+		return fmt.Errorf("verify consistent index generation: %w", err)
+	}
+	if current != expected {
+		return fmt.Errorf("index changed during retrieval (generation %s → %s); rerun command", expected, current)
+	}
+	return nil
+}
+
 func resolveNode(idx *indexer.Indexer, scopes []string, symbol, fileHint string, line int, wantSource, wantRelations bool, limit int, freshness NodeFreshness) (NodeResult, error) {
 	matches, err := findNodeMatches(idx.StoresFiltered(scopes), symbol)
 	if err != nil {

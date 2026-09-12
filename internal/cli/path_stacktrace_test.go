@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/specscore/codegrapher/indexer"
 	"github.com/specscore/codegrapher/model"
 )
 
@@ -71,6 +72,13 @@ func TestFindCallPathBoundsAndDoesNotCallCycleOnlyAtHopLimitTruncated(t *testing
 	limited, err := findCallPathWithLimits(idx, nil, "Warm", "Set", 3, pathLimits{maxNodes: 1, maxEdges: 10}, false, NodeFreshness{})
 	if err != nil || limited.Status != "not_found" || !limited.Truncated {
 		t.Fatalf("node bound = %+v, %v", limited, err)
+	}
+	lens, err := findNodeMatches(idx.Stores(), "Len")
+	if err != nil || len(lens) != 1 {
+		t.Fatalf("Len = %+v, %v", lens, err)
+	}
+	if edges, truncated, err := boundedCallEdges(lens[0].store, lens[0].node.ID, 0); err != nil || truncated || len(edges) != 0 {
+		t.Fatalf("exact-budget leaf = %v %t %v", edges, truncated, err)
 	}
 }
 
@@ -167,6 +175,11 @@ func TestMapStacktraceNeverSilentlyAcceptsWrongNameOrOutOfRangeLocation(t *testi
 	if err != nil || len(result.Frames) != 1 || result.Frames[0].Status != "mismatch" {
 		t.Fatalf("wrong-name mapping = %+v, %v", result, err)
 	}
+	wrongReceiver := "example.com/go-small/internal/store.(*OtherType).Warm(...)\n\t" + path + ":24 +0x1"
+	result, err = mapStacktrace(idx, nil, wrongReceiver, false, NodeFreshness{})
+	if err != nil || len(result.Frames) != 1 || result.Frames[0].Status != "mismatch" {
+		t.Fatalf("wrong-receiver mapping = %+v, %v", result, err)
+	}
 	stale := "example.com/go-small/internal/store.(*Cache).Warm(...)\n\t" + path + ":2 +0x1"
 	result, err = mapStacktrace(idx, nil, stale, true, NodeFreshness{})
 	if err != nil || len(result.Frames) != 1 || result.Frames[0].Status != "stale" || result.Frames[0].Source != "" {
@@ -180,6 +193,51 @@ func TestMapStacktraceNeverSilentlyAcceptsWrongNameOrOutOfRangeLocation(t *testi
 	noFrames, err := mapStacktrace(idx, nil, "fatal error without stack\n", false, NodeFreshness{})
 	if err != nil || noFrames.Status != "no_frames" || len(noFrames.Frames) != 0 {
 		t.Fatalf("no frames = %+v, %v", noFrames, err)
+	}
+}
+
+func TestStacktraceFooterSkipsEmptyMismatchSourceAndTextShowsWeakerState(t *testing.T) {
+	symbol := BriefSymbol{ID: "method:warm", QualifiedName: "Cache::Warm", FilePath: "cache.go", Language: "go", StartLine: 1}
+	result := StackTraceResult{Status: "ok", MaxFrames: 1, Truncated: true, Frames: []StackTraceFrame{
+		{Index: 0, Status: "mismatch", Symbol: &symbol},
+		{Index: 1, Status: "name_only", Hint: "name only", Symbol: &symbol, Source: "func Warm() {}"},
+	}}
+	var footer bytes.Buffer
+	if err := printStacktraceFooter(&footer, result); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(footer.String(), "func Warm() {}") != 1 {
+		t.Fatalf("footer source = %s", footer.String())
+	}
+	var text bytes.Buffer
+	if err := printStacktraceMarkdown(&text, result, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(text.String(), "Mapping truncated") || !strings.Contains(text.String(), "[name_only]") || !strings.Contains(text.String(), "name only") {
+		t.Fatalf("weaker markdown = %s", text.String())
+	}
+}
+
+func TestIndexGenerationRejectsCompletedReindexDuringRead(t *testing.T) {
+	root, idx := initFixture(t)
+	defer func() { _ = idx.Close() }()
+	before, err := captureIndexGeneration(idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(root, "internal/store/cache.go")
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(file, append(data, []byte("\n// generation mutation\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if sync := idx.SyncFiles([]string{"internal/store/cache.go"}, indexer.Options{}); len(sync.Errors) > 0 {
+		t.Fatalf("SyncFiles = %+v", sync)
+	}
+	if err := requireUnchangedIndexGeneration(idx, before); err == nil || !strings.Contains(err.Error(), "index changed during retrieval") {
+		t.Fatalf("generation fence = %v", err)
 	}
 }
 

@@ -24,6 +24,7 @@ type PathResult struct {
 	MaxHops          int           `json:"maxHops"`
 	MaxNodes         int           `json:"maxNodes"`
 	MaxEdges         int           `json:"maxEdges"`
+	IndexGeneration  string        `json:"indexGeneration,omitempty"`
 	VisitedNodes     int           `json:"visitedNodes"`
 	VisitedEdges     int           `json:"visitedEdges"`
 	Truncated        bool          `json:"truncated,omitempty"`
@@ -82,8 +83,16 @@ func newPathCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			generation, err := captureIndexGeneration(idx)
+			if err != nil {
+				return err
+			}
 			result, err := findCallPathWithLimits(idx, splitCSV(scope), args[0], args[1], maxHops, pathLimits{maxNodes: maxNodes, maxEdges: maxEdges}, sourceMode != "", fresh)
 			if err != nil {
+				return err
+			}
+			result.IndexGeneration = generation
+			if err := requireUnchangedIndexGeneration(idx, generation); err != nil {
 				return err
 			}
 			if wantsJSON(format, jsonOut) {
@@ -262,7 +271,11 @@ func findCallPathWithLimits(idx *indexer.Indexer, scopes []string, startQuery, t
 // so the caller can state truncation without loading an unbounded adjacency.
 func boundedCallEdges(s *store.Store, sourceID string, remaining int) ([]model.Edge, bool, error) {
 	if remaining < 1 {
-		return nil, true, nil
+		probe, err := s.GetOutgoingEdgesByKindLimited(sourceID, []model.EdgeKind{model.EdgeCalls}, 1)
+		if err != nil {
+			return nil, false, err
+		}
+		return nil, len(probe) > 0, nil
 	}
 	edges, err := s.GetOutgoingEdgesByKindLimited(sourceID, []model.EdgeKind{model.EdgeCalls}, remaining+1)
 	if err != nil {
@@ -369,12 +382,13 @@ func printPathFooter(w io.Writer, result PathResult) error {
 	}
 	seen := map[string]bool{}
 	for _, step := range result.Steps {
-		if !seen[step.Symbol.ID] {
-			seen[step.Symbol.ID] = true
-			if err := printPathStepSource(w, step); err != nil {
-				return err
-			}
+		if step.Source == "" || seen[step.Symbol.ID] {
+			continue
 		}
+		if err := printPathStepSource(w, step); err != nil {
+			return err
+		}
+		seen[step.Symbol.ID] = true
 	}
 	return nil
 }
