@@ -29,6 +29,8 @@ codegrapher sync [path]      Incremental re-index since last index
 codegrapher status [path]    Index stats                         (--json)
 codegrapher query <search>   Symbol search                       (-l limit, -k kind, --brief, --json)
 codegrapher node <symbol>    Symbol metadata/source/relations    (--source[=footer|inline], --relations, --file, --line, --json)
+codegrapher path <from> <to> One bounded static call path        (--max-hops, --source[=footer|inline], --json)
+codegrapher stacktrace [file] Map runtime frames to symbols       (--source[=footer|inline], --json)
 codegrapher files            Indexed file tree                   (--json)
 codegrapher callers <symbol> What calls this symbol              (--json)
 codegrapher callees <symbol> What this symbol calls              (--json)
@@ -44,6 +46,39 @@ codegrapher import [path]    Import an INGR snapshot into the local store
 codegrapher unlock [path]    Remove a stale lock file
 codegrapher version          Print version
 ```
+
+### Trace a precise code route
+
+Use `path` when the entry and target symbols are known but the intermediate
+calls are not. It returns one deterministic shortest directed `calls` path;
+the default is signatures and locations, not source bodies.
+
+```sh
+codegrapher path main NewRootCmd --max-hops 8
+codegrapher path "function:exact-start-id" "function:exact-target-id" --source=footer
+```
+
+Each hop includes edge kind, call-site line/column, and extraction provenance.
+Ambiguous endpoints produce candidates and require an exact ID. `--source` is
+Markdown-only: `footer` writes compact JSON metadata followed by deduplicated,
+raw language fences; `inline` is also valid with `--format json`.
+
+### Read a runtime stack without file-chunk hunting
+
+`stacktrace` maps file-and-line runtime frames to the smallest enclosing
+indexed callable. It accepts a trace file, `-`, or stdin:
+
+```sh
+codegrapher stacktrace panic.txt
+pbpaste | codegrapher stacktrace --source=footer
+codegrapher stacktrace trace.txt --source=inline --format json
+```
+
+Go, V8 JavaScript/TypeScript, Python, JVM, .NET, Rust, and generic
+`file:line[:column]` frames are recognized. Stack order and unmatched/external
+frames are preserved. A stack is runtime evidence, so adjacent frames do not
+need a static graph edge. Source is deduplicated for recursion and repeated
+frames, and only returned after the indexed file hash is verified.
 
 ## Snapshot / viewer
 

@@ -78,6 +78,37 @@ after indexing. When `--source` is requested it verifies the current file bytes
 against the indexed hash; it refreshes once or returns an explicit stale/lock/
 read error rather than slicing a stale range.
 
+When an agent knows an entry point and a target but not the intermediate
+implementation route, ask CodeGrapher for one bounded static path before
+loading bodies:
+
+```sh
+codegrapher path "main" "NewRootCmd" --max-hops 8
+codegrapher path "<start-id>" "<target-id>" --source=footer
+```
+
+`path` follows only directed `calls` edges and returns a deterministic shortest
+route with call-site locations and provenance. It does not guess ambiguous
+endpoint names; use the exact IDs in its compact candidates. Default output is
+metadata/signatures. `--source=footer` emits that metadata before deduplicated
+raw Markdown code blocks; `--source=inline --format json` is available when
+automation needs code in JSON.
+
+When debugging a runtime failure, map the supplied trace directly instead of
+searching each `file:line` frame by hand:
+
+```sh
+codegrapher stacktrace panic.txt
+pbpaste | codegrapher stacktrace --source=footer
+```
+
+`stacktrace` recognizes Go, V8 JS/TS, Python, JVM, .NET, Rust, and generic
+location frames. It preserves runtime frame order and labels unmatched or
+ambiguous frames instead of guessing. It selects the smallest enclosing
+callable for a unique file+line match and deduplicates recursive/repeated
+source bodies. Runtime stack adjacency is not claimed to be a static graph
+edge.
+
 Use relationship verbs when you need a wider or transitive answer:
 
 ```sh
