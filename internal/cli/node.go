@@ -112,13 +112,19 @@ func newNodeCmd() *cobra.Command {
 				return nil
 			}
 			if sourceMode == "footer" {
-				printNodeFooter(out, results)
+				if err := printNodeFooter(out, results); err != nil {
+					return err
+				}
 			} else {
 				for i, result := range results {
 					if i > 0 {
-						fmt.Fprintln(out, "\n---")
+						if _, err := fmt.Fprintln(out, "\n---"); err != nil {
+							return err
+						}
 					}
-					printNodeMarkdown(out, result, sourceMode == "inline")
+					if err := printNodeMarkdown(out, result, sourceMode == "inline"); err != nil {
+						return err
+					}
 				}
 			}
 			if incomplete {
@@ -140,26 +146,11 @@ func newNodeCmd() *cobra.Command {
 }
 
 func refreshNodeIndex(idx *indexer.Indexer) (NodeFreshness, error) {
-	changes := idx.GetChangedFiles()
-	paths := append(append([]string{}, changes.Added...), changes.Modified...)
-	paths = append(paths, changes.Removed...)
-	if len(paths) == 0 {
-		if err := idx.MarkCurrentGitHead(); err != nil {
-			return NodeFreshness{}, fmt.Errorf("record verified index revision: %w", err)
-		}
-		return NodeFreshness{}, nil
+	res, err := idx.RefreshForRead(indexer.Options{})
+	if err != nil {
+		return NodeFreshness{}, err
 	}
-	res := idx.SyncFiles(paths, indexer.Options{})
-	if res.FilesChecked == 0 && res.DurationMs == 0 {
-		return NodeFreshness{}, errors.New("index is locked; cannot safely refresh symbol data")
-	}
-	if len(res.Errors) > 0 {
-		return NodeFreshness{}, fmt.Errorf("incremental refresh failed: %s", res.Errors[0].Message)
-	}
-	if err := idx.MarkCurrentGitHead(); err != nil {
-		return NodeFreshness{}, fmt.Errorf("record refreshed index revision: %w", err)
-	}
-	return NodeFreshness{Refreshed: true}, nil
+	return NodeFreshness{Refreshed: res.FilesAdded > 0 || res.FilesModified > 0 || res.FilesRemoved > 0 || res.FullReindex}, nil
 }
 
 func resolveNode(idx *indexer.Indexer, scopes []string, symbol, fileHint string, line int, wantSource, wantRelations bool, limit int, freshness NodeFreshness) (NodeResult, error) {
@@ -385,65 +376,93 @@ func briefMatches(matches []matchedNode) []BriefSymbol {
 	return out
 }
 
-func printNodeMarkdown(w io.Writer, result NodeResult, requestedSource bool) {
+func printNodeMarkdown(w io.Writer, result NodeResult, requestedSource bool) error {
 	if len(result.Candidates) > 0 {
-		fmt.Fprintf(w, "## %s symbol `%s`\n", result.Status, result.Requested)
+		if _, err := fmt.Fprintf(w, "## %s symbol `%s`\n", result.Status, result.Requested); err != nil {
+			return err
+		}
 		for _, candidate := range result.Candidates {
 			sig := ""
 			if candidate.Signature != "" {
 				sig = " — `" + candidate.Signature + "`"
 			}
-			fmt.Fprintf(w, "- `%s` — `%s` (%s) — %s:%d-%d%s\n", candidate.ID, candidate.QualifiedName, candidate.Kind, candidate.FilePath, candidate.StartLine, candidate.EndLine, sig)
+			if _, err := fmt.Fprintf(w, "- `%s` — `%s` (%s) — %s:%d-%d%s\n", candidate.ID, candidate.QualifiedName, candidate.Kind, candidate.FilePath, candidate.StartLine, candidate.EndLine, sig); err != nil {
+				return err
+			}
 		}
-		fmt.Fprintf(w, "\nChoose a candidate, then run `codegrapher node \"<exact id>\" --source`. %s\n", result.Hint)
-		return
+		_, err := fmt.Fprintf(w, "\nChoose a candidate, then run `codegrapher node \"<exact id>\" --source`. %s\n", result.Hint)
+		return err
 	}
 	if result.Symbol == nil {
-		fmt.Fprintf(w, "## not_found symbol `%s`\n", result.Requested)
-		if result.Hint != "" {
-			fmt.Fprintf(w, "\n%s\n", result.Hint)
+		if _, err := fmt.Fprintf(w, "## not_found symbol `%s`\n", result.Requested); err != nil {
+			return err
 		}
-		return
+		if result.Hint != "" {
+			if _, err := fmt.Fprintf(w, "\n%s\n", result.Hint); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 	s := *result.Symbol
-	fmt.Fprintf(w, "## %s (%s)\n\n", s.QualifiedName, s.Kind)
-	fmt.Fprintf(w, "- File: `%s:%d-%d`\n", s.FilePath, s.StartLine, s.EndLine)
+	if _, err := fmt.Fprintf(w, "## %s (%s)\n\n", s.QualifiedName, s.Kind); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "- File: `%s:%d-%d`\n", s.FilePath, s.StartLine, s.EndLine); err != nil {
+		return err
+	}
 	if s.Signature != "" {
-		fmt.Fprintf(w, "- Signature: `%s`\n", s.Signature)
+		if _, err := fmt.Fprintf(w, "- Signature: `%s`\n", s.Signature); err != nil {
+			return err
+		}
 	}
 	if result.Freshness.Refreshed {
-		fmt.Fprintln(w, "- Freshness: incrementally refreshed")
+		if _, err := fmt.Fprintln(w, "- Freshness: incrementally refreshed"); err != nil {
+			return err
+		}
 	}
 	if requestedSource {
-		printNodeSourceMarkdown(w, result)
+		if err := printNodeSourceMarkdown(w, result); err != nil {
+			return err
+		}
 	}
 	if len(result.Relations) > 0 {
-		fmt.Fprintln(w, "\n### Immediate relationships")
+		if _, err := fmt.Fprintln(w, "\n### Immediate relationships"); err != nil {
+			return err
+		}
 		for _, r := range result.Relations {
 			prov := ""
 			if r.Provenance != "" {
 				prov = " [" + r.Provenance + "]"
 			}
-			fmt.Fprintf(w, "- %s `%s` → `%s` (%s)%s\n", r.Direction, r.Kind, r.Symbol.QualifiedName, r.Symbol.FilePath, prov)
+			if _, err := fmt.Fprintf(w, "- %s `%s` → `%s` (%s)%s\n", r.Direction, r.Kind, r.Symbol.QualifiedName, r.Symbol.FilePath, prov); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
-func printNodeSourceMarkdown(w io.Writer, result NodeResult) {
+func printNodeSourceMarkdown(w io.Writer, result NodeResult) error {
 	if result.Source == "" || result.Symbol == nil {
-		return
+		return nil
 	}
 	s := *result.Symbol
-	fmt.Fprintf(w, "\n### %s — `%s:%d-%d`\n\n", s.QualifiedName, s.FilePath, s.StartLine, s.EndLine)
-	fmt.Fprintf(w, "> Source range is %s; it was verified against the indexed file hash.\n\n", result.SourceRange)
+	if _, err := fmt.Fprintf(w, "\n### %s — `%s:%d-%d`\n\n", s.QualifiedName, s.FilePath, s.StartLine, s.EndLine); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "> Source range is %s; it was verified against the indexed file hash.\n\n", result.SourceRange); err != nil {
+		return err
+	}
 	fence := codeFence(result.Source)
-	fmt.Fprintf(w, "%s%s\n%s\n%s\n", fence, s.Language, result.Source, fence)
+	_, err := fmt.Fprintf(w, "%s%s\n%s\n%s\n", fence, s.Language, result.Source, fence)
+	return err
 }
 
 // printNodeFooter keeps source outside structured metadata. This is the
 // token-friendly default for shell/agent use: an agent can inspect one compact
 // JSON-shaped header, then read raw (not JSON-escaped) code blocks.
-func printNodeFooter(w io.Writer, results []NodeResult) {
+func printNodeFooter(w io.Writer, results []NodeResult) error {
 	metadata := make([]NodeResult, len(results))
 	copy(metadata, results)
 	for i := range metadata {
@@ -457,13 +476,21 @@ func printNodeFooter(w io.Writer, results []NodeResult) {
 	} else {
 		data, err = json.MarshalIndent(metadata, "", "  ")
 	}
-	if err == nil {
-		fmt.Fprintf(w, "```json\n%s\n```\n", data)
+	if err != nil {
+		return err
 	}
-	fmt.Fprintln(w, "\n## Sources")
+	if _, err := fmt.Fprintf(w, "```json\n%s\n```\n", data); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(w, "\n## Sources"); err != nil {
+		return err
+	}
 	for _, result := range results {
-		printNodeSourceMarkdown(w, result)
+		if err := printNodeSourceMarkdown(w, result); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func codeFence(source string) string {
