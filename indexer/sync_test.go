@@ -416,3 +416,69 @@ func TestSyncResolvesCrossFileEdges(t *testing.T) {
 		t.Errorf("unresolved refs after sync = %d, want 0", n)
 	}
 }
+
+// A changed definition receives a new node ID when its source range changes.
+// Reindexing it must preserve edges from unchanged callers by re-resolving
+// their saved unresolved references after the old target is deleted.
+func TestSyncChangedCalleePreservesIncomingCallerEdges(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "lib.go"), "package main\n\nfunc Helper() {}\n")
+	writeFile(t, filepath.Join(dir, "main.go"), "package main\n\nfunc main() { Helper() }\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+
+	caller, err := idx.Store().GetNodesByName("main")
+	if err != nil || len(caller) != 1 {
+		t.Fatalf("caller: %v %d", err, len(caller))
+	}
+
+	// Prefixing a line changes the extracted callee ID without touching main.go.
+	writeFile(t, filepath.Join(dir, "lib.go"), "package main\n\n\nfunc Helper() {}\n")
+	res := idx.SyncFiles([]string{"lib.go"}, Options{})
+	if res.FilesModified != 1 {
+		t.Fatalf("SyncFiles result = %+v, want one modified file", res)
+	}
+
+	edges, err := idx.Store().GetOutgoingEdges(caller[0].ID, []model.EdgeKind{model.EdgeCalls}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(edges) != 1 {
+		t.Fatalf("caller edges after changed callee = %+v, want one call edge", edges)
+	}
+	target, err := idx.Store().GetNodeByID(edges[0].Target)
+	if err != nil || target == nil || target.Name != "Helper" {
+		t.Fatalf("edge target = %+v, %v; want Helper", target, err)
+	}
+}
+
+func TestSyncHashesSameSizeSameMillisecondFileChanges(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	writeFile(t, path, "package main\n\nfunc Old() {}\n")
+	mustGit(t, dir, "init")
+	mustGit(t, dir, "add", "main.go")
+	mustGit(t, dir, "commit", "-m", "initial")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	rec, err := idx.Store().GetFileByPath("main.go")
+	if err != nil || rec == nil {
+		t.Fatalf("file record: %v, %+v", err, rec)
+	}
+
+	writeFile(t, path, "package main\n\nfunc New() {}\n") // same byte length
+	oldTime := time.UnixMilli(rec.ModifiedAt)
+	if err := os.Chtimes(path, oldTime, oldTime); err != nil {
+		t.Fatal(err)
+	}
+	res := idx.Sync(Options{})
+	if res.FilesModified != 1 || !hasNodeNamed(t, idx, "New") {
+		t.Fatalf("Sync result = %+v; New indexed = %v, want changed file indexed", res, hasNodeNamed(t, idx, "New"))
+	}
+}

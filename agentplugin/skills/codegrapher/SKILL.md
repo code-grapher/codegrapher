@@ -26,14 +26,51 @@ Refresh a previously initialized index after source changes:
 codegrapher sync
 ```
 
-Use focused queries before editing:
+Discover symbols with compact machine-readable metadata before loading source:
 
 ```sh
-codegrapher query "<symbol>" --format json
+codegrapher query "<symbol>" --brief --format json
+```
+
+Then retrieve the selected semantic unit rather than a surrounding file chunk:
+
+```sh
+codegrapher node "<qualified-symbol>" --source --relations
+codegrapher node "<symbol>" --file path/to/file.go --source
+codegrapher node "<id-from-query-brief>" --source=footer
+```
+
+`node` writes Markdown by default. With `--source`, it first writes compact
+JSON-shaped metadata in a fenced `json` block, then raw unescaped language
+fences for the source; this is easier for an agent to read than code escaped
+inside JSON. `--format json` is available for automation and always returns an
+array (also for one requested symbol). Source ranges are line-bounded from the
+index, not universal AST byte ranges.
+
+For a batch, `--source=footer` prints all metadata and relationships first,
+then a `## Sources` section. `--source` is shorthand for `--source=footer`.
+Use `--source=inline` when each source should follow its symbol header.
+Footer mode is text-only; JSON may use only inline source.
+
+If a bare name has multiple definitions, `node` returns compact candidates and
+never guesses a body. It exits non-zero as a disambiguation response; retry it
+with `node "<exact id>" --source` (or `--file` / `--line`) using a candidate
+from `query --brief`. Do not fall back to grep or a surrounding-file read.
+
+Before node lookup, CodeGrapher uses the persisted file hash and modification
+metadata to incrementally refresh Git-dirty or untracked source files. When
+`--source` is requested it verifies the current file bytes against the indexed
+hash; it refreshes once or returns an explicit stale/lock/read error rather
+than slicing a stale range.
+
+Use relationship verbs when you need a wider or transitive answer:
+
+```sh
 codegrapher callers "<symbol>" --format json
 codegrapher callees "<symbol>" --format json
 codegrapher impact "<symbol>" --format json
 ```
 
-Treat the graph as investigation evidence. Read the referenced source before
-making a behavior claim, and refresh the index if the relevant files changed.
+Treat the graph as investigation evidence. `node --source` is the preferred
+source read for indexed symbols; use ordinary file reads for docs, configs, or
+when CodeGrapher reports a freshness error.

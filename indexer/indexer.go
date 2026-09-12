@@ -65,7 +65,13 @@ type SyncResult struct {
 	// FullReindex is true when Sync escalated to a from-scratch reindex
 	// because the index was built by a different scanner/extraction version.
 	FullReindex bool
+	// Errors records non-recoverable incremental-update failures. Callers that
+	// need fresh graph data must not treat these as a successful refresh.
+	Errors []model.ExtractionError
 }
+
+// Root returns the absolute project root for source retrieval clients.
+func (idx *Indexer) Root() string { return idx.root }
 
 // ChangedFiles classifies pending filesystem changes against the index.
 type ChangedFiles struct {

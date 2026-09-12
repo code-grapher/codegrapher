@@ -27,7 +27,8 @@ codegrapher uninit [path]    Remove .codegraph/ from a project
 codegrapher index [path]     Full re-index
 codegrapher sync [path]      Incremental re-index since last index
 codegrapher status [path]    Index stats                         (--json)
-codegrapher query <search>   Symbol search                       (-l limit, -k kind, --json)
+codegrapher query <search>   Symbol search                       (-l limit, -k kind, --brief, --json)
+codegrapher node <symbol>    Symbol metadata/source/relations    (--source[=footer|inline], --relations, --file, --line, --json)
 codegrapher files            Indexed file tree                   (--json)
 codegrapher callers <symbol> What calls this symbol              (--json)
 codegrapher callees <symbol> What this symbol calls              (--json)

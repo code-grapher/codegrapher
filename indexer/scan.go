@@ -327,12 +327,18 @@ func collectGitFiles(repoDir, prefix string, files map[string]bool) bool {
 }
 
 func gitOutput(dir string, args ...string) (string, error) {
+	out, err := gitOutputRaw(dir, args...)
+	return strings.TrimSpace(out), err
+}
+
+// gitOutputRaw preserves leading status columns required by porcelain output.
+func gitOutputRaw(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(out)), nil
+	return string(out), nil
 }
 
 // scanDirectoryWalk is the filesystem-walk fallback for non-git projects.

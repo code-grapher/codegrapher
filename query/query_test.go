@@ -2,6 +2,7 @@ package query_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -205,6 +206,47 @@ func TestGoSmall_Query(t *testing.T) {
 	}
 	if diff != "" {
 		t.Fatalf("parity mismatch:\n%s", diff)
+	}
+}
+
+// Path and name filters are semantic constraints, not a post-processing hint.
+// In particular, a matching node must not disappear just because unrelated
+// candidates consumed the initial search limit.
+func TestSearchNodes_PushesPathAndNameFiltersBeforeLimit(t *testing.T) {
+	s, err := store.Initialize(filepath.Join(t.TempDir(), store.DatabaseFilename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	for i := range 20 {
+		n := model.Node{
+			ID:            fmt.Sprintf("function:common:%02d", i),
+			Kind:          model.KindFunction,
+			Name:          "Common",
+			QualifiedName: fmt.Sprintf("Common%d", i),
+			FilePath:      fmt.Sprintf("other/%02d.go", i),
+			Language:      model.LangGo,
+			StartLine:     1,
+		}
+		if err := s.InsertNode(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.InsertNode(model.Node{
+		ID: "function:target", Kind: model.KindFunction, Name: "Common",
+		QualifiedName: "TargetCommon", FilePath: "wanted/target.go",
+		Language: model.LangGo, StartLine: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := query.SearchNodes(s, "name:Common path:wanted", query.SearchOptions{Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Node.FilePath != "wanted/target.go" {
+		t.Fatalf("SearchNodes filtered result = %+v, want wanted/target.go", got)
 	}
 }
 

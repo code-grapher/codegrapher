@@ -1,12 +1,14 @@
 package indexer
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/specscore/codegrapher/model"
+	"github.com/specscore/codegrapher/store"
 )
 
 // Sync reconciles the index with the current filesystem state. Change
@@ -65,6 +67,12 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 	for _, f := range tracked {
 		trackedMap[f.Path] = f
 	}
+	dirtyPaths := make(map[string]struct{})
+	if changes, ok := gitChangedFiles(idx.root); ok {
+		for _, path := range append(append(changes.modified, changes.added...), changes.deleted...) {
+			dirtyPaths[path] = struct{}{}
+		}
+	}
 
 	// Removals: tracked in the DB but no longer a present source file. Check
 	// the filesystem directly — `git ls-files` still lists a file deleted
@@ -86,16 +94,17 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 	for _, filePath := range currentFiles {
 		fullPath := filepath.Join(idx.root, filepath.FromSlash(filePath))
 		rec, isTracked := trackedMap[filePath]
-
-		// Cheap pre-filter: an already-indexed file whose size AND mtime both
-		// match the DB is unchanged — skip without reading or hashing.
 		if isTracked {
 			fi, err := os.Stat(fullPath)
 			if err != nil {
-				continue // unstattable — skip, like the original
+				continue
 			}
 			if fi.Size() == rec.Size && statMtimeMs(fi) == rec.ModifiedAt {
-				continue
+				// Git lists dirty candidates cheaply; always hash those so a
+				// same-size change within one millisecond is never missed.
+				if _, dirty := dirtyPaths[filePath]; !dirty {
+					continue
+				}
 			}
 		}
 
@@ -206,9 +215,18 @@ func (idx *Indexer) syncChangedFiles(filesToIndex []string, opts Options, result
 		return
 	}
 	sort.Strings(filesToIndex)
+	backups, err := idx.captureIncomingEdges(filesToIndex)
+	if err != nil {
+		result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "edge_backup_error"})
+		return
+	}
 
 	var ir IndexResult
 	idx.extractAndStore(filesToIndex, opts, &ir)
+	if err := idx.restoreIncomingEdges(backups); err != nil {
+		result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "edge_restore_error"})
+		return
+	}
 
 	// nodesUpdated is the sum of nodes now stored for the changed files
 	// (the original's `nodesUpdated += result.nodes.length`).
@@ -225,6 +243,89 @@ func (idx *Indexer) syncChangedFiles(filesToIndex []string, opts Options, result
 		var dummy IndexResult
 		idx.resolveAll(opts, &dummy)
 	}
+}
+
+// incomingEdgeBackup retains an edge from an unchanged source while its target
+// file is re-extracted. Deleting the old target node otherwise cascades the
+// edge, and the source's unresolved reference was cleared by the prior resolve
+// pass. The target's stable symbol identity lets us restore only edges whose
+// definition still exists after the update; renames deliberately remain gone.
+type incomingEdgeBackup struct {
+	store  *store.Store
+	target model.Node
+	edge   model.Edge
+}
+
+func (idx *Indexer) captureIncomingEdges(changedFiles []string) ([]incomingEdgeBackup, error) {
+	changed := make(map[string]struct{}, len(changedFiles))
+	for _, file := range changedFiles {
+		changed[file] = struct{}{}
+	}
+	var out []incomingEdgeBackup
+	for _, s := range idx.Stores() {
+		for _, file := range changedFiles {
+			nodes, err := s.GetNodesByFile(file)
+			if err != nil {
+				return nil, fmt.Errorf("read changed nodes for %s: %w", file, err)
+			}
+			for _, target := range nodes {
+				edges, err := s.GetIncomingEdges(target.ID, nil)
+				if err != nil {
+					return nil, fmt.Errorf("read incoming edges for %s: %w", target.ID, err)
+				}
+				for _, edge := range edges {
+					source, err := s.GetNodeByID(edge.Source)
+					if err != nil {
+						return nil, fmt.Errorf("read edge source %s: %w", edge.Source, err)
+					}
+					if source == nil {
+						continue
+					}
+					if _, isChanging := changed[source.FilePath]; isChanging {
+						continue
+					}
+					out = append(out, incomingEdgeBackup{store: s, target: target, edge: edge})
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+func (idx *Indexer) restoreIncomingEdges(backups []incomingEdgeBackup) error {
+	byStoreFile := make(map[*store.Store]map[string][]model.Node)
+	for _, backup := range backups {
+		files := byStoreFile[backup.store]
+		if files == nil {
+			files = make(map[string][]model.Node)
+			byStoreFile[backup.store] = files
+		}
+		if _, loaded := files[backup.target.FilePath]; !loaded {
+			nodes, err := backup.store.GetNodesByFile(backup.target.FilePath)
+			if err != nil {
+				return fmt.Errorf("read reindexed nodes for %s: %w", backup.target.FilePath, err)
+			}
+			files[backup.target.FilePath] = nodes
+		}
+	}
+	restore := make(map[*store.Store][]model.Edge)
+	for _, backup := range backups {
+		for _, candidate := range byStoreFile[backup.store][backup.target.FilePath] {
+			if candidate.Kind != backup.target.Kind || candidate.Name != backup.target.Name || candidate.QualifiedName != backup.target.QualifiedName {
+				continue
+			}
+			edge := backup.edge
+			edge.Target = candidate.ID
+			restore[backup.store] = append(restore[backup.store], edge)
+			break
+		}
+	}
+	for s, edges := range restore {
+		if err := s.InsertEdges(edges); err != nil {
+			return fmt.Errorf("restore incoming edges: %w", err)
+		}
+	}
+	return nil
 }
 
 // GetChangedFiles classifies filesystem changes since the last index without
@@ -372,7 +473,7 @@ type gitChanges struct {
 // gitChangedFiles parses `git status --porcelain --no-renames`. Returns
 // ok=false when git is unavailable so callers fall back to a full scan.
 func gitChangedFiles(rootDir string) (gitChanges, bool) {
-	out, err := gitOutput(rootDir, "status", "--porcelain", "--no-renames")
+	out, err := gitOutputRaw(rootDir, "status", "--porcelain", "--no-renames")
 	if err != nil {
 		return gitChanges{}, false
 	}

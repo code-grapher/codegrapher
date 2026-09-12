@@ -158,6 +158,24 @@ func TestNodes_ByNameFileLowerQualified(t *testing.T) {
 	}
 }
 
+func TestNodes_ByQualifiedNameSuffix(t *testing.T) {
+	s := newTestStore(t)
+	for _, n := range []model.Node{
+		testNode("method:one", "Run", "one.go", 1),
+		testNode("method:two", "Run", "two.go", 2),
+	} {
+		n.Kind = model.KindMethod
+		n.QualifiedName = "Service::Run"
+		if err := s.InsertNode(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.GetNodesByQualifiedNameSuffix("Service::Run")
+	if err != nil || len(got) != 2 {
+		t.Fatalf("GetNodesByQualifiedNameSuffix = %d, %v", len(got), err)
+	}
+}
+
 func TestEdges_EndpointFilterAndQueries(t *testing.T) {
 	s := newTestStore(t)
 	if err := s.InsertNodes([]model.Node{
