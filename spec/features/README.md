@@ -15,7 +15,7 @@ Feature specifications for this project.
 | [WB Fleet Integration](wb-fleet-integration/README.md) | Draft | Fleet-safe CodeGrapher behavior for WB-managed repositories and worktrees. |
 | [SpecScore Source Traceability](specscore-source-traceability/README.md) | Implementing | Connect accepted SpecScore source directives to canonical Feature, REQ, AC, and scenario nodes. |
 | [Automatic index freshness](automatic-index-freshness/README.md) | Implementing | Keep CodeGrapher indexes current automatically through one observable incremental reconciliation engine, beginning with a foreground watch command. |
-| [Authenticated browser API](live-daemon-api/README.md) | Amending | Expose the one repository owned by a foreground server or background daemon through a bounded, authenticated, versioned HTTP API that the codegrapher.com repository browser can consume without learning local filesystem paths. |
+| [Authenticated browser API](live-daemon-api/README.md) | Stable | Expose the one repository owned by a foreground server or background daemon through a bounded, authenticated, versioned HTTP API that the CodeGrapher.dev repository browser can consume without learning local filesystem paths. |
 | [Sync initialization on demand](sync-initialize-if-missing/README.md) | Implementing | Let automation explicitly initialize an unindexed repository through the normal sync command, then use incremental reconciliation thereafter. |
 
 ## Open Questions

@@ -1,11 +1,11 @@
 ---
 format: https://specscore.md/plan-specification
-status: Executing
+status: Implemented
 ---
 
 # Plan: Authenticated browser API
 
-**Status:** Executing
+**Status:** Implemented
 **Source Feature:** live-daemon-api
 **Date:** 2026-09-12
 **Owner:** alex
@@ -134,13 +134,22 @@ families, security errors, stop, and listener teardown.
 
 **Verifies:** live-daemon-api#ac:generated-client-installs-from-git
 **Depends-On:** 6
-**Status:** in_progress
+**Status:** complete
 
 Add the package lifecycle and export metadata required for pnpm to install the
 generated client directly from an immutable CodeGrapher Git subdirectory.
 Prove a clean package build/import, release the repair, and let the
 `codegrapher-dev` consumer pin that immutable provider revision without a local
 filesystem link.
+
+Completed in PR #35 with source `32b610e5d01a4cc929b5d8537e98434643f48845`,
+candidate `38aff6e7bd151ee35ea87fcffb2245415820eaf9`, and provider landing
+`3d99906857865dad7dcc009752f200c8267c4f4c`. The committed generated package
+rebuilds without drift, installs from `/clients/typescript` at that immutable
+Git revision, and imports from its package root in a cold frozen pnpm install.
+CodeGrapher `v0.10.2` released that landing, the Homebrew-managed binary was
+upgraded to it, and `codegrapher-dev` pinned the same revision before its real
+production browser journey passed against the installed daemon.
 
 ## Open Questions
 
