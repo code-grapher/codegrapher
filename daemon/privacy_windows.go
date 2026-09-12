@@ -9,8 +9,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// FILE_ALL_ACCESS is STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE plus the nine
+// file-specific rights. x/sys intentionally does not export this composite.
 const userFileAccess windows.ACCESS_MASK = windows.STANDARD_RIGHTS_REQUIRED |
-	windows.SYNCHRONIZE | windows.SPECIFIC_RIGHTS_ALL
+	windows.SYNCHRONIZE | 0x1ff
 
 func protectUserOnly(path string) error {
 	user, err := windows.GetCurrentProcessToken().GetTokenUser()
