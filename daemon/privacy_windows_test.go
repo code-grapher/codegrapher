@@ -5,6 +5,7 @@ package daemon
 import (
 	"path/filepath"
 	"testing"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -32,5 +33,13 @@ func TestStateUsesProtectedSingleUserDACL(t *testing.T) {
 	}
 	if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || ace.Mask == 0 {
 		t.Fatalf("state ACE = type %d mask %x, want current-user access", ace.Header.AceType, ace.Mask)
+	}
+	currentUser, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	aceSID := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
+	if !aceSID.Equals(currentUser.User.Sid) {
+		t.Fatalf("state ACE SID = %v, want current user %v", aceSID, currentUser.User.Sid)
 	}
 }

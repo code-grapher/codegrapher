@@ -2,7 +2,11 @@
 
 package daemon
 
-import "golang.org/x/sys/windows"
+import (
+	"runtime"
+
+	"golang.org/x/sys/windows"
+)
 
 func protectUserOnly(path string) error {
 	user, err := windows.GetCurrentProcessToken().GetTokenUser()
@@ -18,6 +22,9 @@ func protectUserOnly(path string) error {
 			TrusteeValue: windows.TrusteeValueFromSID(user.User.Sid),
 		},
 	}}, nil)
+	// TrusteeValueFromSID converts the SID pointer to uintptr, so it does not
+	// keep the token-user buffer alive for the Windows call that copies it.
+	runtime.KeepAlive(user)
 	if err != nil {
 		return err
 	}
