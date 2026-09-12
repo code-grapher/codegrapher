@@ -161,6 +161,33 @@ func TestSyncNoChanges(t *testing.T) {
 	}
 }
 
+func BenchmarkSyncFilesOneFile(b *testing.B) {
+	dir := b.TempDir()
+	path := filepath.Join(dir, "main.go")
+	contents := [2][]byte{
+		[]byte("package main\n\nfunc Current() int { return 1 }\n"),
+		[]byte("package main\n\nfunc Current() int { return 2 }\n"),
+	}
+	if err := os.WriteFile(path, contents[0], 0o644); err != nil {
+		b.Fatal(err)
+	}
+	idx, result, err := Init(dir, Options{})
+	if err != nil || !result.Success {
+		b.Fatalf("Init: %v %+v", err, result)
+	}
+	b.Cleanup(func() { _ = idx.Close() })
+	b.ResetTimer()
+	for i := range b.N {
+		if err := os.WriteFile(path, contents[(i+1)%2], 0o644); err != nil {
+			b.Fatal(err)
+		}
+		result := idx.SyncFiles([]string{"main.go"}, Options{})
+		if len(result.Errors) != 0 || result.FilesModified != 1 {
+			b.Fatalf("SyncFiles: %+v", result)
+		}
+	}
+}
+
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/specscore-source-traceability#ac:sync-refreshes-feature-and-source-links
 func TestSyncRefreshesCanonicalSpecScoreTrace(t *testing.T) {
 	dir := t.TempDir()

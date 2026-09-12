@@ -399,6 +399,106 @@ func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
 	}
 }
 
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:event-storm-falls-back-to-full-reconciliation
+func TestWatchCommandConvergesAfterGitMerge(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping real watcher Git integration test in short mode")
+	}
+	dir := t.TempDir()
+	base := []byte("package merged\n\nfunc Base() int { return 1 }\n")
+	if err := os.WriteFile(filepath.Join(dir, "base.go"), base, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitForWatchTest(t, dir, "init", "-q")
+	runGitForWatchTest(t, dir, "config", "user.email", "watch@example.test")
+	runGitForWatchTest(t, dir, "config", "user.name", "Watch Test")
+	runGitForWatchTest(t, dir, "branch", "-M", "main")
+	runGitForWatchTest(t, dir, "add", "base.go")
+	runGitForWatchTest(t, dir, "commit", "-qm", "base")
+	runGitForWatchTest(t, dir, "checkout", "-qb", "feature")
+	feature := []byte("package merged\n\nfunc Feature() int { return Base() }\n")
+	if err := os.WriteFile(filepath.Join(dir, "feature.go"), feature, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitForWatchTest(t, dir, "add", "feature.go")
+	runGitForWatchTest(t, dir, "commit", "-qm", "feature")
+	runGitForWatchTest(t, dir, "checkout", "-q", "main")
+	mainOnly := []byte("package merged\n\nfunc MainOnly() int { return 2 }\n")
+	if err := os.WriteFile(filepath.Join(dir, "main_only.go"), mainOnly, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitForWatchTest(t, dir, "add", "main_only.go")
+	runGitForWatchTest(t, dir, "commit", "-qm", "main")
+	idx, _, err := indexer.Init(dir, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := idx.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("CODEGRAPH_WATCH_DEBOUNCE_MS", "50")
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := newWatchCmd()
+	cmd.SetArgs([]string{dir, "--verbose"})
+	var stdout, stderr lockedBuffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	done := make(chan error, 1)
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		done <- cmd.ExecuteContext(ctx)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-finished:
+		case <-time.After(3 * time.Second):
+		}
+	})
+	waitForCLI(t, 5*time.Second, func() bool { return strings.Contains(stdout.String(), "Watching ") })
+	runGitForWatchTest(t, dir, "merge", "--no-ff", "-qm", "merge feature", "feature")
+	waitForCLI(t, 8*time.Second, func() bool {
+		candidate, openErr := indexer.Open(dir, indexer.Options{})
+		if openErr != nil {
+			return false
+		}
+		defer func() { _ = candidate.Close() }()
+		for _, graphStore := range candidate.Stores() {
+			nodes, getErr := graphStore.GetNodesByName("Feature")
+			if getErr == nil && len(nodes) > 0 {
+				return true
+			}
+		}
+		return false
+	})
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("watch command: %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	idx, err = indexer.Open(dir, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	cleanDir := t.TempDir()
+	for rel, content := range map[string][]byte{"base.go": base, "feature.go": feature, "main_only.go": mainOnly} {
+		if err := os.WriteFile(filepath.Join(cleanDir, rel), content, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cleanIdx, _, err := indexer.Init(cleanDir, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cleanIdx.Close() }()
+	if got, want := graphFingerprint(t, idx), graphFingerprint(t, cleanIdx); !reflect.DeepEqual(got, want) {
+		t.Fatalf("post-merge watch graph differs from clean index\nwatch=%v\nclean=%v", got, want)
+	}
+}
+
 func graphFingerprint(t *testing.T, idx *indexer.Indexer) []string {
 	t.Helper()
 	var fingerprint []string

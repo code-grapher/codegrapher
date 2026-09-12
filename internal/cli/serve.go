@@ -1,123 +1,162 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
+	"github.com/specscore/codegrapher/freshness"
 	"github.com/specscore/codegrapher/indexer"
 	"github.com/specscore/codegrapher/mcp"
 	"github.com/spf13/cobra"
 )
 
-// newServeCmd implements `codegrapher serve`, mirroring the upstream CLI
-// surface (src/bin/codegraph.ts): -p/--path, --mcp, --no-watch.
-//
-// Only direct (stdio) mode is implemented. Upstream defaults to a shared
-// daemon + proxy transport selected via environment variables
-// (CODEGRAPH_NO_DAEMON opts out; CODEGRAPH_DAEMON_INTERNAL marks the spawned
-// daemon process) — that mode is not implemented here (KNOWN-BUGS gap C-1),
-// so daemon-specific env is either rejected with a clear message
-// (CODEGRAPH_DAEMON_INTERNAL — the caller explicitly asked this process to BE
-// the daemon) or noted and ignored (daemon default — we serve direct instead).
+// newServeCmd builds the composable foreground server. Capability flags narrow
+// selection; no capability flags means every capability in this build.
 func newServeCmd() *cobra.Command {
 	var pathFlag string
 	var mcpFlag bool
+	var watchFlag bool
+	var apiFlag bool
 	var noWatch bool
+	var verbose bool
 
 	cmd := &cobra.Command{
-		Use:   "serve",
-		Short: "Start CodeGraph as an MCP server for AI assistants",
-		Args:  cobra.NoArgs,
+		Use:   "serve [path]",
+		Short: "Serve CodeGrapher capabilities in the foreground",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Daemon-internal launch: this process was asked to BE the
-			// shared daemon — unimplemented, fail with a clear message.
 			if envTruthy(os.Getenv("CODEGRAPH_DAEMON_INTERNAL")) {
-				return fmt.Errorf("daemon mode is not implemented in this build (KNOWN-BUGS gap C-1): " +
-					"unset CODEGRAPH_DAEMON_INTERNAL and run `codegrapher serve --mcp` for direct stdio mode")
+				return errors.New("CODEGRAPH_DAEMON_INTERNAL is obsolete; use 'codegrapher daemon start' for background service")
+			}
+			explicitCapability := cmd.Flags().Changed("mcp") || cmd.Flags().Changed("watch") || cmd.Flags().Changed("api")
+			mcpEnabled := mcpFlag
+			watchEnabled := watchFlag
+			apiEnabled := apiFlag
+			if !explicitCapability {
+				mcpEnabled = true
+				watchEnabled = !noWatch
+				apiEnabled = false // Added to the default set when the public API lands.
+			} else if noWatch {
+				watchEnabled = false
+			}
+			if apiEnabled {
+				return errors.New("browser API capability is not yet available; omit --api until the next implementation phase")
+			}
+			if !mcpEnabled && !watchEnabled {
+				return errors.New("no serve capability selected")
 			}
 
-			// Mirror upstream: --no-watch routes through the same env-var
-			// chokepoint the watcher honors.
-			if noWatch {
-				_ = os.Setenv("CODEGRAPH_NO_WATCH", "1")
-			}
-
-			if !mcpFlag {
-				printServeInfo()
-				return nil
-			}
-
-			// Upstream defaults to daemon/proxy transport unless
-			// CODEGRAPH_NO_DAEMON is set; this build only implements direct
-			// stdio mode — say so once on stderr, then serve.
-			if !envTruthy(os.Getenv("CODEGRAPH_NO_DAEMON")) {
-				fmt.Fprintln(os.Stderr,
-					"codegraph: daemon/proxy mode is not implemented; serving in direct stdio mode "+
-						"(set CODEGRAPH_NO_DAEMON=1 to silence this notice)")
-			}
-
-			projectPath := resolveArg(nil)
+			projectArgs := args
 			if pathFlag != "" {
-				projectPath = resolveArg([]string{pathFlag})
+				projectArgs = []string{pathFlag}
+			}
+			projectPath := resolveArg(projectArgs)
+			if mismatch := indexer.DetectWorktreeIndexMismatch(watchStartPath(projectArgs), projectPath); mismatch != nil {
+				return fmt.Errorf("cannot serve a different git worktree's index:\n%s", indexer.WorktreeMismatchWarning(*mismatch))
 			}
 			if !indexer.IsInitialized(projectPath) {
-				return fmt.Errorf("CodeGraph not initialized in %s. Run 'codegrapher init' in that project first", projectPath)
+				return fmt.Errorf("CodeGraph not initialized in %s; run 'codegrapher init' there first", projectPath)
 			}
 
+			ctx, stopSignals := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stopSignals()
+			var owner *freshness.Owner
+			var output *watchOutput
+			if watchEnabled {
+				watchStdout := cmd.OutOrStdout()
+				if mcpEnabled {
+					watchStdout = cmd.ErrOrStderr()
+				}
+				output = newWatchOutput(watchStdout, cmd.ErrOrStderr(), verbose)
+				var err error
+				owner, err = startForegroundWatch(ctx, projectPath, output)
+				if err != nil {
+					if ctx.Err() != nil {
+						return nil
+					}
+					return err
+				}
+				defer func() {
+					_ = owner.Close()
+					output.stopped(projectPath)
+				}()
+			}
+
+			if !mcpEnabled {
+				return owner.Wait(ctx)
+			}
 			idx, err := indexer.Open(projectPath, indexer.Options{})
 			if err != nil {
-				return fmt.Errorf("failed to start server: %w", err)
+				return fmt.Errorf("open MCP index: %w", err)
 			}
 			defer func() { _ = idx.Close() }()
-
 			backend := mcp.NewMultiBackend(idx.Stores(), projectPath)
 			server := mcp.NewServer(backend)
-			return server.Serve(cmd.Context(), os.Stdin, os.Stdout)
+			if owner == nil {
+				return server.Serve(ctx, os.Stdin, cmd.OutOrStdout())
+			}
+			return runCombinedServe(ctx, owner, server, os.Stdin, cmd.OutOrStdout())
 		},
 	}
 
-	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path (optional for MCP mode)")
-	cmd.Flags().BoolVar(&mcpFlag, "mcp", false, "Run as MCP server (stdio transport)")
-	cmd.Flags().BoolVar(&noWatch, "no-watch", false, "Disable the file watcher (no auto-sync; useful on slow filesystems like WSL2 /mnt drives)")
+	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
+	cmd.Flags().BoolVar(&mcpFlag, "mcp", false, "Serve MCP over stdio")
+	cmd.Flags().BoolVar(&watchFlag, "watch", false, "Keep the repository index current")
+	cmd.Flags().BoolVar(&apiFlag, "api", false, "Serve the authenticated browser HTTP API")
+	cmd.Flags().BoolVar(&noWatch, "no-watch", false, "Disable watching when using the default capability set")
+	_ = cmd.Flags().MarkDeprecated("no-watch", "use explicit capability flags to select only the services you need")
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show watcher events, operations, timings, and batch statistics")
 	return cmd
 }
 
-// envTruthy mirrors upstream's daemon env parsing: set, not "0", not "false".
+type mcpServer interface {
+	Serve(context.Context, io.Reader, io.Writer) error
+}
+
+type freshnessSession interface {
+	Wait(context.Context) error
+	Close() error
+}
+
+func runCombinedServe(ctx context.Context, owner freshnessSession, server mcpServer, input io.Reader, output io.Writer) error {
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	mcpDone := make(chan error, 1)
+	watchDone := make(chan error, 1)
+	go func() { mcpDone <- server.Serve(runCtx, input, output) }()
+	go func() { watchDone <- owner.Wait(runCtx) }()
+	var err error
+	mcpFinished := false
+	select {
+	case err = <-mcpDone:
+		mcpFinished = true
+	case err = <-watchDone:
+	case <-ctx.Done():
+	}
+	cancel()
+	_ = owner.Close()
+	if mcpFinished {
+		<-watchDone
+	} else {
+		select {
+		case <-mcpDone:
+		case <-time.After(2 * time.Second):
+		}
+	}
+	return err
+}
+
+// envTruthy retains compatibility with the earlier serve environment parsing.
 func envTruthy(raw string) bool {
 	if raw == "" {
 		return false
 	}
 	return raw != "0" && strings.ToLower(raw) != "false"
-}
-
-// printServeInfo mirrors the upstream no---mcp info screen (stderr so stdout
-// stays clean for piped/stdio usage).
-func printServeInfo() {
-	fmt.Fprint(os.Stderr, `
-CodeGraph MCP Server
-
-Use --mcp flag to start the MCP server
-
-To use with Claude Code, add to your MCP configuration:
-
-{
-  "mcpServers": {
-    "codegrapher": {
-	  "command": "codegrapher",
-      "args": ["serve", "--mcp"]
-    }
-  }
-}
-
-Available tools:
-  codegraph_explore   - Primary: source of the relevant symbols for any question
-  codegraph_search    - Search for code symbols
-  codegraph_callers   - Find callers of a symbol
-  codegraph_callees   - Find what a symbol calls
-  codegraph_impact    - Analyze impact of changes
-  codegraph_node      - Get symbol details
-  codegraph_files     - Get project file structure
-  codegraph_status    - Get index status
-`)
 }

@@ -61,3 +61,19 @@ jobs:
           cache: true
       - name: go mod tidy -diff
         run: go mod tidy -diff
+
+  daemon-platform:
+    name: daemon lifecycle (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.0'
+          cache: true
+      - name: Test daemon package and built-binary lifecycle
+        run: go test -count=1 ./daemon

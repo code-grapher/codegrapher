@@ -1,16 +1,17 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/specscore/codegrapher/freshness"
 	"github.com/specscore/codegrapher/indexer"
 	"github.com/specscore/codegrapher/watch"
 	"github.com/spf13/cobra"
@@ -32,60 +33,50 @@ func newWatchCmd() *cobra.Command {
 			if mismatch := indexer.DetectWorktreeIndexMismatch(startPath, projectPath); mismatch != nil {
 				return fmt.Errorf("cannot watch a different git worktree's index:\n%s", indexer.WorktreeMismatchWarning(*mismatch))
 			}
-			if !indexer.IsInitialized(projectPath) {
-				return fmt.Errorf("CodeGraph not initialized in %s; run 'codegrapher init' there first", projectPath)
-			}
-
-			idx, err := indexer.Open(projectPath, indexer.Options{})
-			if err != nil {
-				return fmt.Errorf("open index: %w", err)
-			}
-			defer func() { _ = idx.Close() }()
-
 			output := newWatchOutput(cmd.OutOrStdout(), cmd.ErrOrStderr(), verbose)
-			pathFilter := indexer.NewPathFilter(projectPath)
-			watcher := watch.NewWithPaths(projectPath, func(paths []string) (watch.SyncResult, error) {
-				return reconcilePathsForWatch(idx, paths)
-			}, watch.Options{
-				IsIgnored:     pathFilter.IsIgnored,
-				OnObservation: output.observe,
-			})
-			if err := watcher.StartWithError(); err != nil {
-				return fmt.Errorf("cannot watch %s: %w", projectPath, err)
-			}
-			defer watcher.StopAndWait()
-
-			// Establish the native watch set first, then reconcile. Events arriving
-			// during startup remain pending for the normal debounced path, closing
-			// the otherwise unavoidable scan-to-watch race.
-			started := time.Now()
-			const startupOperationID = 0
-			output.startupStarted(started, startupOperationID)
-			startupResult, err := reconcileStartupForWatch(idx)
+			owner, err := startForegroundWatch(ctx, projectPath, output)
 			if err != nil {
-				return fmt.Errorf("startup reconciliation: %w", err)
+				if ctx.Err() != nil {
+					return nil
+				}
+				return err
 			}
-			output.startupCompleted(time.Now(), startupOperationID, time.Since(started), startupResult)
-			if ctx.Err() != nil {
-				watcher.StopAndWait()
-				return nil
-			}
-			output.watching(projectPath)
+			defer func() { _ = owner.Close() }()
 
-			select {
-			case <-ctx.Done():
-				watcher.StopAndWait()
+			err = owner.Wait(ctx)
+			if closeErr := owner.Close(); err == nil {
+				err = closeErr
+			}
+			if ctx.Err() != nil {
 				output.stopped(projectPath)
 				return nil
-			case fatalErr := <-watcher.FatalErrors():
-				watcher.StopAndWait()
-				return fmt.Errorf("watch failed: %w", fatalErr)
 			}
+			return err
 		},
 	}
 
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show received events, operation lifecycle, timings, and batch statistics")
 	return cmd
+}
+
+func startForegroundWatch(ctx context.Context, projectPath string, output *watchOutput) (*freshness.Owner, error) {
+	const startupOperationID = 0
+	owner, _, err := freshness.Start(ctx, projectPath, freshness.Options{
+		Watch: watch.Options{OnObservation: output.observe},
+		OnStartupStarted: func(at time.Time) {
+			output.startupStarted(at, startupOperationID)
+		},
+		OnStartupDone: func(at time.Time, duration time.Duration, result watch.SyncResult, startupErr error) {
+			if startupErr == nil {
+				output.startupCompleted(at, startupOperationID, duration, result)
+			}
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	output.watching(projectPath)
+	return owner, nil
 }
 
 func watchStartPath(args []string) string {
@@ -103,42 +94,7 @@ func watchStartPath(args []string) string {
 }
 
 func reconcilePathsForWatch(idx *indexer.Indexer, paths []string) (watch.SyncResult, error) {
-	if paths == nil {
-		return mapReconcileResult(idx.Rebuild(indexer.Options{}))
-	}
-	return mapReconcileResult(idx.SyncFiles(paths, indexer.Options{}))
-}
-
-func reconcileStartupForWatch(idx *indexer.Indexer) (watch.SyncResult, error) {
-	return mapReconcileResult(idx.Sync(indexer.Options{}))
-}
-
-func mapReconcileResult(result indexer.SyncResult) (watch.SyncResult, error) {
-	mapped := watch.SyncResult{
-		FilesChanged:  result.FilesAdded + result.FilesModified + result.FilesRemoved,
-		FilesChecked:  result.FilesChecked,
-		FilesAdded:    result.FilesAdded,
-		FilesModified: result.FilesModified,
-		FilesRemoved:  result.FilesRemoved,
-		NodesUpdated:  result.NodesUpdated,
-		DurationMs:    result.DurationMs,
-		FullReindex:   result.FullReindex,
-	}
-	if len(result.Errors) > 0 {
-		messages := make([]string, 0, len(result.Errors))
-		for _, extractionErr := range result.Errors {
-			message := extractionErr.Message
-			if extractionErr.FilePath != "" {
-				message = extractionErr.FilePath + ": " + message
-			}
-			messages = append(messages, message)
-		}
-		return mapped, fmt.Errorf("index reconciliation failed: %s", strings.Join(messages, "; "))
-	}
-	if result.LockUnavailable {
-		return mapped, watch.NewLockUnavailableError("")
-	}
-	return mapped, nil
+	return freshness.ReconcilePaths(idx, paths)
 }
 
 type watchOutput struct {
@@ -164,18 +120,27 @@ func (o *watchOutput) observe(observation watch.Observation) {
 		}
 	case watch.ObservationOperationStarted:
 		if o.verbose {
+			reason := observation.FullReconcileReason
+			if reason == "" {
+				reason = "none"
+			}
 			_, _ = fmt.Fprintf(o.stdout,
-				"%s operation=%d started kind=%s events=%d dirty_paths=%d coalesced=%d ignored=%d queued=%s debounce=%s\n",
+				"%s operation=%d started kind=%s reason=%s events=%d dirty_paths=%d coalesced=%d ignored=%d queued=%s debounce=%s\n",
 				prefix, observation.OperationID, observation.Operation,
+				reason,
 				observation.EventsReceived, observation.DirtyPaths, observation.CoalescedEvents,
 				observation.IgnoredEvents, observationDuration(observation.QueuedFor), observationDuration(observation.Debounce))
 		}
 	case watch.ObservationOperationCompleted:
 		if o.verbose {
+			reason := observation.FullReconcileReason
+			if reason == "" {
+				reason = "none"
+			}
 			_, _ = fmt.Fprintf(o.stdout,
-				"%s operation=%d completed kind=%s duration=%s total=%s no_op=%t events=%d dirty_paths=%d coalesced=%d ignored=%d checked=%d added=%d modified=%d removed=%d nodes_updated=%d full_reindex=%t\n",
+				"%s operation=%d completed kind=%s duration=%s total=%s no_op=%t reason=%s events=%d dirty_paths=%d coalesced=%d ignored=%d checked=%d added=%d modified=%d removed=%d nodes_updated=%d full_reindex=%t\n",
 				prefix, observation.OperationID, observation.Operation, observationDuration(observation.Duration),
-				observationDuration(observation.TotalDuration), observation.NoOp,
+				observationDuration(observation.TotalDuration), observation.NoOp, reason,
 				observation.EventsReceived, observation.DirtyPaths, observation.CoalescedEvents, observation.IgnoredEvents,
 				observation.Result.FilesChecked, observation.Result.FilesAdded,
 				observation.Result.FilesModified, observation.Result.FilesRemoved,

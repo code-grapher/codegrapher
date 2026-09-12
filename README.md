@@ -34,7 +34,11 @@ codegrapher callers <symbol> What calls this symbol              (--json)
 codegrapher callees <symbol> What this symbol calls              (--json)
 codegrapher impact <symbol>  Blast-radius analysis               (--json)
 codegrapher affected [files] Test files affected by changed sources (--json)
-codegrapher serve            MCP server (stdio)
+codegrapher watch [path]     Compatibility foreground watcher  (--verbose)
+codegrapher serve [path]     Composable foreground server       (--watch, --mcp)
+codegrapher daemon start     Background freshness owner
+codegrapher daemon status    Daemon lifecycle/freshness health  (--json)
+codegrapher daemon stop      Gracefully stop background owner
 codegrapher export [path]    Export index as INGR snapshot files
 codegrapher import [path]    Import an INGR snapshot into the local store
 codegrapher unlock [path]    Remove a stale lock file
