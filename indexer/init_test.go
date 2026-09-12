@@ -336,3 +336,18 @@ func TestStoresFilteredMergesNodeScope(t *testing.T) {
 		t.Errorf("node-v0 filter returned %d stores, want 1", n)
 	}
 }
+
+func TestInitEmptyProjectCreatesUsableGraph(t *testing.T) {
+	dir := t.TempDir()
+	idx, result, err := Init(dir, Options{})
+	if err != nil || !result.Success {
+		t.Fatalf("Init empty: %+v %v", result, err)
+	}
+	defer func() { _ = idx.Close() }()
+	if idx.Store() == nil {
+		t.Fatal("empty project has no usable primary store")
+	}
+	if _, err := idx.RefreshForRead(Options{}); err != nil {
+		t.Fatalf("refresh empty: %v", err)
+	}
+}

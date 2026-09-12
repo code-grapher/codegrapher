@@ -38,6 +38,9 @@ func Init(projectRoot string, opts Options) (*Indexer, IndexResult, error) {
 	if err != nil {
 		return nil, IndexResult{}, err
 	}
+	if _, err := reg.Store(scope.Scope{Language: model.LangUnknown, Version: "1"}); err != nil {
+		return nil, IndexResult{}, err
+	}
 	idx := newIndexer(root, reg)
 	result := idx.IndexAll(opts)
 	return idx, result, nil
@@ -151,6 +154,20 @@ func (idx *Indexer) indexAllLocked(opts Options) IndexResult {
 	// Phase 3: resolution.
 	if result.Success && result.FilesIndexed > 0 {
 		idx.resolveAll(opts, &result)
+		result.Success = !hasSevereError(result.Errors)
+	}
+	if result.Success && result.FilesIndexed == 0 {
+		for _, s := range idx.Stores() {
+			if err := s.SetMetadata("indexed_with_version", PackageVersion); err != nil {
+				result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "metadata_error"})
+			}
+			if err := s.SetMetadata("indexed_with_extraction_version", strconv.Itoa(ExtractionVersion)); err != nil {
+				result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "metadata_error"})
+			}
+		}
+		if err := idx.markCurrentGitHead(); err != nil {
+			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "git_head_metadata_error"})
+		}
 		result.Success = !hasSevereError(result.Errors)
 	}
 
@@ -309,6 +326,13 @@ func (idx *Indexer) extractAndStore(files []string, opts Options, result *IndexR
 					continue
 				}
 				s, serr := idx.scopeStoreForFile(job.path, job.lang)
+				if serr == nil {
+					// A policy skip must not leave symbols from the previous, now
+					// uninspectable source body available to node/source retrieval.
+					if err := s.DeleteFile(job.path); err != nil {
+						serr = err
+					}
+				}
 				if serr == nil {
 					serr = s.UpsertFile(model.FileRecord{Path: job.path, ContentHash: HashContent(content), Language: job.lang, Size: job.size, ModifiedAt: job.mtimeMs, IndexedAt: now(), Errors: []model.ExtractionError{skipErr}})
 				}

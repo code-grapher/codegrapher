@@ -747,9 +747,8 @@ func TestSyncChangedCalleeFailureDoesNotRestoreDuplicateEdges(t *testing.T) {
 		t.Fatalf("caller: %v %d", err, len(caller))
 	}
 
-	// A recognized source file above the parser cap cannot replace its old
-	// nodes. Both retries must report the failed refresh and leave the one
-	// persisted caller edge untouched.
+	// A policy-skipped replacement removes stale definition nodes and their
+	// callers' target edge; retries must not recreate stale graph data.
 	writeFile(t, filepath.Join(dir, "lib.go"), strings.Repeat("x", MaxFileSize+1))
 	for attempt := 0; attempt < 2; attempt++ {
 		res := idx.SyncFiles([]string{"lib.go"}, Options{})
@@ -757,8 +756,8 @@ func TestSyncChangedCalleeFailureDoesNotRestoreDuplicateEdges(t *testing.T) {
 			t.Fatalf("attempt %d errors = none, want extraction failure", attempt)
 		}
 		edges, err := idx.Store().GetOutgoingEdges(caller[0].ID, []model.EdgeKind{model.EdgeCalls}, "")
-		if err != nil || len(edges) != 1 {
-			t.Fatalf("attempt %d edges = %+v, %v; want exactly one original edge", attempt, edges, err)
+		if err != nil || len(edges) != 0 {
+			t.Fatalf("attempt %d edges = %+v, %v; want no stale edge", attempt, edges, err)
 		}
 	}
 }
@@ -934,5 +933,35 @@ func TestRefreshForReadIgnoresUnchangedOversizedPolicySkip(t *testing.T) {
 	res, err := idx.RefreshForRead(Options{})
 	if err != nil || len(res.Errors) != 0 || !hasNodeNamed(t, idx, "Generated") {
 		t.Fatalf("shrunk generated refresh: %+v %v", res, err)
+	}
+}
+
+func TestOversizedReplacementRemovesStaleSymbolsUntilShrunk(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "lib.go")
+	writeFile(t, path, "package main\nfunc Helper() {}\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, path, strings.Repeat("x", MaxFileSize+1))
+	first := idx.SyncFiles([]string{"lib.go"}, Options{})
+	if len(first.Errors) == 0 {
+		t.Fatal("first oversized replacement should warn")
+	}
+	for i := 0; i < 2; i++ {
+		if hasNodeNamed(t, idx, "Helper") {
+			t.Fatalf("attempt %d retained stale Helper", i)
+		}
+		res := idx.SyncFiles([]string{"lib.go"}, Options{})
+		if len(res.Errors) != 0 {
+			t.Fatalf("repeat %d = %+v", i, res.Errors)
+		}
+	}
+	writeFile(t, path, "package main\nfunc Recovered() {}\n")
+	res := idx.SyncFiles([]string{"lib.go"}, Options{})
+	if len(res.Errors) != 0 || !hasNodeNamed(t, idx, "Recovered") {
+		t.Fatalf("shrink = %+v", res)
 	}
 }
