@@ -102,6 +102,9 @@ func (idx *Indexer) IndexAll(opts Options) IndexResult {
 		}
 	}
 	defer idx.lock.Release()
+	if err := idx.invalidateGitHead(); err != nil {
+		return IndexResult{Success: false, Errors: []model.ExtractionError{{Message: err.Error(), Severity: "error", Code: "git_head_metadata_error"}}}
+	}
 
 	return idx.indexAllLocked(opts)
 }

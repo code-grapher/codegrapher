@@ -27,6 +27,9 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 		return SyncResult{}
 	}
 	defer idx.lock.Release()
+	if err := idx.invalidateGitHead(); err != nil {
+		return SyncResult{Errors: []model.ExtractionError{{Message: err.Error(), Severity: "error", Code: "git_head_metadata_error"}}}
+	}
 
 	now := opts.clock()
 	start := now()
@@ -162,6 +165,9 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 		return SyncResult{}
 	}
 	defer idx.lock.Release()
+	if err := idx.invalidateGitHead(); err != nil {
+		return SyncResult{Errors: []model.ExtractionError{{Message: err.Error(), Severity: "error", Code: "git_head_metadata_error"}}}
+	}
 
 	now := opts.clock()
 	start := now()
@@ -242,6 +248,9 @@ func (idx *Indexer) Rebuild(opts Options) SyncResult {
 		return SyncResult{}
 	}
 	defer idx.lock.Release()
+	if err := idx.invalidateGitHead(); err != nil {
+		return SyncResult{Errors: []model.ExtractionError{{Message: err.Error(), Severity: "error", Code: "git_head_metadata_error"}}}
+	}
 	now := opts.clock()
 	start := now()
 	return idx.fullRebuildLocked(opts, start, now)
