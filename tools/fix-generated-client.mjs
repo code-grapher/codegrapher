@@ -93,3 +93,25 @@ function fetchAdapter(fetchImpl: typeof globalThis.fetch): HttpClient {
 }
 `
 await writeFile('clients/typescript/src/transport.ts', transport, 'utf8')
+
+const packagePath = 'clients/typescript/package.json'
+const packageJson = JSON.parse(await readFile(packagePath, 'utf8'))
+packageJson.files = ['dist']
+packageJson.types = './dist/index.d.ts'
+packageJson.scripts = {
+  ...packageJson.scripts,
+  prepare: 'pnpm run build',
+}
+packageJson.exports = {
+  '.': {
+    types: './dist/index.d.ts',
+    import: './dist/index.js',
+    default: './dist/index.js',
+  },
+  './models': {
+    types: './dist/models/index.d.ts',
+    import: './dist/models/index.js',
+    default: './dist/models/index.js',
+  },
+}
+await writeFile(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`, 'utf8')

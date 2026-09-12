@@ -7,7 +7,8 @@
     "generate:contract": "tsp compile typespec && node tools/fix-generated-client.mjs",
     "check:contract": "node tools/check-generated-contract.mjs",
     "test:contract-drift": "node tools/test-contract-drift.mjs",
-    "build:client": "pnpm --dir clients/typescript build"
+    "build:client": "pnpm --dir clients/typescript build",
+    "test:client-package": "node tools/test-generated-client-package.mjs"
   },
   "devDependencies": {
     "@typespec/compiler": "1.16.0",
