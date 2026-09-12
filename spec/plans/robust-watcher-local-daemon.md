@@ -1,11 +1,12 @@
 ---
 format: https://specscore.md/plan-specification
-status: Executing
+status: Implemented
 ---
 
 # Plan: Robust watcher and local daemon
 
-**Status:** Executing
+**Status:** Implemented
+**Reconciled:** 2026-09-12
 **Source Feature:** automatic-index-freshness
 **Date:** 2026-09-12
 **Owner:** alex
@@ -162,7 +163,7 @@ full process journeys. Verify no listener or process survives test cleanup.
 
 **Verifies:** automatic-index-freshness#ac:event-storm-falls-back-to-full-reconciliation, automatic-index-freshness#ac:daemon-lifecycle-keeps-an-index-current, automatic-index-freshness#ac:duplicate-daemon-ownership-is-rejected, automatic-index-freshness#ac:daemon-control-rejects-unauthenticated-callers, automatic-index-freshness#ac:daemon-failure-state-is-truthful
 **Depends-On:** 6
-**Status:** in_progress
+**Status:** complete
 
 Run focused tests and race checks, the repository's required gates once,
 SpecScore lint, and an independent adversarial review of the exact diff. Fix or
@@ -193,4 +194,12 @@ not duplicate their original acceptance suite:
 None at this time.
 
 ---
+
+## Resolution
+
+**Reconciled Executing → Implemented outside the tracked `change-status` flow** (1 task(s) marked complete; this did not walk the legal-transition matrix).
+
+Implementation landed through WB, v0.7.0 was published and installed, and the isolated installed-binary daemon lifecycle smoke passed.
+
+Evidence: a038ed45f913047329c07441da6f1c19f3de61ff, https://github.com/code-grapher/codegrapher/pull/25, https://github.com/code-grapher/codegrapher/releases/tag/v0.7.0
 *This document follows the https://specscore.md/plan-specification*
