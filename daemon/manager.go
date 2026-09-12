@@ -156,8 +156,10 @@ func (m *Manager) start(ctx context.Context, projectPath string, lockHeld bool) 
 	child := exec.Command(m.Executable, "daemon", "_run", projectPath)
 	child.Env = append(os.Environ(), envStateDir+"="+m.StateDir, envNonce+"="+nonce, envToken+"="+token)
 	child.Stdin = nil
-	child.Stdout = nil
-	child.Stderr = nil
+	// Bootstrap errors and panics still reach the durable log. Once Run starts,
+	// structured daemon logging uses the size-aware rotating writer.
+	child.Stdout = logFile
+	child.Stderr = logFile
 	configureDetached(child)
 	if err := child.Start(); err != nil {
 		initial.Lifecycle = LifecycleFailed

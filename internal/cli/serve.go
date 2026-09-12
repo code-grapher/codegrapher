@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/specscore/codegrapher/freshness"
 	"github.com/specscore/codegrapher/indexer"
@@ -119,7 +120,12 @@ type mcpServer interface {
 	Serve(context.Context, io.Reader, io.Writer) error
 }
 
-func runCombinedServe(ctx context.Context, owner *freshness.Owner, server mcpServer, input io.Reader, output io.Writer) error {
+type freshnessSession interface {
+	Wait(context.Context) error
+	Close() error
+}
+
+func runCombinedServe(ctx context.Context, owner freshnessSession, server mcpServer, input io.Reader, output io.Writer) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	mcpDone := make(chan error, 1)
@@ -127,13 +133,23 @@ func runCombinedServe(ctx context.Context, owner *freshness.Owner, server mcpSer
 	go func() { mcpDone <- server.Serve(runCtx, input, output) }()
 	go func() { watchDone <- owner.Wait(runCtx) }()
 	var err error
+	mcpFinished := false
 	select {
 	case err = <-mcpDone:
+		mcpFinished = true
 	case err = <-watchDone:
 	case <-ctx.Done():
 	}
 	cancel()
 	_ = owner.Close()
+	if mcpFinished {
+		<-watchDone
+	} else {
+		select {
+		case <-mcpDone:
+		case <-time.After(2 * time.Second):
+		}
+	}
 	return err
 }
 
