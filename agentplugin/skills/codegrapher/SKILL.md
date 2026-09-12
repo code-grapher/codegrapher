@@ -92,7 +92,8 @@ route with call-site locations and provenance. It does not guess ambiguous
 endpoint names; use the exact IDs in its compact candidates. Default output is
 metadata/signatures. `--source=footer` emits that metadata before deduplicated
 raw Markdown code blocks; `--source=inline --format json` is available when
-automation needs code in JSON.
+automation needs code in JSON. It is bounded by `--max-hops`, `--max-nodes`,
+and `--max-edges`; respect a truncated result before requesting a wider search.
 
 When debugging a runtime failure, map the supplied trace directly instead of
 searching each `file:line` frame by hand:
@@ -107,7 +108,9 @@ location frames. It preserves runtime frame order and labels unmatched or
 ambiguous frames instead of guessing. It selects the smallest enclosing
 callable for a unique file+line match and deduplicates recursive/repeated
 source bodies. Runtime stack adjacency is not claimed to be a static graph
-edge.
+edge. Use `--revision <deployed-git-sha>` when the trace must match a known
+checkout. A `mismatch` or `stale` frame is evidence to investigate, not a
+source-read instruction; CodeGrapher withholds source in those cases.
 
 Use relationship verbs when you need a wider or transitive answer:
 

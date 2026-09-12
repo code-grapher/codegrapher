@@ -29,8 +29,8 @@ codegrapher sync [path]      Incremental re-index since last index
 codegrapher status [path]    Index stats                         (--json)
 codegrapher query <search>   Symbol search                       (-l limit, -k kind, --brief, --json)
 codegrapher node <symbol>    Symbol metadata/source/relations    (--source[=footer|inline], --relations, --file, --line, --json)
-codegrapher path <from> <to> One bounded static call path        (--max-hops, --source[=footer|inline], --json)
-codegrapher stacktrace [file] Map runtime frames to symbols       (--source[=footer|inline], --json)
+codegrapher path <from> <to> One bounded static call path        (--max-hops, --max-nodes, --max-edges, --source[=footer|inline], --json)
+codegrapher stacktrace [file] Map runtime frames to symbols       (--max-bytes, --max-frames, --revision, --source[=footer|inline], --json)
 codegrapher files            Indexed file tree                   (--json)
 codegrapher callers <symbol> What calls this symbol              (--json)
 codegrapher callees <symbol> What this symbol calls              (--json)
@@ -54,7 +54,7 @@ calls are not. It returns one deterministic shortest directed `calls` path;
 the default is signatures and locations, not source bodies.
 
 ```sh
-codegrapher path main NewRootCmd --max-hops 8
+codegrapher path main NewRootCmd --max-hops 8 --max-nodes 1000 --max-edges 5000
 codegrapher path "function:exact-start-id" "function:exact-target-id" --source=footer
 ```
 
@@ -62,6 +62,8 @@ Each hop includes edge kind, call-site line/column, and extraction provenance.
 Ambiguous endpoints produce candidates and require an exact ID. `--source` is
 Markdown-only: `footer` writes compact JSON metadata followed by deduplicated,
 raw language fences; `inline` is also valid with `--format json`.
+The traversal is explicitly bounded by hops, visited nodes, and inspected
+edges; a truncated result says so rather than silently broadening the search.
 
 ### Read a runtime stack without file-chunk hunting
 
@@ -72,6 +74,7 @@ indexed callable. It accepts a trace file, `-`, or stdin:
 codegrapher stacktrace panic.txt
 pbpaste | codegrapher stacktrace --source=footer
 codegrapher stacktrace trace.txt --source=inline --format json
+codegrapher stacktrace prod-panic.txt --revision "<deployed-git-sha>"
 ```
 
 Go, V8 JavaScript/TypeScript, Python, JVM, .NET, Rust, and generic
@@ -79,6 +82,10 @@ Go, V8 JavaScript/TypeScript, Python, JVM, .NET, Rust, and generic
 frames are preserved. A stack is runtime evidence, so adjacent frames do not
 need a static graph edge. Source is deduplicated for recursion and repeated
 frames, and only returned after the indexed file hash is verified.
+Input bytes and mapped-frame count are bounded. A runtime function name that
+contradicts the symbol containing its `file:line` is reported as `mismatch`,
+and a shifted line with a matching name in the same file is reported as
+`stale`; neither silently returns source.
 
 ## Snapshot / viewer
 

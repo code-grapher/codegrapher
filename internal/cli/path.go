@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 
 	"github.com/specscore/codegrapher/indexer"
 	"github.com/specscore/codegrapher/model"
@@ -23,11 +22,22 @@ type PathResult struct {
 	Hint             string        `json:"hint,omitempty"`
 	Freshness        NodeFreshness `json:"freshness"`
 	MaxHops          int           `json:"maxHops"`
+	MaxNodes         int           `json:"maxNodes"`
+	MaxEdges         int           `json:"maxEdges"`
+	VisitedNodes     int           `json:"visitedNodes"`
+	VisitedEdges     int           `json:"visitedEdges"`
 	Truncated        bool          `json:"truncated,omitempty"`
 	Steps            []PathStep    `json:"steps,omitempty"`
 	StartCandidates  []BriefSymbol `json:"startCandidates,omitempty"`
 	TargetCandidates []BriefSymbol `json:"targetCandidates,omitempty"`
 }
+
+const (
+	defaultPathMaxNodes = 1_000
+	defaultPathMaxEdges = 5_000
+)
+
+type pathLimits struct{ maxNodes, maxEdges int }
 
 // PathStep is a symbol on a path. Edge describes the transition from the
 // preceding step; it is omitted for the starting symbol.
@@ -47,7 +57,7 @@ type PathEdge struct {
 func newPathCmd() *cobra.Command {
 	var jsonOut bool
 	var format, sourceMode, pathFlag, scope string
-	var maxHops int
+	var maxHops, maxNodes, maxEdges int
 	cmd := &cobra.Command{
 		Use:   "path <start-symbol-or-id> <target-symbol-or-id>",
 		Short: "Find one bounded directed call path between two symbols",
@@ -72,7 +82,7 @@ func newPathCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			result, err := findCallPath(idx, splitCSV(scope), args[0], args[1], maxHops, sourceMode != "", fresh)
+			result, err := findCallPathWithLimits(idx, splitCSV(scope), args[0], args[1], maxHops, pathLimits{maxNodes: maxNodes, maxEdges: maxEdges}, sourceMode != "", fresh)
 			if err != nil {
 				return err
 			}
@@ -97,6 +107,8 @@ func newPathCmd() *cobra.Command {
 	cmd.Flags().StringVar(&sourceMode, "source", "", "Include path source: footer (default when set) or inline")
 	cmd.Flags().Lookup("source").NoOptDefVal = "footer"
 	cmd.Flags().IntVar(&maxHops, "max-hops", 8, "Maximum directed call edges to traverse")
+	cmd.Flags().IntVar(&maxNodes, "max-nodes", defaultPathMaxNodes, "Maximum graph nodes to visit")
+	cmd.Flags().IntVar(&maxEdges, "max-edges", defaultPathMaxEdges, "Maximum graph edges to inspect")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
 	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
 	return cmd
@@ -119,9 +131,16 @@ func nodeProjectPath(pathFlag string) (string, error) {
 }
 
 func findCallPath(idx *indexer.Indexer, scopes []string, startQuery, targetQuery string, maxHops int, wantSource bool, freshness NodeFreshness) (PathResult, error) {
-	result := PathResult{Start: startQuery, Target: targetQuery, Freshness: freshness, MaxHops: maxHops, Steps: []PathStep{}}
-	if maxHops < 0 {
-		return result, errors.New("--max-hops must not be negative")
+	return findCallPathWithLimits(idx, scopes, startQuery, targetQuery, maxHops, pathLimits{maxNodes: defaultPathMaxNodes, maxEdges: defaultPathMaxEdges}, wantSource, freshness)
+}
+
+func findCallPathWithLimits(idx *indexer.Indexer, scopes []string, startQuery, targetQuery string, maxHops int, limits pathLimits, wantSource bool, freshness NodeFreshness) (PathResult, error) {
+	result := PathResult{Start: startQuery, Target: targetQuery, Freshness: freshness, MaxHops: maxHops, MaxNodes: limits.maxNodes, MaxEdges: limits.maxEdges, Steps: []PathStep{}}
+	if maxHops < 0 || limits.maxNodes < 1 || limits.maxEdges < 1 {
+		if maxHops < 0 {
+			return result, errors.New("--max-hops must not be negative")
+		}
+		return result, errors.New("--max-nodes and --max-edges must be positive")
 	}
 	stores := idx.StoresFiltered(scopes)
 	starts, err := findNodeMatches(stores, startQuery)
@@ -158,6 +177,7 @@ func findCallPath(idx *indexer.Indexer, scopes []string, startQuery, targetQuery
 		hops     int
 	}
 	seenByID := map[string]seen{start.node.ID: {hops: 0}}
+	result.VisitedNodes = 1
 	queue := []string{start.node.ID}
 	found := false
 	for len(queue) > 0 && !found {
@@ -165,23 +185,36 @@ func findCallPath(idx *indexer.Indexer, scopes []string, startQuery, targetQuery
 		queue = queue[1:]
 		entry := seenByID[current]
 		if entry.hops >= maxHops {
-			edges, err := start.store.GetOutgoingEdges(current, []model.EdgeKind{model.EdgeCalls}, "")
+			edges, more, err := boundedCallEdges(start.store, current, limits.maxEdges-result.VisitedEdges)
 			if err != nil {
 				return result, err
 			}
-			result.Truncated = result.Truncated || len(edges) > 0
+			result.VisitedEdges += len(edges)
+			result.Truncated = result.Truncated || more
+			for _, edge := range edges {
+				if _, alreadySeen := seenByID[edge.Target]; !alreadySeen {
+					result.Truncated = true
+					break
+				}
+			}
 			continue
 		}
-		edges, err := start.store.GetOutgoingEdges(current, []model.EdgeKind{model.EdgeCalls}, "")
+		edges, more, err := boundedCallEdges(start.store, current, limits.maxEdges-result.VisitedEdges)
 		if err != nil {
 			return result, err
 		}
-		sort.Slice(edges, func(i, j int) bool { return store.EdgeKey(edges[i]) < store.EdgeKey(edges[j]) })
+		result.VisitedEdges += len(edges)
+		result.Truncated = result.Truncated || more
 		for _, edge := range edges {
 			if _, exists := seenByID[edge.Target]; exists {
 				continue
 			}
+			if result.VisitedNodes >= limits.maxNodes {
+				result.Truncated = true
+				continue
+			}
 			seenByID[edge.Target] = seen{previous: current, edge: edge, hops: entry.hops + 1}
+			result.VisitedNodes++
 			if edge.Target == target.node.ID {
 				found = true
 				break
@@ -192,7 +225,7 @@ func findCallPath(idx *indexer.Indexer, scopes []string, startQuery, targetQuery
 	if !found {
 		result.Status = "not_found"
 		if result.Truncated {
-			result.Hint = "No path was found within --max-hops; increase it if a longer static call chain is acceptable."
+			result.Hint = "No path was found within the configured hop/node/edge bounds; increase the relevant limit if a wider static search is acceptable."
 		} else {
 			result.Hint = "No directed calls edge connects the selected symbols."
 		}
@@ -225,22 +258,41 @@ func findCallPath(idx *indexer.Indexer, scopes []string, startQuery, targetQuery
 	return addPathSources(idx, scopes, result, wantSource)
 }
 
+// boundedCallEdges asks for one sentinel row beyond the remaining allowance,
+// so the caller can state truncation without loading an unbounded adjacency.
+func boundedCallEdges(s *store.Store, sourceID string, remaining int) ([]model.Edge, bool, error) {
+	if remaining < 1 {
+		return nil, true, nil
+	}
+	edges, err := s.GetOutgoingEdgesByKindLimited(sourceID, []model.EdgeKind{model.EdgeCalls}, remaining+1)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(edges) > remaining {
+		return edges[:remaining], true, nil
+	}
+	return edges, false, nil
+}
+
 func addPathSources(idx *indexer.Indexer, scopes []string, result PathResult, want bool) (PathResult, error) {
 	if !want {
 		return result, nil
 	}
 	for i := range result.Steps {
-		n, err := resolveNode(idx, scopes, result.Steps[i].Symbol.ID, "", 0, true, false, 0, result.Freshness)
+		matches, err := findNodeMatches(idx.StoresFiltered(scopes), result.Steps[i].Symbol.ID)
 		if err != nil {
 			return result, err
 		}
-		if n.Status != "ok" {
+		if len(matches) != 1 {
 			return result, fmt.Errorf("path symbol %s changed during source retrieval", result.Steps[i].Symbol.ID)
 		}
-		result.Steps[i].Source = n.Source
-		result.Steps[i].Symbol = *n.Symbol
-		result.Freshness = n.Freshness
+		source, err := readVerifiedIndexedNodeSource(idx.Root(), matches[0])
+		if err != nil {
+			return result, err
+		}
+		result.Steps[i].Source = source
 	}
+	result.Freshness.Verified = true
 	return result, nil
 }
 
