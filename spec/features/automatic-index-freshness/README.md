@@ -379,12 +379,15 @@ checkout
 
 **Requirements:** automatic-index-freshness#req:canonical-incremental-reconciliation
 
-**Given** a running watcher
+**Given** a running watcher, an indexed source directory, and a pre-populated
+source directory outside the tree
 
-**When** a pre-populated source directory is moved into the watched tree
+**When** the pre-populated directory is moved in or the indexed directory is
+moved out
 
-**Then** its existing admitted files form a dirty-path batch and reconciliation
-is scheduled without waiting for a later unrelated event.
+**Then** moved-in admitted files form a dirty-path batch, a missing directory
+hint removes all tracked descendants, and neither direction waits for a later
+unrelated event.
 
 ### AC: graceful-cancellation
 

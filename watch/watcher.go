@@ -403,8 +403,8 @@ func (fw *FileWatcher) handleFSNotifyEvent(event fsnotify.Event) {
 
 	// A newly-created directory needs its own watch (per-directory strategy on
 	// all platforms, since fsnotify v1.10 has no public recursive API).
-	if event.Op&fsnotify.Create != 0 {
-		if info, err := os.Stat(name); err == nil && info.IsDir() {
+	if info, err := os.Stat(name); err == nil && info.IsDir() {
+		if event.Op&fsnotify.Create != 0 {
 			var watchErr error
 			var shouldSchedule bool
 			fw.mu.Lock()
@@ -421,8 +421,11 @@ func (fw *FileWatcher) handleFSNotifyEvent(event fsnotify.Event) {
 			if watchErr != nil {
 				fw.observe(Observation{Kind: ObservationWatcherError, Path: rel, Err: watchErr})
 			}
-			return
 		}
+		// Directory metadata/write events are covered by watches on the
+		// directory and its children; only a now-missing remove/rename path is
+		// a reconciliation hint for tracked descendants.
+		return
 	}
 
 	fw.handleChange(rel)

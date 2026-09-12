@@ -241,6 +241,11 @@ func TestSyncLockConflictReturnsExplicitSignal(t *testing.T) {
 	if !res.LockUnavailable || res.FilesChecked != 0 || res.DurationMs != 0 {
 		t.Errorf("SyncResult = %+v, want explicit lock-unavailable signal", res)
 	}
+	writeFile(t, filepath.Join(dir, "main.go"), "package main\nfunc main() { println(1) }\n")
+	res, refreshErr := idx.RefreshForRead(Options{})
+	if refreshErr == nil || !strings.Contains(refreshErr.Error(), "locked") || !res.LockUnavailable {
+		t.Fatalf("RefreshForRead = %+v, %v; want explicit lock error", res, refreshErr)
+	}
 }
 
 // --- git-based sync ------------------------------------------------------------
@@ -496,6 +501,35 @@ func TestSyncFilesRebuildsWhenGitignoreChangesAdmission(t *testing.T) {
 	}
 	if nodes, err := idx.Store().GetNodesByName("Stale"); err != nil || len(nodes) != 0 {
 		t.Fatalf("ignored symbol remains: nodes=%+v err=%v", nodes, err)
+	}
+}
+
+func TestSyncFilesMissingDirectoryHintRemovesTrackedDescendants(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "obsolete", "one.go"), "package obsolete\nfunc One() {}\n")
+	writeFile(t, filepath.Join(dir, "obsolete", "nested", "two.go"), "package nested\nfunc Two() {}\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	if err := os.RemoveAll(filepath.Join(dir, "obsolete")); err != nil {
+		t.Fatal(err)
+	}
+
+	res := idx.SyncFiles([]string{"obsolete"}, Options{})
+	if res.FilesRemoved != 2 || len(res.Errors) != 0 {
+		t.Fatalf("directory removal = %+v, want two removed files", res)
+	}
+	if got := strings.Join(res.ChangedFilePaths, ","); got != "obsolete/nested/two.go,obsolete/one.go" {
+		t.Fatalf("ChangedFilePaths = %q", got)
+	}
+	for _, name := range []string{"One", "Two"} {
+		for _, store := range idx.Stores() {
+			if nodes, getErr := store.GetNodesByName(name); getErr != nil || len(nodes) != 0 {
+				t.Fatalf("%s remains after directory removal: nodes=%+v err=%v", name, nodes, getErr)
+			}
+		}
 	}
 }
 

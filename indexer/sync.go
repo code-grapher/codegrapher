@@ -204,7 +204,13 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 					result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), FilePath: filePath, Severity: "error", Code: "delete_error"})
 				} else if deleted {
 					result.FilesRemoved++
+					result.ChangedFilePaths = append(result.ChangedFilePaths, filePath)
 				}
+			} else if removed, removeErrs := idx.deleteTrackedPrefix(filePath); len(removeErrs) > 0 {
+				result.Errors = append(result.Errors, removeErrs...)
+			} else {
+				result.FilesRemoved += len(removed)
+				result.ChangedFilePaths = append(result.ChangedFilePaths, removed...)
 			}
 			continue
 		}
@@ -245,6 +251,32 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 
 	result.DurationMs = now() - start
 	return result
+}
+
+func (idx *Indexer) deleteTrackedPrefix(prefix string) ([]string, []model.ExtractionError) {
+	if prefix == "" || prefix == "." {
+		return nil, nil
+	}
+	tracked, err := idx.allTrackedFiles()
+	if err != nil {
+		return nil, []model.ExtractionError{{Message: err.Error(), FilePath: prefix, Severity: "error", Code: "files_read_error"}}
+	}
+	prefix += "/"
+	var removed []string
+	var errs []model.ExtractionError
+	for _, file := range tracked {
+		if !strings.HasPrefix(file.Path, prefix) {
+			continue
+		}
+		deleted, deleteErr := idx.deleteFileEverywhere(file.Path)
+		if deleteErr != nil {
+			errs = append(errs, model.ExtractionError{Message: deleteErr.Error(), FilePath: file.Path, Severity: "error", Code: "delete_error"})
+		} else if deleted {
+			removed = append(removed, file.Path)
+		}
+	}
+	sort.Strings(removed)
+	return removed, errs
 }
 
 // Rebuild performs a strict from-scratch reconstruction. It is used when a
@@ -468,7 +500,7 @@ func (idx *Indexer) RefreshForRead(opts Options) (SyncResult, error) {
 			return SyncResult{}, err
 		}
 		result := idx.Sync(opts)
-		if result.FilesChecked == 0 && result.DurationMs == 0 {
+		if result.LockUnavailable {
 			return result, fmt.Errorf("index is locked; cannot safely rebuild symbol data")
 		}
 		if len(result.Errors) > 0 || !result.FullReindex {
@@ -504,7 +536,7 @@ func (idx *Indexer) RefreshForRead(opts Options) (SyncResult, error) {
 		return SyncResult{}, err
 	}
 	result := idx.SyncFiles(paths, opts)
-	if result.FilesChecked == 0 && result.DurationMs == 0 {
+	if result.LockUnavailable {
 		return result, fmt.Errorf("index is locked; cannot safely refresh symbol data")
 	}
 	if len(result.Errors) > 0 {

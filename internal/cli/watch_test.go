@@ -207,6 +207,7 @@ func runGitForWatchTest(t *testing.T, dir string, args ...string) {
 }
 
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:foreground-watch-reconciles-real-edit
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:populated-directory-move-is-reconciled
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:graceful-cancellation
 func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
 	if testing.Short() {
@@ -222,6 +223,13 @@ func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "caller.go"), []byte("package main\n\nfunc Caller() int { return Target() }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	obsoleteDir := filepath.Join(dir, "obsolete")
+	if err := os.Mkdir(obsoleteDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(obsoleteDir, "old.go"), []byte("package obsolete\n\nfunc Obsolete() {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	originalInfo, err := os.Stat(mainPath)
@@ -266,6 +274,12 @@ func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
 	waitForCLI(t, 8*time.Second, func() bool {
 		return strings.Contains(stdout.String(), "completed") && strings.Contains(stdout.String(), "added=1")
 	})
+	if err := os.Rename(obsoleteDir, filepath.Join(t.TempDir(), "obsolete")); err != nil {
+		t.Fatal(err)
+	}
+	waitForCLI(t, 8*time.Second, func() bool {
+		return strings.Contains(stdout.String(), "removed=1")
+	})
 	cancel()
 	select {
 	case err := <-done:
@@ -281,7 +295,7 @@ func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = idx.Close() }()
-	var foundAdded, foundTarget, preservedCall, updatedHash bool
+	var foundAdded, foundTarget, foundObsolete, preservedCall, updatedHash bool
 	for _, store := range idx.Stores() {
 		nodes, getErr := store.GetNodesByName("Added")
 		if getErr != nil {
@@ -293,6 +307,11 @@ func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
 			t.Fatal(getErr)
 		}
 		foundTarget = foundTarget || len(nodes) > 0
+		nodes, getErr = store.GetNodesByName("Obsolete")
+		if getErr != nil {
+			t.Fatal(getErr)
+		}
+		foundObsolete = foundObsolete || len(nodes) > 0
 		callers, getErr := store.GetNodesByName("Caller")
 		if getErr != nil {
 			t.Fatal(getErr)
@@ -314,9 +333,9 @@ func TestWatchCommandReconcilesRealFilesystemEditAndCancels(t *testing.T) {
 			}
 		}
 	}
-	if !foundAdded || !foundTarget || !preservedCall || !updatedHash {
-		t.Fatalf("unexpected graph added=%t target=%t preserved_call=%t updated_hash=%t; stdout=%s stderr=%s",
-			foundAdded, foundTarget, preservedCall, updatedHash, stdout.String(), stderr.String())
+	if !foundAdded || !foundTarget || foundObsolete || !preservedCall || !updatedHash {
+		t.Fatalf("unexpected graph added=%t target=%t obsolete=%t preserved_call=%t updated_hash=%t; stdout=%s stderr=%s",
+			foundAdded, foundTarget, foundObsolete, preservedCall, updatedHash, stdout.String(), stderr.String())
 	}
 }
 

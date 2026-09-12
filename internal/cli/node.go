@@ -176,7 +176,7 @@ func resolveNode(idx *indexer.Indexer, scopes []string, symbol, fileHint string,
 		}
 		if indexer.HashContent(content.all) != rec.ContentHash {
 			res := idx.SyncFiles([]string{match.node.FilePath}, indexer.Options{})
-			if res.FilesChecked == 0 && res.DurationMs == 0 {
+			if res.LockUnavailable {
 				return NodeResult{}, errors.New("index is locked; cannot safely refresh changed source")
 			}
 			if len(res.Errors) > 0 {
