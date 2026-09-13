@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/url"
 	"os"
 	"os/signal"
@@ -30,6 +29,10 @@ func newServeCmd() *cobra.Command {
 	var noWatch bool
 	var verbose bool
 	var apiListen string
+	var apiTLSCert string
+	var apiTLSKey string
+	var apiPublicAuthority string
+	var apiExternalTLS bool
 	var corsOrigins []string
 
 	cmd := &cobra.Command{
@@ -113,7 +116,10 @@ func newServeCmd() *cobra.Command {
 						return err
 					}
 				}
-				listener, err := net.Listen("tcp", apiListen)
+				listener, err := openAPIListener(apiListenerSettings{
+					listenAddress: apiListen, certificate: apiTLSCert, privateKey: apiTLSKey,
+					publicAuthority: apiPublicAuthority, externalTLS: apiExternalTLS,
+				})
 				if err != nil {
 					return fmt.Errorf("bind browser API: %w", err)
 				}
@@ -133,13 +139,13 @@ func newServeCmd() *cobra.Command {
 					_ = listener.Close()
 					return fmt.Errorf("read browser API revision: %w", err)
 				}
-				authority := listener.Addr().String()
+				authority := listener.authority
 				browserLink := "https://codegrapher.dev/browse/" + url.QueryEscape(authority) + "/repos/" + url.PathEscape(api.RepositoryID()) + "/revisions/" + url.PathEscape(revision) + "/tree#secret=" + url.QueryEscape(token)
 				humanOut := cmd.OutOrStdout()
 				if mcpEnabled {
 					humanOut = cmd.ErrOrStderr()
 				}
-				_, _ = fmt.Fprintf(humanOut, "Browser API: http://%s%s\nBrowser link: %s\n", authority, browserapi.BasePath, browserLink)
+				_, _ = fmt.Fprintf(humanOut, "Browser API: %s://%s%s\nBrowser link: %s\n", listener.scheme, authority, browserapi.BasePath, browserLink)
 				participants = append(participants, func(runCtx context.Context) error { return api.Serve(runCtx, listener) })
 			}
 			return runServeGroup(ctx, participants)
@@ -151,6 +157,10 @@ func newServeCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&watchFlag, "watch", false, "Keep the repository index current")
 	cmd.Flags().BoolVar(&apiFlag, "api", false, "Serve the authenticated browser HTTP API")
 	cmd.Flags().StringVar(&apiListen, "api-listen", "127.0.0.1:7331", "Browser API listen address")
+	cmd.Flags().StringVar(&apiTLSCert, "api-tls-cert", "", "PEM certificate for direct browser API HTTPS")
+	cmd.Flags().StringVar(&apiTLSKey, "api-tls-key", "", "PEM private key for direct browser API HTTPS")
+	cmd.Flags().StringVar(&apiPublicAuthority, "api-public-authority", "", "Public DNS/IP authority used by the browser route")
+	cmd.Flags().BoolVar(&apiExternalTLS, "api-external-tls", false, "Advertise trusted HTTPS terminated outside CodeGrapher (loopback listen only)")
 	cmd.Flags().StringSliceVar(&corsOrigins, "cors-origin", nil, "Additional exact browser origin allowed by CORS")
 	cmd.Flags().BoolVar(&noWatch, "no-watch", false, "Disable watching when using the default capability set")
 	_ = cmd.Flags().MarkDeprecated("no-watch", "use explicit capability flags to select only the services you need")

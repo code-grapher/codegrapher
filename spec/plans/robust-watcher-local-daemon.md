@@ -188,6 +188,8 @@ not duplicate their original acceptance suite:
 - automatic-index-freshness#ac:worktree-index-is-local — automatic-index-freshness Tasks 3 and 5
 - automatic-index-freshness#ac:populated-directory-move-is-reconciled — automatic-index-freshness Tasks 2, 4 and 5
 - automatic-index-freshness#ac:graceful-cancellation — automatic-index-freshness Tasks 3–5
+- automatic-index-freshness#ac:unrelated-nonfatal-candidates-do-not-block-read — post-release-hardening Tasks 1–3
+- automatic-index-freshness#ac:read-command-refuses-foreign-worktree-index — post-release-hardening Tasks 1–3
 
 ## Open Questions
 

@@ -1,12 +1,12 @@
 ---
 format: https://specscore.md/feature-specification
-status: Implementing
+status: Stable
 ---
 
 # Feature: Automatic index freshness
 
 > [SpecScore.**Studio**](https://specscore.studio): | [Explore](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness?op=explore) | [Edit](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness?op=edit) | [Ask question](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness?op=ask) | [Request change](https://specscore.studio/app/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness?op=request-change) |
-**Status:** Implementing
+**Status:** Stable
 **Source Ideas:** automatic-index-freshness
 
 ## Summary
@@ -24,8 +24,8 @@ standalone foreground command and no diagnostic event/operation lifecycle.
 
 ### Current-state audit
 
-This subsection records the audited baseline before Phase 1 implementation;
-the Behavior and Phased delivery sections define the resulting/current contract.
+This subsection began as the Phase 1 baseline and now records the released
+state; the Behavior and Phased delivery sections remain the normative contract.
 
 - Graph data is local to a filesystem checkout under `.codegraph/`, partitioned
   into scoped SQLite stores. The current identity model is the worktree path;
@@ -50,12 +50,12 @@ the Behavior and Phased delivery sections define the resulting/current contract.
   contract: strict callers must retain dirty state and retry rather than report
   the batch current. Lock contention is now an explicit result signal rather
   than an ambiguous zero-duration result.
-- `watch.FileWatcher` already performs recursive `fsnotify` watching,
+- `watch.FileWatcher` performs recursive `fsnotify` watching,
   debounce, path deduplication, retry after lock contention, create-directory
-  registration, pending-path tracking, graceful stop/restart, and a bounded
-  real-filesystem test. It is not wired into a `watch` CLI command, native
-  watcher errors are discarded, and it exposes no structured raw-event or
-  operation timing stream.
+  registration, pending-path tracking, graceful stop/restart, bounded fallback,
+  and real-filesystem tests. It is wired through `watch` and composable `serve`;
+  native errors fail closed, while structured observations drive concise and
+  verbose event/operation timing output.
 - Opt-in Git hooks already exist for `post-commit`, `post-merge`, and
   `post-checkout`. They launch `codegrapher sync` in the background and preserve
   user hook content. They remain a fallback when native watching is unavailable,
@@ -70,8 +70,9 @@ the Behavior and Phased delivery sections define the resulting/current contract.
 - Git worktree support currently detects accidental use of another worktree's
   index and advises local initialization. Repository identity, HEAD identity,
   base snapshots, and delta overlays remain future work.
-- Daemon/proxy transport is explicitly unimplemented. There is no PID,
-  registration, IPC, or multi-repository daemon lifecycle to reuse yet.
+- The released per-user daemon owns one registered worktree, authenticated
+  lifecycle control, watcher readiness, durable state/logs, and the public
+  browser API. Multi-worktree registration remains deliberately deferred.
 - A local full initialization of this worktree indexed 1,275 files and 5,628
   nodes in about 6.3 seconds. This is directional development evidence, not a
   committed benchmark.
@@ -161,6 +162,25 @@ MUST be debounced and deduplicated before one sync. Event-storm thresholds,
 overflow-triggered full reconciliation, and periodic safety reconciliation are
 later robustness work, not separate indexing paths. Any native error or runtime
 watch-cap breach terminates watching instead of leaving partial coverage active.
+
+#### REQ: read-refresh-classifies-nonfatal-candidates
+
+Read-side freshness MUST classify every Git or filesystem candidate before
+reading it as source. A directory hint MUST never be read as a file. If that
+path was previously an indexed file, its stale record and nodes MUST be removed;
+admitted files already beneath a newly populated directory MUST be reconciled
+before the candidate generation can stamp the index revision. A policy-skipped
+oversized source file or a SpecScore-shaped document that yields only a warning
+MUST update its file record without preventing an unrelated, verified symbol
+from being returned. Errors that can make graph identity or source ranges
+unsafe remain fatal, keep the index revision unstamped, and MUST name the
+repository-relative path when one is known.
+
+The `node` command MUST also reject an index owned by a different Git worktree.
+Its actionable instruction to initialize the current worktree MUST resolve that
+explicit worktree path exactly rather than walking up to the foreign index
+again. Extending this safeguard to older read commands is follow-up work and is
+not silently credited by this acceptance criterion.
 
 #### REQ: robust-event-fallback
 
@@ -450,6 +470,39 @@ remain visible.
 
 **Then** the path remains pending, the failure is observable, and a later retry
 can clear it only after success.
+
+### AC: unrelated-nonfatal-candidates-do-not-block-read
+
+**Requirements:** automatic-index-freshness#req:read-refresh-classifies-nonfatal-candidates
+
+**Given** an initialized repository with a valid requested symbol and freshness
+candidates that include a directory, an oversized SQLite fixture, or a
+SpecScore index document that produces a parse warning
+
+**When** an agent runs `codegrapher node <symbol> --source`
+
+**Then** the directory is not read as a file, any exact stale file record is
+removed, admitted descendants of a newly populated directory and warning-only
+candidates are recorded, the repository revision is safely refreshed, and the
+requested source is returned and verified
+
+**And** a genuinely fatal candidate error still prevents source retrieval and
+identifies its repository-relative path.
+
+### AC: read-command-refuses-foreign-worktree-index
+
+**Requirements:** automatic-index-freshness#req:read-refresh-classifies-nonfatal-candidates
+
+**Given** an uninitialized Git worktree nested below a different initialized
+checkout
+
+**When** an agent runs `codegrapher node` from the nested worktree
+
+**Then** it refuses the foreign index instead of returning stale or missing
+symbols and tells the agent to initialize the current worktree
+
+**And** `codegrapher init <worktree>` creates a worktree-local index even though
+an initialized ancestor exists.
 
 ### AC: lock-contention-retries-without-clearing
 

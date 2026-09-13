@@ -101,6 +101,15 @@ func TestServeCapabilitySelection(t *testing.T) {
 	}
 }
 
+func TestServeRegistersSecureAPITransportFlagsOnce(t *testing.T) {
+	cmd := newServeCmd()
+	for _, name := range []string{"api-tls-cert", "api-tls-key", "api-public-authority", "api-external-tls"} {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Fatalf("serve flag --%s is missing", name)
+		}
+	}
+}
+
 type fakeFreshnessSession struct {
 	closed   atomic.Bool
 	waitDone chan struct{}

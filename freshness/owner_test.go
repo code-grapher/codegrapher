@@ -99,6 +99,7 @@ func TestStartRejectsUninitializedRepository(t *testing.T) {
 }
 
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:daemon-health-reports-liveness-watch-readiness-and-index-currency-separately
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:daemon-failure-state-is-truthful
 func TestStatusStaysStaleUntilLatestAcceptedGenerationSucceeds(t *testing.T) {
 	dir := initializedRepository(t)
 	var calls atomic.Int32

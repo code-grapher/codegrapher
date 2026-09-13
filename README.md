@@ -37,7 +37,7 @@ codegrapher callees <symbol> What this symbol calls              (--json)
 codegrapher impact <symbol>  Blast-radius analysis               (--json)
 codegrapher affected [files] Test files affected by changed sources (--json)
 codegrapher watch [path]     Compatibility foreground watcher  (--verbose)
-codegrapher serve [path]     Composable foreground server       (--watch, --mcp)
+codegrapher serve [path]     Composable foreground server       (--watch, --api, --mcp)
 codegrapher daemon start     Background freshness owner
 codegrapher daemon status    Daemon lifecycle/freshness health  (--json)
 codegrapher daemon stop      Gracefully stop background owner

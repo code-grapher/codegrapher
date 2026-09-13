@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -72,6 +73,7 @@ func TestWatchOutputVerboseIncludesEventLifecycleAndStats(t *testing.T) {
 	}
 }
 
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:default-output-is-not-event-level
 func TestWatchOutputDefaultSuppressesRawEventsAndNoOpCompletion(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	output := newWatchOutput(&stdout, &stderr, false)
@@ -111,6 +113,9 @@ func TestWatchOutputDefaultDescribesFullRebuildTruthfully(t *testing.T) {
 }
 
 func TestReconcilePathsForWatchSurfacesRealIndexerFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("self-referential symlink requires Unix symlink semantics")
+	}
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -120,7 +125,7 @@ func TestReconcilePathsForWatchSurfacesRealIndexerFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = idx.Close() }()
-	if err := os.Mkdir(filepath.Join(dir, "not-a-file"), 0o755); err != nil {
+	if err := os.Symlink("not-a-file", filepath.Join(dir, "not-a-file")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -135,6 +140,9 @@ func TestReconcilePathsForWatchSurfacesRealIndexerFailure(t *testing.T) {
 
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:failure-remains-dirty-and-visible
 func TestWatcherRetriesAfterRealIndexerFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("self-referential symlink requires Unix symlink semantics")
+	}
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -145,7 +153,7 @@ func TestWatcherRetriesAfterRealIndexerFailure(t *testing.T) {
 	}
 	defer func() { _ = idx.Close() }()
 	badPath := filepath.Join(dir, "bad")
-	if err := os.Mkdir(badPath, 0o755); err != nil {
+	if err := os.Symlink("bad", badPath); err != nil {
 		t.Fatal(err)
 	}
 	failures := make(chan watch.Observation, 1)
