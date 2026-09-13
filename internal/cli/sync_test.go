@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/specscore/codegrapher/indexer"
+	"github.com/specscore/codegrapher/model"
 )
 
 func TestSyncInitInitializesThenUsesIncrementalReconciliation(t *testing.T) {
@@ -81,4 +82,62 @@ func TestSyncWithoutInitHelper(t *testing.T) {
 	command := newSyncCmd()
 	command.SetArgs([]string{projectPath})
 	_ = command.Execute()
+}
+
+func TestSyncReturnsErrorWhenWriterLockIsUnavailable(t *testing.T) {
+	projectPath := initializedSyncFixture(t)
+	command := newSyncCmdWithRunner(func(*indexer.Indexer, indexer.Options) indexer.SyncResult {
+		return indexer.SyncResult{LockUnavailable: true}
+	})
+	command.SetArgs([]string{"--quiet", projectPath})
+
+	err := command.Execute()
+	if err == nil {
+		t.Fatal("sync unexpectedly succeeded without acquiring the writer lock")
+	}
+	if !strings.Contains(err.Error(), "writer lock") {
+		t.Fatalf("error = %q, want writer-lock explanation", err)
+	}
+}
+
+func TestSyncReturnsErrorForPartialFailures(t *testing.T) {
+	projectPath := initializedSyncFixture(t)
+	command := newSyncCmdWithRunner(func(*indexer.Indexer, indexer.Options) indexer.SyncResult {
+		return indexer.SyncResult{
+			FilesModified: 1,
+			Errors: []model.ExtractionError{{
+				FilePath: "broken.go",
+				Message:  "could not update file",
+				Severity: "error",
+			}},
+		}
+	})
+	command.SetArgs([]string{"--quiet", projectPath})
+
+	err := command.Execute()
+	if err == nil {
+		t.Fatal("sync unexpectedly succeeded with incremental update failures")
+	}
+	if !strings.Contains(err.Error(), "1 file") {
+		t.Fatalf("error = %q, want failed-file count", err)
+	}
+}
+
+func initializedSyncFixture(t *testing.T) string {
+	t.Helper()
+	projectPath := t.TempDir()
+	if err := copyDir(filepath.Join("..", "..", "testdata", "fixtures", "go-small"), projectPath); err != nil {
+		t.Fatal(err)
+	}
+	idx, result, err := indexer.Init(projectPath, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := idx.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if !result.Success {
+		t.Fatalf("fixture initialization failed: %+v", result.Errors)
+	}
+	return projectPath
 }

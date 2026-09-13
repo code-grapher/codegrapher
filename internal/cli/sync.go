@@ -10,6 +10,14 @@ import (
 )
 
 func newSyncCmd() *cobra.Command {
+	return newSyncCmdWithRunner(func(idx *indexer.Indexer, opts indexer.Options) indexer.SyncResult {
+		return idx.Sync(opts)
+	})
+}
+
+type syncRunner func(*indexer.Indexer, indexer.Options) indexer.SyncResult
+
+func newSyncCmdWithRunner(runSync syncRunner) *cobra.Command {
 	var quiet bool
 	var initialize bool
 
@@ -62,13 +70,8 @@ func newSyncCmd() *cobra.Command {
 			}
 			defer func() { _ = idx.Close() }()
 
-			if quiet {
-				idx.Sync(indexer.Options{})
-				return nil
-			}
-
 			opts := indexer.Options{}
-			if isTTY() {
+			if isTTY() && !quiet {
 				sp := newSpinner()
 				sp.start("Syncing…")
 				opts.OnProgress = func(p indexer.IndexProgress) {
@@ -77,7 +80,22 @@ func newSyncCmd() *cobra.Command {
 				defer sp.stop()
 			}
 
-			result := idx.Sync(opts)
+			result := runSync(idx, opts)
+			if result.LockUnavailable {
+				return fmt.Errorf("sync did not run: writer lock is unavailable")
+			}
+			if len(result.Errors) > 0 {
+				if !quiet {
+					printErrorBreakdown(result.Errors)
+					writeErrorLog(projectPath, result.Errors)
+					printInfo("See .codegraph/errors.log for details")
+				}
+				return fmt.Errorf("sync failed for %d file(s): %s", len(result.Errors), result.Errors[0].Message)
+			}
+			if quiet {
+				return nil
+			}
+
 			totalChanges := result.FilesAdded + result.FilesModified + result.FilesRemoved
 			if totalChanges == 0 {
 				printInfo("Already up to date")
