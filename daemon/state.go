@@ -97,7 +97,7 @@ func ensureStateDir(dir string) error {
 }
 
 func readState(dir string) (diskState, error) {
-	data, err := os.ReadFile(filepath.Join(dir, stateFileName))
+	data, err := readStateFile(filepath.Join(dir, stateFileName))
 	if err != nil {
 		return diskState{}, err
 	}
@@ -140,7 +140,7 @@ func writeState(dir string, state diskState) error {
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close daemon state transaction: %w", err)
 	}
-	if err := os.Rename(tmpName, filepath.Join(dir, stateFileName)); err != nil {
+	if err := commitStateFile(tmpName, filepath.Join(dir, stateFileName)); err != nil {
 		return fmt.Errorf("commit daemon state transaction: %w", err)
 	}
 	if err := protectUserOnly(filepath.Join(dir, stateFileName)); err != nil {
