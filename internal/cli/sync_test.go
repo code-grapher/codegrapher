@@ -11,6 +11,7 @@ import (
 	"github.com/specscore/codegrapher/model"
 )
 
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/sync-initialize-if-missing#ac:first-update-initializes-then-next-update-syncs
 func TestSyncInitInitializesThenUsesIncrementalReconciliation(t *testing.T) {
 	projectPath := t.TempDir()
 	if err := copyDir(filepath.Join("..", "..", "testdata", "fixtures", "go-small"), projectPath); err != nil {
@@ -58,6 +59,7 @@ func TestSyncInitInitializesThenUsesIncrementalReconciliation(t *testing.T) {
 	}
 }
 
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/sync-initialize-if-missing#ac:default-sync-does-not-create-policy
 func TestSyncWithoutInitStillRefusesUninitializedRepository(t *testing.T) {
 	projectPath := t.TempDir()
 	command := exec.Command(os.Args[0], "-test.run=^TestSyncWithoutInitHelper$")

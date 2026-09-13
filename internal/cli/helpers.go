@@ -38,6 +38,13 @@ func wantsJSON(format string, jsonOut bool) bool {
 }
 
 func resolveArg(args []string) string {
+	return findNearestOrReturn(resolveExactArg(args))
+}
+
+// resolveExactArg resolves the requested directory without borrowing an
+// initialized ancestor. Initialization uses this so nested Git worktrees can
+// create the local index that worktree-safety diagnostics require.
+func resolveExactArg(args []string) string {
 	var raw string
 	if len(args) > 0 && args[0] != "" {
 		raw = args[0]
@@ -48,7 +55,7 @@ func resolveArg(args []string) string {
 	if err != nil {
 		return raw
 	}
-	return findNearestOrReturn(abs)
+	return abs
 }
 
 // findNearestOrReturn walks up from startPath looking for an initialized

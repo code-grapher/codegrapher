@@ -68,11 +68,17 @@ func newNodeCmd() *cobra.Command {
 				return errors.New("--source=footer is text-only; use --source=inline with --format json")
 			}
 			projectPath := ""
+			startPath := ""
 			if pathFlag != "" {
+				startPath = resolveExactArg([]string{pathFlag})
 				projectPath = resolveArg([]string{pathFlag})
 			} else {
 				cwd, _ := os.Getwd()
+				startPath = cwd
 				projectPath = findNearestOrReturn(cwd)
+			}
+			if mismatch := indexer.DetectWorktreeIndexMismatch(startPath, projectPath); mismatch != nil {
+				return fmt.Errorf("cannot read a different git worktree's index:\n%s", indexer.WorktreeMismatchWarning(*mismatch))
 			}
 			if !indexer.IsInitialized(projectPath) {
 				return fmt.Errorf("CodeGraph not initialized in %s", projectPath)

@@ -42,8 +42,38 @@ its gateway remains `contract-pending` until the generated package is wired in a
 separate consumer change.
 
 The local API defaults to HTTP loopback. A browser must explicitly opt into that
-mode. A non-loopback or hosted-browser connection requires HTTPS termination and
-may also be subject to the browser's private-network-access policy.
+mode. Clear-text serving is refused for wildcard and non-loopback binds.
+
+For direct HTTPS, supply all three settings and make the advertised port match
+the listen port (an authority without a port means 443):
+
+```sh
+codegrapher serve --watch --api \
+  --api-listen 0.0.0.0:443 \
+  --api-tls-cert /path/to/fullchain.pem \
+  --api-tls-key /path/to/private-key.pem \
+  --api-public-authority graph.example.com
+```
+
+Startup validates the key pair, certificate validity, and DNS/IP SAN before it
+opens the listener. It never falls back to HTTP or prints a browser link after
+validation failure.
+
+For a trusted reverse proxy or tunnel, keep CodeGrapher on loopback and mark
+external termination explicitly:
+
+```sh
+codegrapher serve --watch --api \
+  --api-listen 127.0.0.1:7331 \
+  --api-external-tls \
+  --api-public-authority graph.example.com
+```
+
+The proxy/tunnel must forward `https://graph.example.com/codegrapher/` to
+`http://127.0.0.1:7331/codegrapher/`, preserve the `Authorization` header, and
+use a certificate trusted for `graph.example.com`. Stop both CodeGrapher and the
+proxy/tunnel after use; stopping only one leaves machine state behind. Hosted
+browser connections may also be subject to private-network-access policy.
 
 Production origins `https://codegrapher.com` and `https://codegrapher.dev` are
 allowed by default. Add exact local-development origins with repeatable

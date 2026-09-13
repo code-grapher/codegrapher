@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -1049,6 +1050,107 @@ func TestRefreshForReadIgnoresUnchangedOversizedPolicySkip(t *testing.T) {
 	res, err := idx.RefreshForRead(Options{})
 	if err != nil || len(res.Errors) != 0 || !hasNodeNamed(t, idx, "Generated") {
 		t.Fatalf("shrunk generated refresh: %+v %v", res, err)
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:unrelated-nonfatal-candidates-do-not-block-read
+func TestSyncFilesDirectoryCandidateReplacesStaleFileAndIndexesDescendants(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "main.go"), "package main\nfunc Good() {}\n")
+	writeFile(t, filepath.Join(dir, "generated"), "old file\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	if err := os.Remove(filepath.Join(dir, "generated")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "generated", "child.go"), "package generated\nfunc Child() {}\n")
+
+	res := idx.SyncFiles([]string{"generated"}, Options{})
+	if len(res.Errors) != 0 {
+		t.Fatalf("directory sync errors = %+v", res.Errors)
+	}
+	if rec, err := idx.fileRecord("generated"); err != nil || rec != nil {
+		t.Fatalf("stale exact file record = %+v, %v", rec, err)
+	}
+	if rec, err := idx.fileRecord("generated/child.go"); err != nil || rec == nil {
+		t.Fatalf("descendant file record = %+v, %v", rec, err)
+	}
+	if !hasNodeNamed(t, idx, "Child") {
+		t.Fatal("directory descendant was not indexed")
+	}
+}
+
+func TestSyncFilesDirectoryCandidateFailsClosedWhenSubtreeCannotBeRead(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permission semantics differ on Windows")
+	}
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "main.go"), "package main\nfunc Good() {}\n")
+	blocked := filepath.Join(dir, "generated")
+	writeFile(t, filepath.Join(blocked, "child.go"), "package generated\nfunc Child() {}\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	if err := os.Chmod(blocked, 0); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chmod(blocked, 0o755) }()
+	if _, err := os.ReadDir(blocked); err == nil {
+		t.Skip("current user can read mode-000 directories")
+	}
+
+	result := idx.SyncFiles([]string{"generated"}, Options{})
+	if len(result.Errors) != 1 || result.Errors[0].Code != "files_read_error" {
+		t.Fatalf("unreadable directory result = %+v", result)
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:unrelated-nonfatal-candidates-do-not-block-read
+func TestRefreshForReadAcceptsWarningOnlyCandidates(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "main.go"), "package main\nfunc Good() {}\n")
+	writeFile(t, filepath.Join(dir, "cache.db"), "initial\n")
+	writeFile(t, filepath.Join(dir, "spec", "features", "README.md"), "plain markdown\n")
+	idx, _, err := Init(dir, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	writeFile(t, filepath.Join(dir, "cache.db"), strings.Repeat("x", MaxFileSize+1))
+	writeFile(t, filepath.Join(dir, "spec", "features", "README.md"), "---\nformat: https://specscore.md/broken-specification\n---\n")
+
+	res, err := idx.RefreshForRead(Options{})
+	if err != nil {
+		t.Fatalf("warning-only refresh failed: %+v, %v", res, err)
+	}
+	if len(res.Errors) < 2 {
+		t.Fatalf("warning-only refresh errors = %+v, want policy and parse warnings", res.Errors)
+	}
+	for _, extractionErr := range res.Errors {
+		if extractionErr.Severity == "error" {
+			t.Fatalf("unexpected fatal extraction error: %+v", extractionErr)
+		}
+	}
+	if !hasNodeNamed(t, idx, "Good") {
+		t.Fatal("unrelated valid symbol disappeared")
+	}
+}
+
+func TestFirstFatalExtractionErrorIncludesPath(t *testing.T) {
+	err := firstFatalExtractionError([]model.ExtractionError{
+		{Severity: "warning", FilePath: "cache.db", Message: "skipped"},
+		{Severity: "error", FilePath: "src/bad.go", Message: "cannot read"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "src/bad.go") || !strings.Contains(err.Error(), "cannot read") {
+		t.Fatalf("fatal extraction error = %v", err)
+	}
+	if err := firstFatalExtractionError([]model.ExtractionError{{Severity: "warning", Message: "safe"}}); err != nil {
+		t.Fatalf("warning became fatal: %v", err)
 	}
 }
 

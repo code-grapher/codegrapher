@@ -78,6 +78,10 @@ after indexing. When `--source` is requested it verifies the current file bytes
 against the indexed hash; it refreshes once or returns an explicit stale/lock/
 read error rather than slicing a stale range.
 
+In a Git worktree, `node` refuses an index owned by another checkout. Run
+`codegrapher init` from the current worktree to create the local index; explicit
+initialization paths are exact and do not walk up to an initialized ancestor.
+
 When an agent knows an entry point and a target but not the intermediate
 implementation route, ask CodeGrapher for one bounded static path before
 loading bodies:

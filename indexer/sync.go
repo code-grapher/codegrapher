@@ -3,6 +3,7 @@ package indexer
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -165,6 +166,11 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 // gone, and re-resolves references. Paths are project-relative (POSIX or
 // native separators).
 func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
+	var expandErr error
+	changed, expandErr = idx.expandSyncCandidates(changed)
+	if expandErr != nil {
+		return SyncResult{Errors: []model.ExtractionError{{Message: expandErr.Error(), Severity: "error", Code: "files_read_error"}}}
+	}
 	if requiresScopeRebuild(changed) {
 		return idx.Rebuild(opts)
 	}
@@ -216,6 +222,18 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 			}
 			continue
 		}
+		if fi.IsDir() {
+			if rec != nil {
+				deleted, deleteErr := idx.deleteFileEverywhere(filePath)
+				if deleteErr != nil {
+					result.Errors = append(result.Errors, model.ExtractionError{Message: deleteErr.Error(), FilePath: filePath, Severity: "error", Code: "delete_error"})
+				} else if deleted {
+					result.FilesRemoved++
+					result.ChangedFilePaths = append(result.ChangedFilePaths, filePath)
+				}
+			}
+			continue
+		}
 		if isIgnoredSyncPath(idx.root, filePath) {
 			if rec != nil {
 				deleted, deleteErr := idx.deleteFileEverywhere(filePath)
@@ -264,6 +282,95 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 	}
 	result.DurationMs = now() - start
 	return result
+}
+
+// expandSyncCandidates turns a directory event into the authoritative admitted
+// descendants plus any previously tracked descendants. The latter ensures a
+// directory hint also removes children that disappeared or became ignored.
+func (idx *Indexer) expandSyncCandidates(changed []string) ([]string, error) {
+	seen := make(map[string]bool, len(changed))
+	var directories []string
+	for _, raw := range changed {
+		path := filepath.ToSlash(strings.TrimPrefix(raw, "./"))
+		if path == "" || path == "." {
+			continue
+		}
+		seen[path] = true
+		info, err := os.Lstat(filepath.Join(idx.root, filepath.FromSlash(path)))
+		if err == nil && info.IsDir() {
+			directories = append(directories, path)
+		}
+	}
+	if len(directories) == 0 {
+		return sortedKeys(seen), nil
+	}
+	tracked, err := idx.allTrackedFiles()
+	if err != nil {
+		return nil, err
+	}
+	for _, directory := range directories {
+		visible, scanErr := idx.scanAdmittedDescendants(directory)
+		if scanErr != nil {
+			return nil, fmt.Errorf("scan changed directory %s: %w", directory, scanErr)
+		}
+		prefix := directory + "/"
+		for _, path := range visible {
+			if strings.HasPrefix(path, prefix) {
+				seen[path] = true
+			}
+		}
+		for _, file := range tracked {
+			if strings.HasPrefix(file.Path, prefix) {
+				seen[file.Path] = true
+			}
+		}
+	}
+	return sortedKeys(seen), nil
+}
+
+// scanAdmittedDescendants is the fail-closed counterpart to the best-effort
+// whole-project scanner. A watcher/read-refresh directory hint must not certify
+// a revision when part of that changed subtree could not be enumerated.
+func (idx *Indexer) scanAdmittedDescendants(directory string) ([]string, error) {
+	root := filepath.Join(idx.root, filepath.FromSlash(directory))
+	var files []string
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path == root {
+			return nil
+		}
+		relative, err := filepath.Rel(idx.root, path)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		if entry.IsDir() {
+			if isIgnoredSyncPath(idx.root, relative+"/") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !isIgnoredSyncPath(idx.root, relative) {
+			files = append(files, relative)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(files)
+	return files, nil
+}
+
+func sortedKeys(values map[string]bool) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func (idx *Indexer) deleteTrackedPrefix(prefix string) ([]string, []model.ExtractionError) {
@@ -525,7 +632,10 @@ func (idx *Indexer) RefreshForRead(opts Options) (SyncResult, error) {
 		if result.LockUnavailable {
 			return result, fmt.Errorf("index is locked; cannot safely rebuild symbol data")
 		}
-		if len(result.Errors) > 0 || !result.FullReindex {
+		if fatal := firstFatalExtractionError(result.Errors); fatal != nil {
+			return result, fmt.Errorf("full index rebuild failed: %w", fatal)
+		}
+		if !result.FullReindex {
 			return result, fmt.Errorf("full index rebuild failed")
 		}
 		if gitRepo {
@@ -561,8 +671,8 @@ func (idx *Indexer) RefreshForRead(opts Options) (SyncResult, error) {
 	if result.LockUnavailable {
 		return result, fmt.Errorf("index is locked; cannot safely refresh symbol data")
 	}
-	if len(result.Errors) > 0 {
-		return result, fmt.Errorf("incremental refresh failed: %s", result.Errors[0].Message)
+	if fatal := firstFatalExtractionError(result.Errors); fatal != nil {
+		return result, fmt.Errorf("incremental refresh failed: %w", fatal)
 	}
 	if gitRepo {
 		if err := idx.markGitHeadIfCurrent(observedHead); err != nil {
@@ -570,6 +680,19 @@ func (idx *Indexer) RefreshForRead(opts Options) (SyncResult, error) {
 		}
 	}
 	return result, nil
+}
+
+func firstFatalExtractionError(extractionErrors []model.ExtractionError) error {
+	for _, extractionErr := range extractionErrors {
+		if strings.EqualFold(extractionErr.Severity, "warning") {
+			continue
+		}
+		if extractionErr.FilePath != "" {
+			return fmt.Errorf("%s: %s", extractionErr.FilePath, extractionErr.Message)
+		}
+		return errors.New(extractionErr.Message)
+	}
+	return nil
 }
 
 func (idx *Indexer) getChangedFilesByScan(forceHash bool) (ChangedFiles, error) {

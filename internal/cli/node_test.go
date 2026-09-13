@@ -3,12 +3,99 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/specscore/codegrapher/indexer"
 	"github.com/specscore/codegrapher/model"
 )
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:unrelated-nonfatal-candidates-do-not-block-read
+func TestNodeCommandReturnsSourceWithUnrelatedNonfatalCandidates(t *testing.T) {
+	root := t.TempDir()
+	mustWrite := func(path, content string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite(filepath.Join(root, "main.go"), "package main\nfunc Good() {}\n")
+	mustWrite(filepath.Join(root, "generated"), "old file\n")
+	mustWrite(filepath.Join(root, "cache.db"), "initial\n")
+	mustWrite(filepath.Join(root, "spec", "features", "README.md"), "plain markdown\n")
+	idx, _, err := indexer.Init(root, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := idx.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(root, "generated")); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(filepath.Join(root, "generated", "child.go"), "package generated\nfunc Child() {}\n")
+	mustWrite(filepath.Join(root, "cache.db"), strings.Repeat("x", indexer.MaxFileSize+1))
+	mustWrite(filepath.Join(root, "spec", "features", "README.md"), "---\nformat: https://specscore.md/broken-specification\n---\n")
+
+	cmd := newNodeCmd()
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"Good", "--source=inline", "--path", root})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("node command failed: %v\n%s", err, out.String())
+	}
+	if got := out.String(); !strings.Contains(got, "func Good()") {
+		t.Fatalf("node output = %q", got)
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:read-command-refuses-foreign-worktree-index
+func TestNodeRefusesForeignWorktreeIndexAndInitCreatesLocalIndex(t *testing.T) {
+	outer := t.TempDir()
+	runGitForWatchTest(t, outer, "init", "-q")
+	if err := os.WriteFile(filepath.Join(outer, "main.go"), []byte("package main\nfunc Outer() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, _, err := indexer.Init(outer, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := idx.Close(); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(outer, "nested-worktree")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGitForWatchTest(t, nested, "init", "-q")
+	if err := os.WriteFile(filepath.Join(nested, "main.go"), []byte("package main\nfunc Nested() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	nodeCmd := newNodeCmd()
+	nodeCmd.SilenceUsage = true
+	nodeCmd.SilenceErrors = true
+	nodeCmd.SetArgs([]string{"Nested", "--path", nested})
+	if err := nodeCmd.Execute(); err == nil || !strings.Contains(err.Error(), "different git worktree's index") {
+		t.Fatalf("foreign worktree node error = %v", err)
+	}
+
+	initCmd := newInitCmd()
+	initCmd.SetArgs([]string{nested})
+	if err := initCmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !indexer.IsInitialized(nested) {
+		t.Fatal("init did not create a worktree-local index")
+	}
+}
 
 func TestNodeSourceIsBoundedAndHashVerified(t *testing.T) {
 	root, idx := initFixture(t)

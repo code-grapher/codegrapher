@@ -131,6 +131,8 @@ retroactively claimed by this already-implemented foreground-watcher plan:
 - automatic-index-freshness#ac:duplicate-daemon-ownership-is-rejected — robust-watcher-local-daemon Tasks 4–7
 - automatic-index-freshness#ac:daemon-control-rejects-unauthenticated-callers — robust-watcher-local-daemon Tasks 4, 6 and 7
 - automatic-index-freshness#ac:daemon-failure-state-is-truthful — robust-watcher-local-daemon Tasks 2–4, 6 and 7
+- automatic-index-freshness#ac:unrelated-nonfatal-candidates-do-not-block-read — post-release-hardening Tasks 1–3
+- automatic-index-freshness#ac:read-command-refuses-foreign-worktree-index — post-release-hardening Tasks 1–3
 
 ## Open Questions
 

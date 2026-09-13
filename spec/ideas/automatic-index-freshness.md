@@ -1,11 +1,11 @@
 ---
 format: https://specscore.md/idea-specification
-status: Implementing
+status: Implemented
 ---
 
 # Idea: Automatic index freshness
 
-**Status:** Implementing
+**Status:** Implemented
 **Date:** 2026-09-12
 **Owner:** alex
 **Promotes To:** automatic-index-freshness
