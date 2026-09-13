@@ -41,7 +41,9 @@ the graph. The command MUST use the ordinary incremental `Indexer.Sync` path.
 
 `--quiet` MUST suppress normal initialization and incremental-sync output.
 Initialization, open, or indexing failure MUST return a non-zero result and
-MUST NOT claim the graph is current.
+MUST NOT claim the graph is current. An incremental sync that cannot acquire
+the writer lock, or that reports any non-recoverable file update error, MUST
+also return non-zero in quiet and interactive modes.
 
 ## Acceptance Criteria
 
@@ -57,6 +59,16 @@ sync-initialize-if-missing#req:automation-output-and-failure
 **And when** a source file changes and the same command runs again
 **Then** the ordinary incremental reconciler consumes the change and leaves no
 pending changed file.
+
+### AC: incomplete-incremental-sync-fails
+
+**Requirements:** sync-initialize-if-missing#req:automation-output-and-failure
+
+**Given** an initialized repository
+**When** incremental reconciliation cannot acquire its writer lock or reports a
+non-recoverable file update error
+**Then** `codegrapher sync`, including `--quiet`, returns non-zero and does not
+print an up-to-date or successful-sync result.
 
 ### AC: default-sync-does-not-create-policy
 
