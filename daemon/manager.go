@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofrs/flock"
 	"github.com/specscore/codegrapher/browserapi"
 	"github.com/specscore/codegrapher/indexer"
 )
@@ -149,15 +148,11 @@ func (m *Manager) start(ctx context.Context, projectPath string, lockHeld bool) 
 	}
 
 	if !lockHeld {
-		startLock := flock.New(filepath.Join(m.StateDir, startLockName))
-		locked, lockErr := startLock.TryLockContext(ctx, 25*time.Millisecond)
+		startLock, lockErr := acquireDaemonLock(ctx, filepath.Join(m.StateDir, startLockName))
 		if lockErr != nil {
 			return Status{}, fmt.Errorf("acquire daemon start lock: %w", lockErr)
 		}
-		if !locked {
-			return Status{}, fmt.Errorf("daemon start coordination canceled: %w", ctx.Err())
-		}
-		defer func() { _ = startLock.Unlock() }()
+		defer func() { _ = releaseDaemonLock(startLock) }()
 	}
 	existing, readErr := readState(m.StateDir)
 	held, probeErr := lifetimeLockHeld(m.StateDir)
@@ -307,15 +302,11 @@ func (m *Manager) stop(ctx context.Context, lockHeld bool) (Status, error) {
 		return Status{}, err
 	}
 	if !lockHeld {
-		startLock := flock.New(filepath.Join(m.StateDir, startLockName))
-		locked, lockErr := startLock.TryLockContext(ctx, 25*time.Millisecond)
+		startLock, lockErr := acquireDaemonLock(ctx, filepath.Join(m.StateDir, startLockName))
 		if lockErr != nil {
 			return Status{}, fmt.Errorf("acquire daemon stop lock: %w", lockErr)
 		}
-		if !locked {
-			return Status{}, fmt.Errorf("daemon stop coordination canceled: %w", ctx.Err())
-		}
-		defer func() { _ = startLock.Unlock() }()
+		defer func() { _ = releaseDaemonLock(startLock) }()
 	}
 	state, err := readState(m.StateDir)
 	if isNoState(err) {
@@ -389,12 +380,11 @@ func (m *Manager) Restart(ctx context.Context, projectPath string) (Status, erro
 	if err := m.defaults(); err != nil {
 		return Status{}, err
 	}
-	startLock := flock.New(filepath.Join(m.StateDir, startLockName))
-	locked, err := startLock.TryLockContext(ctx, 25*time.Millisecond)
-	if err != nil || !locked {
+	startLock, err := acquireDaemonLock(ctx, filepath.Join(m.StateDir, startLockName))
+	if err != nil {
 		return Status{}, fmt.Errorf("acquire daemon restart lock: %w", err)
 	}
-	defer func() { _ = startLock.Unlock() }()
+	defer func() { _ = releaseDaemonLock(startLock) }()
 	if _, err := m.stop(ctx, true); err != nil {
 		return Status{}, err
 	}
@@ -485,18 +475,11 @@ func (m *Manager) controlRequest(ctx context.Context, state diskState, method, p
 }
 
 func lifetimeLockHeld(dir string) (bool, error) {
-	lock := flock.New(filepath.Join(dir, lifetimeLockName))
-	acquired, err := lock.TryLock()
+	held, err := daemonLockHeld(filepath.Join(dir, lifetimeLockName))
 	if err != nil {
 		return false, fmt.Errorf("probe daemon lifetime lock: %w", err)
 	}
-	if acquired {
-		if err := lock.Unlock(); err != nil {
-			return false, fmt.Errorf("release daemon lifetime probe: %w", err)
-		}
-		return false, nil
-	}
-	return true, nil
+	return held, nil
 }
 
 func canonicalProjectPath(path string) (string, error) {

@@ -196,6 +196,11 @@ Starting the same path while a live owner exists is idempotent and reports that
 owner; starting a different path MUST fail with an instruction to stop or
 restart because the initial daemon owns one worktree. Every successful start
 MUST name `codegrapher daemon stop` as the teardown command.
+
+State directories and lock files MUST use the shared
+`strongo/cli-helpers/daemonlifecycle` owner-only and advisory-lock primitives.
+On Windows, privacy MUST be a protected DACL granting only the current user;
+Unix mode bits are not accepted as a Windows privacy check.
 The background lifecycle wraps the same serving/freshness composition as the
 foreground `serve` command; it MUST NOT introduce a daemon-only reconciler.
 
