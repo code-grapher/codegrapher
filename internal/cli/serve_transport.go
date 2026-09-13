@@ -58,6 +58,9 @@ func openAPIListener(settings apiListenerSettings) (*apiListener, error) {
 			return nil, fmt.Errorf("--api-public-authority is required for HTTPS serving")
 		}
 	}
+	if settings.externalTLS && sameAPIEndpoint(bindHost, bindPort, publicHost, publicPort, publicHasPort) {
+		return nil, fmt.Errorf("--api-public-authority must name a distinct HTTPS endpoint when --api-external-tls is used")
+	}
 	publicAuthority := canonicalPublicAuthority(publicHost, publicPort, publicHasPort)
 	if hasCert && bindPort != 0 {
 		effectivePublicPort := 443
@@ -131,6 +134,18 @@ func splitListenAddress(address string) (string, int, error) {
 
 func isLoopbackHost(host string) bool {
 	return strings.EqualFold(host, "localhost") || host == "127.0.0.1" || host == "::1"
+}
+
+func sameAPIEndpoint(bindHost string, bindPort int, publicHost string, publicPort int, publicHasPort bool) bool {
+	if bindPort == 0 {
+		return false
+	}
+	effectivePublicPort := 443
+	if publicHasPort {
+		effectivePublicPort = publicPort
+	}
+	sameHost := strings.EqualFold(bindHost, publicHost) || isLoopbackHost(bindHost) && isLoopbackHost(publicHost)
+	return sameHost && bindPort == effectivePublicPort
 }
 
 func parsePublicAuthority(authority string) (host string, port int, hasPort bool, err error) {

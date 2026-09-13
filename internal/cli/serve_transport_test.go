@@ -90,6 +90,24 @@ func TestOpenAPIListenerExternalTLSStaysOnLoopback(t *testing.T) {
 		}
 		t.Fatalf("non-loopback external termination = %+v, %v", insecure, err)
 	}
+	for _, authority := range []string{"127.0.0.1:7331", "localhost:7331", "[::1]:7331"} {
+		insecure, err := openAPIListener(apiListenerSettings{
+			listenAddress: "127.0.0.1:7331", publicAuthority: authority, externalTLS: true,
+		})
+		if insecure != nil {
+			_ = insecure.Close()
+		}
+		if err == nil || !strings.Contains(err.Error(), "distinct HTTPS endpoint") {
+			t.Fatalf("loopback public authority %q = %+v, %v", authority, insecure, err)
+		}
+	}
+	distinct, err := openAPIListener(apiListenerSettings{
+		listenAddress: "127.0.0.1:0", publicAuthority: "localhost:7443", externalTLS: true,
+	})
+	if err != nil {
+		t.Fatalf("distinct loopback TLS proxy: %v", err)
+	}
+	_ = distinct.Close()
 }
 
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/secure-remote-browser-api#ac:direct-tls-authority-is-verified

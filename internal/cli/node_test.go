@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,6 +16,9 @@ import (
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/automatic-index-freshness#ac:unrelated-nonfatal-candidates-do-not-block-read
 func TestNodeCommandReturnsSourceWithUnrelatedNonfatalCandidates(t *testing.T) {
 	root := t.TempDir()
+	runGitForWatchTest(t, root, "init", "-q")
+	runGitForWatchTest(t, root, "config", "user.email", "codegrapher-test@example.invalid")
+	runGitForWatchTest(t, root, "config", "user.name", "CodeGrapher Test")
 	mustWrite := func(path, content string) {
 		t.Helper()
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -28,6 +32,13 @@ func TestNodeCommandReturnsSourceWithUnrelatedNonfatalCandidates(t *testing.T) {
 	mustWrite(filepath.Join(root, "generated"), "old file\n")
 	mustWrite(filepath.Join(root, "cache.db"), "initial\n")
 	mustWrite(filepath.Join(root, "spec", "features", "README.md"), "plain markdown\n")
+	runGitForWatchTest(t, root, "add", ".")
+	runGitForWatchTest(t, root, "commit", "-qm", "initial")
+	headOutput, err := exec.Command("git", "-C", root, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	head := strings.TrimSpace(string(headOutput))
 	idx, _, err := indexer.Init(root, indexer.Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -53,6 +64,51 @@ func TestNodeCommandReturnsSourceWithUnrelatedNonfatalCandidates(t *testing.T) {
 	}
 	if got := out.String(); !strings.Contains(got, "func Good()") {
 		t.Fatalf("node output = %q", got)
+	}
+
+	idx, err = indexer.Open(root, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, graphStore := range idx.Stores() {
+		if revision, getErr := graphStore.GetMetadata("indexed_git_head"); getErr != nil || revision != head {
+			t.Fatalf("successful refresh revision = %q, %v; want %q", revision, getErr, head)
+		}
+		if stale, getErr := graphStore.GetFileByPath("generated"); getErr != nil || stale != nil {
+			t.Fatalf("stale directory file record = %+v, %v", stale, getErr)
+		}
+	}
+	children, err := idx.Store().GetNodesByName("Child")
+	if err != nil || len(children) == 0 {
+		t.Fatalf("directory descendant Child = %d, %v", len(children), err)
+	}
+	if err := idx.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// A self-referential symlink is a deterministic stat failure on platforms
+	// that permit symlink creation. It exercises the actual CLI refresh boundary
+	// without a test-only indexer seam.
+	if err := os.Symlink("fatal.go", filepath.Join(root, "fatal.go")); err != nil {
+		t.Logf("symlink unavailable; fatal CLI tail is covered by indexer error tests: %v", err)
+		return
+	}
+	fatalCmd := newNodeCmd()
+	fatalCmd.SilenceUsage = true
+	fatalCmd.SilenceErrors = true
+	fatalCmd.SetArgs([]string{"Good", "--source=inline", "--path", root})
+	if err := fatalCmd.Execute(); err == nil || !strings.Contains(err.Error(), "fatal.go") {
+		t.Fatalf("fatal candidate error = %v", err)
+	}
+	idx, err = indexer.Open(root, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	for _, graphStore := range idx.Stores() {
+		if revision, getErr := graphStore.GetMetadata("indexed_git_head"); getErr != nil || revision != "" {
+			t.Fatalf("fatal refresh retained revision = %q, %v", revision, getErr)
+		}
 	}
 }
 
