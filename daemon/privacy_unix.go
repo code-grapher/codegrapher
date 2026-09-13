@@ -2,4 +2,6 @@
 
 package daemon
 
-func protectUserOnly(string) error { return nil }
+import "github.com/strongo/cli-helpers/daemonlifecycle"
+
+func protectUserOnly(path string) error { return daemonlifecycle.ProtectOwnerOnly(path) }

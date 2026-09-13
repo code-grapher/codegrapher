@@ -11,7 +11,7 @@ require (
 	github.com/specscore/specscore-cli v0.40.0
 	github.com/spf13/cobra v1.10.2
 	github.com/strongo/buildinfo v0.2.0
-	github.com/strongo/cli-helpers v0.10.0
+	github.com/strongo/cli-helpers v0.11.2
 	golang.org/x/mod v0.38.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/tools v0.48.0

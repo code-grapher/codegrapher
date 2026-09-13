@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofrs/flock"
 	"github.com/specscore/codegrapher/browserapi"
 	"github.com/specscore/codegrapher/freshness"
 	"github.com/specscore/codegrapher/watch"
+	"github.com/strongo/cli-helpers/daemonlifecycle"
 )
 
 // RunFromEnvironment runs the internal daemon child. It is intentionally
@@ -49,15 +49,14 @@ func Run(parent context.Context, projectPath, stateDir, nonce, token, browserTok
 	if err != nil {
 		return err
 	}
-	lifetime := flock.New(filepath.Join(stateDir, lifetimeLockName))
-	locked, err := lifetime.TryLock()
+	lifetime, locked, err := tryAcquireDaemonLock(filepath.Join(stateDir, lifetimeLockName))
 	if err != nil {
 		return fmt.Errorf("acquire daemon lifetime lock: %w", err)
 	}
 	if !locked {
 		return errors.New("another CodeGrapher daemon owns the lifetime lock")
 	}
-	defer func() { _ = lifetime.Unlock() }()
+	defer func() { _ = daemonlifecycle.Unlock(lifetime); _ = lifetime.Close() }()
 
 	state, err := readState(stateDir)
 	if err != nil {
