@@ -12,8 +12,13 @@ status: Implementing
 ## Summary
 
 `codegrapher install` lists and installs the fleet CLIs relevant to
-codegrapher, built entirely on the shared
+codegrapher, and `codegrapher upgrade` reports and upgrades every installed
+catalog CLI plus codegrapher itself, both built entirely on the shared
 [CLI Install Command Library](https://github.com/strongo/cli-helpers/blob/main/spec/features/cli-install/README.md).
+`codegrapher self-update` is `codegrapher upgrade codegrapher`: both reach
+the identical library call, because codegrapher is always upgraded last and
+classified from its own self-update Config, never a `PATH` probe of its own
+binary.
 
 ## Problem
 
@@ -53,6 +58,24 @@ the library's full flag surface — `--all`, `--yes`/`-y`, `--dry-run`,
 alias stays on `self-update` only
 (cli-install#req:update-alias-policy).
 
+#### REQ: upgrade-command
+
+The CLI MUST expose `codegrapher upgrade [name...]`, built from
+`github.com/strongo/cli-helpers/cliinstall/cobracmd`'s `cobracmd.NewUpgrade`.
+The command inherits the library's full upgrade flag surface — `--all`,
+`--check`, `--yes`/`-y`, `--dry-run`, and `--format text|json` — none of
+which is re-specified here, and MUST carry no `update` alias
+(cli-install#req:update-alias-policy). `upgrade`'s `HostConfig` and
+`HostAfterUpdate` MUST be the exact SAME Config (resolved through the
+`selfUpdateConfigFunc` seam) and after-update skills-sync hook
+(`syncSkillsAfterSelfUpdate`) `self-update` itself builds and calls, so
+`codegrapher self-update` and `codegrapher upgrade codegrapher` reach the
+identical library call and the identical hook
+(cli-install#req:self-update-equals-upgrade-self,
+cli-install#req:host-target-is-running-binary,
+cli-install#req:self-update-hook-hint — codegrapher's catalog entry declares
+`SelfUpdateHooks: true`).
+
 ### Host identity
 
 #### REQ: host-id
@@ -82,11 +105,17 @@ refusal, a managed-command failure, ...) — is mapped explicitly, never
 through a default branch (cli-install#req:host-owned-exit-codes), and every
 non-`KindUnknownTarget` failure passes through unchanged, exactly like
 `self-update`'s own passthrough. `install nosuchcli` MUST exit `1` and name
-the unknown target.
+the unknown target. `upgrade` MUST use the exact SAME `installErrors` mapper
+(cli-install#req:host-owned-exit-codes: "The upgrade command MUST use the
+same error mapper"); it declares no upgrades-available method, so
+`upgrade --check` never signals a dedicated exit code for an available
+update — matching `self-update`'s own contract, which sets no `Errors` at
+all and so never signals one either. `upgrade nosuchcli` MUST exit `1` and
+name the unknown target, matching `install nosuchcli` exactly.
 
 | Exit code | Meaning |
 |---|---|
-| `0` | Success: every named target installed, already installed, redirected, or dry run |
+| `0` | Success: every named target installed/upgraded, already installed/current, redirected, or dry run — including `upgrade --check` regardless of verdict |
 | `1` | Any failure: an unknown target, no usable install directory, a destination that already exists, any self-update-shared failure kind, or an invalid `--format`/`--all` usage |
 
 ## Implementation
@@ -96,8 +125,12 @@ Source files implementing this feature:
 - [`internal/cli/install.go`](../../../internal/cli/install.go) — the
   `installErrors` exit-code mapper and the `cobracmd.New` wiring against
   `HostID: "codegrapher"`.
+- [`internal/cli/upgrade.go`](../../../internal/cli/upgrade.go) — the
+  `cobracmd.NewUpgrade` wiring, reusing `installErrors` and resolving
+  `HostConfig`/`HostAfterUpdate` through the same `selfUpdateConfigFunc`
+  seam and `syncSkillsAfterSelfUpdate` hook `self-update` uses.
 - [`internal/cli/root.go`](../../../internal/cli/root.go) — registers
-  `newInstallCmd()` on the root command.
+  `newInstallCmd()` and `newUpgradeCmd()` on the root command.
 
 The shared behavior lives upstream, not in this repository:
 `github.com/strongo/cli-helpers` `cliinstall/`, `cliinstall/cliui/`,
@@ -109,7 +142,7 @@ with `self-update`).
 
 | Feature | Interaction |
 |---|---|
-| self-update (`internal/cli/self_update.go`) | Both commands build from the same `cliinstall.ByID("codegrapher")` / `selfupdate.Config` catalog entry, so `install`'s view of codegrapher (shown by other CLIs) and `self-update`'s own release identity never disagree; both share the `SelfUpdateHooks`-driven skills re-sync hint. |
+| self-update (`internal/cli/self_update.go`) | Both `install` and `upgrade` build from the same `cliinstall.ByID("codegrapher")` catalog entry and the same `selfUpdateConfigFunc`-resolved `selfupdate.Config` self-update itself builds, so `install`'s/`upgrade`'s view of codegrapher (shown by other CLIs) and `self-update`'s own release identity never disagree; all three share the `SelfUpdateHooks`-driven skills re-sync hint, and `self-update`/`upgrade codegrapher` reach the identical library call (cli-install#req:self-update-equals-upgrade-self). |
 
 ## Acceptance Criteria
 
@@ -132,6 +165,24 @@ with `self-update`).
 **Then** the command fails before any confirmation, network request or
 write, names `nosuchcli` in its error as a `*cobracmd.UsageError`, and exits
 `1`.
+
+### AC: upgrade-registration-and-self-update-equivalence
+
+**Requirements:** install#req:upgrade-command, cli-install#req:self-update-equals-upgrade-self
+
+**Given** the compiled `cliinstall` catalog
+**When** `newUpgradeCmd()` builds the command, and separately `codegrapher self-update --check` and `codegrapher upgrade codegrapher --check` run against the same release state
+**Then** the command registers `--all`, `--check`, `--yes`/`-y`, `--dry-run` and `--format`, carries no `update` alias, and both commands report the same current/latest verdict.
+
+### AC: upgrade-unknown-target-exit-code
+
+**Requirements:** install#req:exit-codes
+
+**Given** the real command built exactly as `root.go` wires it
+**When** the user runs `codegrapher upgrade nosuchcli`
+**Then** the command fails before any confirmation, network request or
+write, names `nosuchcli` in its error as a `*cobracmd.UsageError`, and exits
+`1`, matching `install nosuchcli` exactly.
 
 The remaining behavior — the relevance matrix, listing and status probing,
 destination policy, Homebrew-cask installs, checksum-verified direct

@@ -27,9 +27,19 @@ func newSelfUpdateConfig() selfupdate.Config {
 	}
 }
 
+// selfUpdateConfigFunc is a seam over newSelfUpdateConfig so tests can point
+// a full command execution at an httptest.Server instead of the real GitHub
+// API. newUpgradeCmd (upgrade.go) resolves its own HostConfig through this
+// SAME seam, so `codegrapher self-update` and `codegrapher upgrade
+// codegrapher` always build from the identical Config
+// (cli-install#req:self-update-equals-upgrade-self,
+// cli-install#req:host-target-is-running-binary), by construction rather
+// than by two copies staying in sync.
+var selfUpdateConfigFunc = newSelfUpdateConfig
+
 func newSelfUpdateCmd() *cobra.Command {
 	var command *cobra.Command
-	command = selfupdatecmd.New(newSelfUpdateConfig(), selfupdatecmd.CommandOptions{
+	command = selfupdatecmd.New(selfUpdateConfigFunc(), selfupdatecmd.CommandOptions{
 		Short:      "Update the installed CodeGrapher binary to the latest release",
 		Aliases:    []string{"update"},
 		JSONFormat: true,
