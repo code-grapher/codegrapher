@@ -18,6 +18,7 @@ Feature specifications for this project.
 | [Authenticated browser API](live-daemon-api/README.md) | Stable | Expose the one repository owned by a foreground server or background daemon through a bounded, authenticated, versioned HTTP API that the CodeGrapher.dev repository browser can consume without learning local filesystem paths. |
 | [Sync initialization on demand](sync-initialize-if-missing/README.md) | Stable | Let automation explicitly initialize an unindexed repository through the normal sync command, then use incremental reconciliation thereafter. |
 | [Secure remote browser API](secure-remote-browser-api/README.md) | Implementing | Serve the browser API remotely only through an authority-matching, browser-trusted HTTPS endpoint. |
+| [Install](install/README.md) | Implementing | `codegrapher install` lists and installs the fleet CLIs relevant to codegrapher, built entirely on the shared [CLI Install Command Library](https://github.com/strongo/cli-helpers/blob/main/spec/features/cli-install/README.md). |
 
 ## Open Questions
 
