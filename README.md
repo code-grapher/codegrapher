@@ -109,6 +109,25 @@ indexed, producing module and dependency nodes across `dependencies`,
 `devDependencies`, `peerDependencies`, and `optionalDependencies`, stored in a
 dedicated node scope merged into JS/TS queries.
 
+## Installing and upgrading
+
+`codegrapher install` lists and installs the other fleet CLIs (`specscore`, `wb`, `cover100`) relevant to codegrapher, the same way `self-update` installs codegrapher itself:
+
+```bash
+codegrapher install                # list fleet CLIs relevant to codegrapher, with live status
+codegrapher install specscore wb   # install named ones, after one confirmation
+```
+
+`codegrapher upgrade` is the fleet-wide counterpart to `self-update`: it reports and upgrades every *installed* catalog CLI, including codegrapher itself.
+
+```bash
+codegrapher upgrade                # report every installed catalog CLI plus codegrapher; changes nothing
+codegrapher upgrade --all          # upgrade every installed catalog CLI plus codegrapher
+codegrapher upgrade --all --check  # report upgrade availability only; changes nothing
+```
+
+`codegrapher self-update` (alias `update`) is exactly `codegrapher upgrade codegrapher`: both build from the same release identity and after-update skills-sync hook, so they never disagree. Full contract: [`spec/features/install/`](spec/features/install/).
+
 ## Build
 
 ```sh

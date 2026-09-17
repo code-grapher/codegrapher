@@ -10,8 +10,55 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/strongo/buildinfo"
+	"github.com/strongo/cli-helpers/cliinstall"
 	"github.com/strongo/cli-helpers/selfupdate"
 )
+
+// AC: cli-install#req:catalog-identity-single-source — review finding S2:
+// newSelfUpdateConfig MUST resolve codegrapher's release identity from
+// cliinstall.ByID("codegrapher").Config(...), the SAME compiled-in catalog
+// entry install/upgrade resolve, not a hand-maintained duplicate that only
+// happens to match today. TestNewSelfUpdateConfigMatchesPublishedReleaseAssets
+// above already pins the individual field values; this proves they come
+// from the catalog entry itself, so drift in catalog_codegrapher.go would
+// be caught here too.
+func TestNewSelfUpdateConfig_MatchesCatalogEntry(t *testing.T) {
+	entry, ok := cliinstall.ByID(codegrapherCatalogID)
+	if !ok {
+		t.Fatalf("no catalog entry for %q", codegrapherCatalogID)
+	}
+	want := entry.Config(buildinfo.Get("codegrapher").Version)
+	got := newSelfUpdateConfig()
+	if got.Repository != want.Repository || got.BinaryName != want.BinaryName {
+		t.Errorf("newSelfUpdateConfig() = %+v, want built from cliinstall.ByID(%q).Config(...): %+v", got, codegrapherCatalogID, want)
+	}
+	if len(got.Managers) != len(want.Managers) {
+		t.Errorf("Managers = %d entries, want %d (the same catalog entry's managers)", len(got.Managers), len(want.Managers))
+	}
+	if len(got.SupportedPlatforms) != len(want.SupportedPlatforms) {
+		t.Errorf("SupportedPlatforms = %d entries, want %d (the catalog entry's own platform matrix)", len(got.SupportedPlatforms), len(want.SupportedPlatforms))
+	}
+}
+
+// cli-install#req:host-identity-from-catalog — a host id absent from the
+// compiled catalog is a programming error caught by this package's own
+// tests, never a runtime state a user can trigger. Before the S2 fix,
+// newSelfUpdateConfig hand-built its Config and could never hit this path;
+// now that it resolves through catalogEntryByID, a missing entry panics,
+// matching specscore's and chatwright's own identical seam and panic.
+func TestNewSelfUpdateConfig_PanicsWhenCatalogEntryMissing(t *testing.T) {
+	prev := catalogEntryByID
+	catalogEntryByID = func(string) (cliinstall.Entry, bool) { return cliinstall.Entry{}, false }
+	t.Cleanup(func() { catalogEntryByID = prev })
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected newSelfUpdateConfig to panic when the catalog entry is missing")
+		}
+	}()
+	newSelfUpdateConfig()
+}
 
 func TestNewSelfUpdateConfigMatchesPublishedReleaseAssets(t *testing.T) {
 	cfg := newSelfUpdateConfig()

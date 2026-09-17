@@ -23,6 +23,8 @@ chains, analyse blast radius, and keep the index in sync.`,
 
 	root.AddCommand(
 		newSelfUpdateCmd(),
+		newInstallCmd(),
+		newUpgradeCmd(),
 		newSkillsCmd(),
 		newInitCmd(),
 		newUninitCmd(),

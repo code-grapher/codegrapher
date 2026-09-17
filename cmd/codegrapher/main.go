@@ -2,10 +2,15 @@
 // colbymchenry/codegraph TypeScript CLI.
 //
 // Skipped verbs (out of scope):
-//   - install / uninstall: agent-config editors, orthogonal to code intelligence
-//   - upgrade: npm self-update logic, meaningless for a static Go binary
+//   - uninstall: an agent-config editor, orthogonal to code intelligence
 //   - MCP daemon/proxy transport: the local repository freshness daemon is
 //     separate from the existing direct stdio MCP transport.
+//
+// install and upgrade are NOT skipped: they come from the shared
+// github.com/strongo/cli-helpers/cliinstall library (see internal/cli/
+// install.go, internal/cli/upgrade.go) and cover fleet CLI discovery and
+// self-update, not the original codegraph TypeScript CLI's own npm-based
+// install/upgrade verbs, which have no equivalent for a static Go binary.
 //
 // CODEGRAPH_* env vars honored:
 //   - CODEGRAPH_NO_WATCH / CODEGRAPH_FORCE_WATCH (watcher policy — consumed by watch package)
