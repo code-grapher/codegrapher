@@ -38,13 +38,14 @@ func TestInstall_Registration(t *testing.T) {
 	}
 }
 
-// TestInstallErrorsFailure_NilReturnsNil proves the defensive nil guard:
-// cliinstall/cobracmd v0.20.0's runInstall calls mapFailure(opts,
-// plan.Failure()) and mapFailure(opts, result.Failure()) unconditionally,
-// and both return nil for a fully successful batch (including a successful
-// --dry-run), so installErrors.Failure(nil) is a real, reachable call on the
-// ordinary success path, not just a defensive guard against a hypothetical
-// caller (known cli-helpers v0.20.0 bug — see install.go's doc comment).
+// TestInstallErrorsFailure_NilReturnsNil proves the defensive nil guard
+// stays nil-safe: cliinstall/cobracmd v0.21.0's mapFailure now short-
+// circuits nil before ever calling opts.Errors.Failure (fixed since the
+// v0.20.0 bug install.go's doc comment used to document, where runInstall
+// called mapFailure(opts, plan.Failure()) and mapFailure(opts,
+// result.Failure()) unconditionally, and both return nil for a fully
+// successful batch), so this guard is now purely defensive against a direct
+// caller rather than a reachable production path.
 func TestInstallErrorsFailure_NilReturnsNil(t *testing.T) {
 	t.Parallel()
 
@@ -99,8 +100,10 @@ func TestInstallErrorsFailure_UnknownTargetBecomesUsageError(t *testing.T) {
 }
 
 // TestInstallErrorsFailure_PassesThroughOtherKinds proves every failure
-// that is NOT KindUnknownTarget — the two other cli-install-only kinds, a
-// self-update-shared kind, an already-usage error, and a plain error —
+// that is NOT KindUnknownTarget — the two other cli-install-only kinds
+// (mapped through their OWN explicit case, per cli-install#req:host-owned-
+// exit-codes, even though the outcome is identical to the default branch),
+// a self-update-shared kind, an already-usage error, and a plain error —
 // passes through unchanged, matching self_update.go's own passthrough
 // (newSelfUpdateCmd sets no Errors).
 func TestInstallErrorsFailure_PassesThroughOtherKinds(t *testing.T) {

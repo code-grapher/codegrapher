@@ -46,6 +46,22 @@ func TestUpgrade_Registration(t *testing.T) {
 	}
 }
 
+// M2 review fix: upgrade MUST register the SAME --json shortcut self-update
+// has (addJSONShortcut, skills.go), so the two commands' flag surfaces stay
+// aligned rather than only self-update offering the shorthand.
+func TestUpgrade_RegistersJSONShortcut(t *testing.T) {
+	t.Parallel()
+
+	cmd := newUpgradeCmd()
+	flag := cmd.Flags().Lookup("json")
+	if flag == nil {
+		t.Fatal("upgrade --json is missing")
+	}
+	if flag.Shorthand != "j" {
+		t.Errorf("--json shorthand = %q, want j", flag.Shorthand)
+	}
+}
+
 // cli-install#req:unknown-target-refused — `codegrapher upgrade nosuchcli`
 // MUST fail before any confirmation, network request or write, mapped
 // through the SAME installErrors mapper install itself uses (a

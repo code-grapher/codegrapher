@@ -9,22 +9,46 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/strongo/buildinfo"
+	"github.com/strongo/cli-helpers/cliinstall"
 	"github.com/strongo/cli-helpers/selfupdate"
 	selfupdatecmd "github.com/strongo/cli-helpers/selfupdate/cobracmd"
 )
 
+// codegrapherCatalogID is this binary's own id in
+// github.com/strongo/cli-helpers/cliinstall -- the fleet-wide compiled-in
+// registry of installable CLIs and their release identities
+// (cli-install#req:host-identity-from-catalog).
+const codegrapherCatalogID = "codegrapher"
+
+// catalogEntryByID is a test seam over cliinstall.ByID so the defensive
+// panic below (a host id absent from the compiled catalog, which never
+// happens in production -- codegrapher's own catalog entry always exists)
+// is exercisable, matching specscore's and chatwright's own identical seam.
+var catalogEntryByID = cliinstall.ByID
+
+// newSelfUpdateConfig resolves codegrapher's own selfupdate.Config from its
+// compiled-in catalog entry (cliinstall/catalog_codegrapher.go in
+// strongo/cli-helpers) rather than a hand-maintained duplicate
+// (cli-install#req:catalog-identity-single-source: "A host's self-update
+// SHOULD build its Config from its own entry so its self-update and every
+// other host's install <that cli> resolve releases identically" --
+// task-10's own "self-update Config from the catalog"). The catalog entry
+// carries the SAME Managers (HomebrewCask), SupportedPlatforms,
+// VersionProbeArgs and ChecksumsName this function used to hand-roll;
+// UndeterminedVersions is left at the library's own {"dev"} default, which
+// the catalog entry also leaves unset. newUpgradeCmd (upgrade.go) resolves
+// its own HostConfig through the SAME selfUpdateConfigFunc seam below, so
+// `codegrapher self-update` and `codegrapher upgrade codegrapher` always
+// build from the identical Config.
 func newSelfUpdateConfig() selfupdate.Config {
-	build := buildinfo.Get("codegrapher")
-	return selfupdate.Config{
-		BinaryName:           "codegrapher",
-		Repository:           "code-grapher/codegrapher",
-		CurrentVersion:       build.Version,
-		UndeterminedVersions: []string{"dev"},
-		Managers:             []selfupdate.Manager{selfupdate.HomebrewCask("codegrapher")},
-		SupportedPlatforms:   []selfupdate.Platform{{GOOS: "darwin", GOARCH: "amd64"}, {GOOS: "darwin", GOARCH: "arm64"}, {GOOS: "linux", GOARCH: "amd64"}, {GOOS: "linux", GOARCH: "arm64"}, {GOOS: "windows", GOARCH: "amd64"}},
-		VersionProbeArgs:     []string{"--version"},
-		ChecksumsName:        func(string, string) string { return "checksums.txt" },
+	entry, ok := catalogEntryByID(codegrapherCatalogID)
+	if !ok {
+		// A host id absent from the compiled catalog is a programming error
+		// caught by this package's own tests, never a runtime state a user
+		// can trigger (cli-install#req:host-identity-from-catalog).
+		panic(fmt.Sprintf("cliinstall: no catalog entry for %q", codegrapherCatalogID))
 	}
+	return entry.Config(buildinfo.Get("codegrapher").Version)
 }
 
 // selfUpdateConfigFunc is a seam over newSelfUpdateConfig so tests can point

@@ -26,12 +26,14 @@ import (
 // SAME syncSkillsAfterSelfUpdate function self-update calls, bound to
 // upgrade's own command so it reads upgrade's own --format flag rather than
 // self-update's (cli-install#req:self-update-hook-hint -- codegrapher is one
-// of the two catalog entries with SelfUpdateHooks set).
+// of the two catalog entries with SelfUpdateHooks set). Also registers the
+// SAME --json shortcut self-update has (addJSONShortcut, skills.go) so the
+// two commands' flag surfaces stay aligned.
 func newUpgradeCmd() *cobra.Command {
 	var command *cobra.Command
 	command = upgradecmd.NewUpgrade(upgradecmd.UpgradeCommandOptions{
 		Short:      "Upgrade installed fleet CLIs, including this one",
-		HostID:     "codegrapher",
+		HostID:     codegrapherCatalogID,
 		Errors:     installErrors{},
 		HostConfig: selfUpdateConfigFunc(),
 		HostAfterUpdate: func(ctx context.Context, update selfupdate.AfterUpdate) error {
@@ -40,6 +42,7 @@ func newUpgradeCmd() *cobra.Command {
 		DetectHost: upgradeDetectHostFunc,
 		Env:        upgradeEnv,
 	})
+	addJSONShortcut(command)
 	return command
 }
 

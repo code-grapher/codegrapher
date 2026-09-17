@@ -20,7 +20,7 @@ func newInstallCmd() *cobra.Command {
 	return cobracmd.New(cobracmd.CommandOptions{
 		Short:  "List and install fleet CLIs relevant to codegrapher",
 		Errors: installErrors{},
-		HostID: "codegrapher",
+		HostID: codegrapherCatalogID,
 	})
 }
 
@@ -44,28 +44,36 @@ type installErrors struct{}
 
 // Failure maps err into codegrapher's own error convention.
 //
-// A nil err IS a real, reachable call on the ordinary success and dry-run
-// path, not just a defensive guard: cliinstall/cobracmd v0.20.0's
-// runInstall calls mapFailure(opts, plan.Failure()) and mapFailure(opts,
-// result.Failure()) unconditionally, and both return nil for a fully
-// successful batch, so installErrors.Failure(nil) runs on every successful
-// `codegrapher install` and `codegrapher install <name> --dry-run`.
-// Feedback for cli-helpers (known bug, not yet fixed at v0.20.0):
-// mapFailure itself should short-circuit nil before calling
-// opts.Errors.Failure, matching what ErrorMapper.Failure's own doc comment
-// already promises ("maps a non-nil command error").
+// cliinstall/cobracmd v0.21.0's mapFailure short-circuits a nil err before
+// ever calling opts.Errors.Failure (fixed since v0.20.0, where this comment
+// used to document the bug: runInstall called mapFailure(opts,
+// plan.Failure()) and mapFailure(opts, result.Failure()) unconditionally,
+// and both return nil for a fully successful batch, so
+// installErrors.Failure(nil) ran on every successful `codegrapher install`
+// and `codegrapher install <name> --dry-run`). The guard below stays only
+// because it is trivially free and keeps this method nil-safe for any
+// direct caller, including TestInstallErrorsFailure_NilReturnsNil.
 func (installErrors) Failure(err error) error {
 	if err == nil {
 		return nil
 	}
-	if selfupdate.KindOf(err) == selfupdate.KindUnknownTarget {
+	switch selfupdate.KindOf(err) {
+	case selfupdate.KindUnknownTarget:
 		return &cobracmd.UsageError{Err: err}
+	case selfupdate.KindNoInstallDir, selfupdate.KindDestinationExists:
+		// Explicit, even though the outcome is identical to the default
+		// branch below (codegrapher has only one non-success exit code):
+		// cli-install#req:host-owned-exit-codes requires every host to map
+		// the three new failure kinds through an EXPLICIT branch, never a
+		// self-update default branch.
+		return err
+	default:
+		// Every other kind — a *cobracmd.UsageError already produced for an
+		// invalid --format or --all combined with names, and every kind
+		// selfupdate itself carries — passes through unchanged, exactly
+		// like self_update.go's own error passthrough (newSelfUpdateCmd's
+		// Errors is nil, so selfupdate/cobracmd already returns those
+		// errors unmodified).
+		return err
 	}
-	// Every other kind — a *cobracmd.UsageError already produced for an
-	// invalid --format or --all combined with names, KindNoInstallDir,
-	// KindDestinationExists, and every kind selfupdate itself carries —
-	// passes through unchanged, exactly like self_update.go's own error
-	// passthrough (newSelfUpdateCmd sets no Errors, so
-	// selfupdate/cobracmd already returns those errors unmodified).
-	return err
 }
