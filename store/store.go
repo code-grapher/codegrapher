@@ -144,7 +144,7 @@ func (s *Store) bootstrapSchemaOnce() (fresh bool, err error) {
 	if err != nil {
 		return false, fmt.Errorf("store: bootstrap connection: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
 		return false, fmt.Errorf("store: begin bootstrap: %w", err)
 	}
