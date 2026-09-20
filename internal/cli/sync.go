@@ -84,13 +84,24 @@ func newSyncCmdWithRunner(runSync syncRunner) *cobra.Command {
 			if result.LockUnavailable {
 				return fmt.Errorf("sync did not run: writer lock is unavailable")
 			}
-			if len(result.Errors) > 0 {
+			fatalCount := 0
+			firstFatal := ""
+			for _, extractionErr := range result.Errors {
+				if strings.EqualFold(extractionErr.Severity, "warning") {
+					continue
+				}
+				fatalCount++
+				if firstFatal == "" {
+					firstFatal = extractionErr.Message
+				}
+			}
+			if fatalCount > 0 {
 				if !quiet {
 					printErrorBreakdown(result.Errors)
 					writeErrorLog(projectPath, result.Errors)
 					printInfo("See .codegraph/errors.log for details")
 				}
-				return fmt.Errorf("sync failed for %d file(s): %s", len(result.Errors), result.Errors[0].Message)
+				return fmt.Errorf("sync failed for %d file(s): %s", fatalCount, firstFatal)
 			}
 			if quiet {
 				return nil

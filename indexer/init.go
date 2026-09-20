@@ -260,6 +260,7 @@ type extractJob struct {
 	result   model.ExtractionResult
 	readErr  error
 	tooLarge bool
+	skip     bool
 }
 
 // extractAndStore reads and parses files concurrently (bounded pool of
@@ -305,6 +306,10 @@ func (idx *Indexer) extractAndStore(files []string, opts Options, result *IndexR
 					Severity: "error",
 					Code:     "read_error",
 				})
+				continue
+			}
+			if job.skip {
+				result.FilesSkipped++
 				continue
 			}
 			if job.tooLarge {
@@ -443,6 +448,7 @@ func extractOne(rootDir, relPath string) extractJob {
 		// Directory events can reach incremental indexing through external
 		// hooks or editors. They are not files and must never become a noisy
 		// "is a directory" read error.
+		job.skip = true
 		return job
 	}
 

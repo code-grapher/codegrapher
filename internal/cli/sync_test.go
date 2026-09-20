@@ -123,6 +123,89 @@ func TestSyncReturnsErrorForPartialFailures(t *testing.T) {
 	if !strings.Contains(err.Error(), "1 file") {
 		t.Fatalf("error = %q, want failed-file count", err)
 	}
+	if !strings.Contains(err.Error(), "could not update file") {
+		t.Fatalf("error = %q, want first fatal diagnostic", err)
+	}
+}
+
+func TestSyncAllowsExtractionWarnings(t *testing.T) {
+	projectPath := initializedSyncFixture(t)
+	command := newSyncCmdWithRunner(func(*indexer.Indexer, indexer.Options) indexer.SyncResult {
+		return indexer.SyncResult{
+			FilesModified: 1,
+			Errors: []model.ExtractionError{{
+				FilePath: "spec/decisions/0001-example.md",
+				Message:  "unrecognized or missing format",
+				Severity: "warning",
+			}},
+		}
+	})
+	command.SetArgs([]string{"--quiet", projectPath})
+
+	if err := command.Execute(); err != nil {
+		t.Fatalf("sync rejected a non-fatal extraction warning: %v", err)
+	}
+}
+
+func TestSyncReportsFatalCountAndFirstFatalAmongWarnings(t *testing.T) {
+	projectPath := initializedSyncFixture(t)
+	command := newSyncCmdWithRunner(func(*indexer.Indexer, indexer.Options) indexer.SyncResult {
+		return indexer.SyncResult{Errors: []model.ExtractionError{
+			{FilePath: "before.md", Message: "warning before", Severity: "warning"},
+			{FilePath: "first.go", Message: "first fatal", Severity: "error"},
+			{FilePath: "between.md", Message: "warning between", Severity: "WARNING"},
+			{FilePath: "second.go", Message: "second fatal", Severity: "error"},
+		}}
+	})
+	command.SetArgs([]string{"--quiet", projectPath})
+
+	err := command.Execute()
+	if err == nil {
+		t.Fatal("sync unexpectedly succeeded with mixed fatal diagnostics")
+	}
+	if got, want := err.Error(), "sync failed for 2 file(s): first fatal"; got != want {
+		t.Fatalf("error = %q, want %q", got, want)
+	}
+}
+
+func TestSyncPersistsWarningDiagnosticsOnSuccess(t *testing.T) {
+	projectPath := initializedSyncFixture(t)
+	relPath := filepath.Join("spec", "features", "README.md")
+	fullPath := filepath.Join(projectPath, relPath)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fullPath, []byte("---\nformat: https://specscore.md/broken-specification\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	command := newSyncCmd()
+	command.SetArgs([]string{"--quiet", projectPath})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("sync rejected warning-only diagnostics: %v", err)
+	}
+
+	idx, err := indexer.Open(projectPath, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	var found bool
+	for _, s := range idx.Stores() {
+		rec, err := s.GetFileByPath(filepath.ToSlash(relPath))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rec == nil {
+			continue
+		}
+		found = true
+		if len(rec.Errors) == 0 || !strings.EqualFold(rec.Errors[0].Severity, "warning") {
+			t.Fatalf("persisted diagnostics = %+v, want warning", rec.Errors)
+		}
+	}
+	if !found {
+		t.Fatalf("no persisted file record for %s", relPath)
+	}
 }
 
 func initializedSyncFixture(t *testing.T) string {

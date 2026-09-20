@@ -107,6 +107,21 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), FilePath: filePath, Severity: "error", Code: "stat_error"})
 			continue
 		}
+		// Git reports tracked symlinks to directories as files. Remove any stale
+		// regular-file record left by a path-kind transition, then skip the
+		// directory instead of passing it to os.ReadFile.
+		if fi.IsDir() {
+			if isTracked {
+				deleted, deleteErr := idx.deleteFileEverywhere(filePath)
+				if deleteErr != nil {
+					result.Errors = append(result.Errors, model.ExtractionError{Message: deleteErr.Error(), FilePath: filePath, Severity: "error", Code: "delete_error"})
+				} else if deleted {
+					result.FilesRemoved++
+					result.ChangedFilePaths = append(result.ChangedFilePaths, filePath)
+				}
+			}
+			continue
+		}
 		if isTracked {
 			if fi.Size() == rec.Size && statMtimeMs(fi) == rec.ModifiedAt {
 				// Git lists dirty candidates cheaply; always hash those so a
