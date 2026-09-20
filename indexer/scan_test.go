@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"testing"
 )
@@ -183,6 +184,25 @@ func TestScanDirectoryGitRepo(t *testing.T) {
 	// .gitignore is tracked and non-gitignored, so it is admitted too.
 	got := ScanDirectory(dir)
 	want := []string{".gitignore", "src/a.go", "untracked.ts"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ScanDirectory = %v, want %v", got, want)
+	}
+}
+
+func TestScanDirectoryGitRepoSkipsTrackedDirectorySymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires additional privileges on Windows")
+	}
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "ai", "skills", "README.md"), "skills\n")
+	if err := os.Symlink(filepath.Join("ai", "skills"), filepath.Join(dir, "skills")); err != nil {
+		t.Fatalf("create directory symlink: %v", err)
+	}
+	mustGit(t, dir, "init")
+	mustGit(t, dir, "add", "-A")
+
+	got := ScanDirectory(dir)
+	want := []string{"ai/skills/README.md"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ScanDirectory = %v, want %v", got, want)
 	}

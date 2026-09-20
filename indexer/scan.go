@@ -432,7 +432,11 @@ func collectGitFiles(repoDir, prefix string, files map[string]bool) bool {
 		// stale index entry; otherwise a rebuild tries to read a missing file.
 		// Other stat failures remain candidates so extraction reports them
 		// instead of silently certifying an incomplete graph.
-		info, statErr := os.Lstat(filepath.Join(repoDir, filepath.FromSlash(rel)))
+		// Follow symlinks here so a tracked link to a directory is excluded by
+		// the same path-kind admission rule as a literal directory. Otherwise it
+		// can never receive a file record and freshness reports it as perpetually
+		// added. Other stat failures remain visible to extraction.
+		info, statErr := os.Stat(filepath.Join(repoDir, filepath.FromSlash(rel)))
 		if os.IsNotExist(statErr) || (statErr == nil && info.IsDir()) {
 			continue
 		}
