@@ -201,6 +201,10 @@ func TestSyncIgnoresTrackedSymlinkToDirectory(t *testing.T) {
 		}
 	}
 	assertIgnored("init")
+	changes := idx.GetChangedFiles()
+	if len(changes.Added) != 0 || len(changes.Modified) != 0 || len(changes.Removed) != 0 {
+		t.Fatalf("post-init changes = %+v, want none", changes)
+	}
 	result := idx.Sync(Options{})
 	if len(result.Errors) != 0 {
 		t.Fatalf("sync errors = %+v", result.Errors)
