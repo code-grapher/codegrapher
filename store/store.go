@@ -13,6 +13,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	_ "embed"
 	"fmt"
@@ -89,8 +90,9 @@ func openDB(path string, opts []Option) (*Store, error) {
 	return s, nil
 }
 
-// Initialize creates a new database at path (parent directories included),
-// applies the schema, and records the current schema version.
+// Initialize creates a database at path when needed, or opens and migrates an
+// existing database. Bootstrap runs under an immediate transaction so two
+// initializers cannot both observe a partially-created schema.
 func Initialize(path string, opts ...Option) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, fmt.Errorf("store: mkdir: %w", err)
@@ -99,27 +101,82 @@ func Initialize(path string, opts ...Option) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.db.Exec(schemaSQL); err != nil {
+	fresh, err := s.bootstrapSchema()
+	if err != nil {
 		_ = s.db.Close()
-		return nil, fmt.Errorf("store: apply schema: %w", err)
+		return nil, err
 	}
-	// Fresh schema.sql already includes every migration's effects; record the
-	// version so migrations aren't re-applied on open (mirrors initialize()).
 	v, err := s.schemaVersion()
 	if err != nil {
 		_ = s.db.Close()
 		return nil, err
 	}
-	if v < CurrentSchemaVersion {
-		if _, err := s.db.Exec(
-			`INSERT OR IGNORE INTO schema_versions (version, applied_at, description) VALUES (?, ?, ?)`,
-			CurrentSchemaVersion, s.now(), "Initial schema includes all migrations",
-		); err != nil {
+	if !fresh && v < CurrentSchemaVersion {
+		if err := s.runMigrations(v); err != nil {
 			_ = s.db.Close()
-			return nil, fmt.Errorf("store: record schema version: %w", err)
+			return nil, err
 		}
 	}
 	return s, nil
+}
+
+// bootstrapSchema applies schema.sql only when schema_versions does not exist.
+// BEGIN IMMEDIATE serializes that decision across processes before either can
+// expose a partial bootstrap to the other.
+func (s *Store) bootstrapSchema() (fresh bool, err error) {
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		fresh, err = s.bootstrapSchemaOnce()
+		if err == nil || !isSQLiteBusy(err) || time.Now().After(deadline) {
+			return fresh, err
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func isSQLiteBusy(err error) bool {
+	return err != nil && (strings.Contains(err.Error(), "SQLITE_BUSY") || strings.Contains(err.Error(), "database is locked"))
+}
+
+func (s *Store) bootstrapSchemaOnce() (fresh bool, err error) {
+	ctx := context.Background()
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return false, fmt.Errorf("store: bootstrap connection: %w", err)
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return false, fmt.Errorf("store: begin bootstrap: %w", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_, _ = conn.ExecContext(ctx, "ROLLBACK")
+		}
+	}()
+
+	var exists int
+	if err := conn.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM sqlite_master
+		WHERE type = 'table' AND name = 'schema_versions'`).Scan(&exists); err != nil {
+		return false, fmt.Errorf("store: inspect schema: %w", err)
+	}
+	if exists == 0 {
+		if _, err := conn.ExecContext(ctx, schemaSQL); err != nil {
+			return false, fmt.Errorf("store: apply schema: %w", err)
+		}
+		if _, err := conn.ExecContext(ctx, `
+			INSERT INTO schema_versions (version, applied_at, description) VALUES (?, ?, ?)
+			ON CONFLICT(version) DO NOTHING`, CurrentSchemaVersion, s.now(), "Initial schema includes all migrations"); err != nil {
+			return false, fmt.Errorf("store: record schema version: %w", err)
+		}
+		fresh = true
+	}
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		return false, fmt.Errorf("store: commit bootstrap: %w", err)
+	}
+	committed = true
+	return fresh, nil
 }
 
 // Open opens an existing database and applies any pending migrations.

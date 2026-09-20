@@ -162,6 +162,101 @@ func TestSyncNoChanges(t *testing.T) {
 	}
 }
 
+func TestSyncIgnoresTrackedSymlinkToDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires additional privileges on Windows")
+	}
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "main.go"), "package main\nfunc Good() {}\n")
+	writeFile(t, filepath.Join(dir, "ai", "skills", "README.md"), "skills\n")
+	if err := os.Symlink(filepath.Join("ai", "skills"), filepath.Join(dir, "skills")); err != nil {
+		t.Fatalf("create directory symlink: %v", err)
+	}
+	if output, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, output)
+	}
+	if output, err := exec.Command("git", "-C", dir, "add", "--", "main.go", "ai/skills/README.md", "skills").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, output)
+	}
+
+	idx, initResult, err := Init(dir, Options{})
+	if err != nil || !initResult.Success {
+		t.Fatalf("Init: %v %+v", err, initResult)
+	}
+	defer func() { _ = idx.Close() }()
+
+	assertIgnored := func(stage string) {
+		t.Helper()
+		for graphScope, graphStore := range idx.reg.Stores() {
+			if graphScope.Language == "" {
+				t.Fatalf("%s: unexpected empty-language scope: %+v", stage, graphScope)
+			}
+			rec, err := graphStore.GetFileByPath("skills")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rec != nil {
+				t.Fatalf("%s: directory symlink record = %+v, want none", stage, rec)
+			}
+		}
+	}
+	assertIgnored("init")
+	result := idx.Sync(Options{})
+	if len(result.Errors) != 0 {
+		t.Fatalf("sync errors = %+v", result.Errors)
+	}
+	assertIgnored("sync")
+}
+
+func TestSyncRemovesStaleFileWhenPathBecomesDirectorySymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires additional privileges on Windows")
+	}
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "skills.go"), "package skills\nfunc Stale() {}\n")
+	if output, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, output)
+	}
+	if output, err := exec.Command("git", "-C", dir, "add", "--", "skills.go").CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, output)
+	}
+	idx, initResult, err := Init(dir, Options{})
+	if err != nil || !initResult.Success {
+		t.Fatalf("Init: %v %+v", err, initResult)
+	}
+	defer func() { _ = idx.Close() }()
+	if !hasNodeNamed(t, idx, "Stale") {
+		t.Fatal("initial symbol was not indexed")
+	}
+
+	if err := os.Remove(filepath.Join(dir, "skills.go")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "ai", "skills", "README.md"), "skills\n")
+	if err := os.Symlink(filepath.Join("ai", "skills"), filepath.Join(dir, "skills.go")); err != nil {
+		t.Fatalf("create directory symlink: %v", err)
+	}
+	result := idx.Sync(Options{})
+	if len(result.Errors) != 0 {
+		t.Fatalf("sync errors = %+v", result.Errors)
+	}
+	if result.FilesRemoved != 1 {
+		t.Fatalf("FilesRemoved = %d, want 1", result.FilesRemoved)
+	}
+	if hasNodeNamed(t, idx, "Stale") {
+		t.Fatal("stale symbol remains after file became directory symlink")
+	}
+	for _, graphStore := range idx.Stores() {
+		rec, err := graphStore.GetFileByPath("skills.go")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rec != nil {
+			t.Fatalf("stale file record = %+v, want none", rec)
+		}
+	}
+}
+
 func BenchmarkSyncFilesOneFile(b *testing.B) {
 	dir := b.TempDir()
 	path := filepath.Join(dir, "main.go")

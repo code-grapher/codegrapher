@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 
 -- Insert initial version
 INSERT INTO schema_versions (version, applied_at, description)
-VALUES (1, strftime('%s', 'now') * 1000, 'Initial schema');
+VALUES (1, strftime('%s', 'now') * 1000, 'Initial schema')
+ON CONFLICT(version) DO NOTHING;
 
 -- =============================================================================
 -- Core Tables

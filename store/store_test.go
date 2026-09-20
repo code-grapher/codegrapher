@@ -1,7 +1,9 @@
 package store
 
 import (
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/specscore/codegrapher/model"
@@ -45,6 +47,95 @@ func TestInitialize_SchemaVersionRecorded(t *testing.T) {
 	}
 	if got := s.JournalMode(); got != "wal" {
 		t.Errorf("journal mode = %q, want wal", got)
+	}
+}
+
+func TestInitialize_ExistingSchemaIsIdempotent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), DatabaseFilename)
+	first, err := Initialize(path, WithNowFunc(fixedNow))
+	if err != nil {
+		t.Fatalf("first Initialize: %v", err)
+	}
+	defer func() { _ = first.Close() }()
+
+	second, err := Initialize(path, WithNowFunc(fixedNow))
+	if err != nil {
+		t.Fatalf("second Initialize: %v", err)
+	}
+	defer func() { _ = second.Close() }()
+
+	if v, err := second.SchemaVersion(); err != nil || v != CurrentSchemaVersion {
+		t.Fatalf("second schema version = %d, %v; want %d", v, err, CurrentSchemaVersion)
+	}
+}
+
+func TestInitialize_ExistingOlderSchemaRunsMigrations(t *testing.T) {
+	path := filepath.Join(t.TempDir(), DatabaseFilename)
+	s, err := Initialize(path, WithNowFunc(fixedNow))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stmt := range []string{
+		`DELETE FROM schema_versions WHERE version > 1`,
+		`INSERT INTO schema_versions (version, applied_at, description) VALUES (4, 0, 'v4')`,
+		`ALTER TABLE nodes DROP COLUMN return_type`,
+		`ALTER TABLE nodes DROP COLUMN metadata`,
+	} {
+		if _, err := s.db.Exec(stmt); err != nil {
+			t.Fatalf("downgrade %q: %v", stmt, err)
+		}
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Initialize(path, WithNowFunc(fixedNow))
+	if err != nil {
+		t.Fatalf("Initialize existing v4 database: %v", err)
+	}
+	defer func() { _ = reopened.Close() }()
+	if v, err := reopened.SchemaVersion(); err != nil || v != CurrentSchemaVersion {
+		t.Fatalf("schema version = %d, %v; want %d", v, err, CurrentSchemaVersion)
+	}
+	n := testNode("function:migrated", "migrated", "a.go", 1)
+	n.ReturnType = "int"
+	n.Metadata = map[string]any{"source": "migration"}
+	if err := reopened.InsertNode(n); err != nil {
+		t.Fatalf("insert using migrated columns: %v", err)
+	}
+}
+
+func TestInitialize_ConcurrentFreshDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), DatabaseFilename)
+	start := make(chan struct{})
+	errs := make(chan error, 8)
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			s, err := Initialize(path, WithNowFunc(fixedNow))
+			if err == nil {
+				var version int
+				version, err = s.SchemaVersion()
+				if err == nil && version != CurrentSchemaVersion {
+					err = fmt.Errorf("schema version = %d, want %d", version, CurrentSchemaVersion)
+				}
+				if closeErr := s.Close(); err == nil {
+					err = closeErr
+				}
+			}
+			errs <- err
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Errorf("concurrent Initialize: %v", err)
+		}
 	}
 }
 

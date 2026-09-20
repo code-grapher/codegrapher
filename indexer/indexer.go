@@ -68,8 +68,9 @@ type SyncResult struct {
 	// FullReindex is true when Sync escalated to a from-scratch reindex
 	// because the index was built by a different scanner/extraction version.
 	FullReindex bool
-	// Errors records non-recoverable incremental-update failures. Callers that
-	// need fresh graph data must not treat these as a successful refresh.
+	// Errors records incremental-update diagnostics. Warning-severity entries
+	// are recoverable and remain observable for callers; every other severity
+	// is fatal and must prevent callers from treating the refresh as successful.
 	Errors []model.ExtractionError
 }
 
