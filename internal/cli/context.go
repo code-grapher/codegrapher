@@ -69,18 +69,28 @@ type ContextNotFound struct {
 
 // ContextSource is section (a): one requested symbol's line-bounded source.
 //
-// ClosureOf/StartLine/EndLine are set when the requested --line fell inside
-// a nested function literal (a closure with no name of its own — an
-// anonymous RunE callback, a switch/loop body has none of these either, but
-// those are not literals and stay unnarrowed) rather than directly in the
-// resolved symbol's own statements: Source is then the literal's own
-// line-bounded body, not the whole enclosing symbol, and ClosureOf names the
-// enclosing function for orientation. See A1 (resolveByFileLine /
-// narrowToEnclosingLiteral).
+// A --line target that falls inside a nested function literal (a closure
+// with no name of its own — an anonymous RunE callback; a switch/loop body
+// has none of these either, but those are not literals) resolves to the
+// innermost NAMED enclosing function/method, per A1 (resolveByFileLine),
+// and Source is that function's WHOLE body, not just the literal: a closure
+// only makes sense read alongside the function that declares the variables
+// it captures and wires it up (founder correction, 2026-09-25 — the earlier
+// design narrowed to the literal's own few lines and lost exactly that
+// context). Every line of a target literal carries a trailing "// TARGET"
+// marker (see A1/resolveClosureNarrowing) so the reader can still find it
+// inside the full function. StartLine/EndLine are always the enclosing
+// node's own declared bounds, even when Narrowed is true.
+//
+// Narrowed is true only when the enclosing function is longer than
+// --max-function-lines: Source then keeps just the target literal(s) whole,
+// the lines declaring the free variables they capture (go/ast scope), and
+// the statement that registers/calls each literal, joined by explicit
+// "// … N lines elided" markers — never a silent drop.
 type ContextSource struct {
 	Symbol    BriefSymbol `json:"symbol"`
 	Source    string      `json:"source"`
-	ClosureOf string      `json:"closureOf,omitempty"`
+	Narrowed  bool        `json:"narrowed,omitempty"`
 	StartLine int         `json:"startLine,omitempty"`
 	EndLine   int         `json:"endLine,omitempty"`
 }
@@ -184,7 +194,7 @@ func buildContextTargets(args []string, fileHint string, line int, symbolsFilePa
 func newContextCmd() *cobra.Command {
 	var jsonOut, uncovered bool
 	var format, fileHint, scopeFlag, forFlag, symbolsFile string
-	var line, budget, testHops, helperBodies int
+	var line, budget, testHops, helperBodies, maxFunctionLines, helperSignatures int
 	var pathFlag string
 
 	cmd := &cobra.Command{
@@ -195,7 +205,15 @@ bounded, budget-capped read: for each requested symbol, in order —
   a. its line-bounded source (--uncovered marks lines an ingested coverage
      profile reports as missed). --file/--line also resolve a symbol with no
      name of its own — an anonymous closure, a switch/loop body — to its
-     innermost enclosing function or function literal;
+     innermost NAMED enclosing function/method and return that function's
+     WHOLE source (a closure only makes sense alongside the function that
+     captures for and wires it), marking every target literal's lines
+     "// TARGET". Only when the enclosing function is longer than
+     --max-function-lines (default 150) does it narrow: the target
+     literal(s) whole, the lines declaring the free variables they capture,
+     and the statement that registers/calls each one, joined by explicit
+     "// … N lines elided" markers (--max-function-lines 0 always returns
+     the whole function);
   b. full declarations of the types it touches (receiver, parameter, result,
      and field types) plus constructors of its receiver type;
   c. its direct callees as signatures only, flagged when they are a seam. A
@@ -207,8 +225,10 @@ bounded, budget-capped read: for each requested symbol, in order —
   e. with --for test, the package's own test helpers/fakes (ranked: helpers
      referenced by section d's tests first, then by name similarity to the
      requested symbols; --helper-bodies N, default 3, includes the top N
-     ranked helpers' full source, not just their signature) and exported
-     symbols of sibling *test/*fake* packages its tests import.
+     ranked helpers' full source, not just their signature; --helper-signatures
+     N, default 40, caps how many ranked helpers appear at all — signature or
+     body — independent of remaining budget, and names how many were cut) and
+     exported symbols of sibling *test/*fake* packages its tests import.
 Deduplicated across every requested symbol, and section e once per package
 even when several requested symbols/files share it. --symbols-file reads
 file<TAB>symbol-or-line lines so one call can span several files.
@@ -257,12 +277,14 @@ mid-item.`,
 			}
 
 			result, err := buildContext(idx, targets, contextOptions{
-				scopes:       splitCSV(scopeFlag),
-				forTest:      forFlag == "test",
-				uncovered:    uncovered,
-				budget:       budget,
-				testHops:     testHops,
-				helperBodies: helperBodies,
+				scopes:           splitCSV(scopeFlag),
+				forTest:          forFlag == "test",
+				uncovered:        uncovered,
+				budget:           budget,
+				testHops:         testHops,
+				helperBodies:     helperBodies,
+				maxFunctionLines: maxFunctionLines,
+				helperSignatures: helperSignatures,
 			})
 			if err != nil {
 				return err
@@ -289,16 +311,20 @@ mid-item.`,
 	cmd.Flags().StringVar(&symbolsFile, "symbols-file", "", "Read additional file<TAB>symbol-or-line targets from this file, one per line")
 	cmd.Flags().IntVar(&testHops, "test-hops", 1, "Existing-test hops to include in section d (1 = direct callers only, 2 = one intermediate hop too)")
 	cmd.Flags().IntVar(&helperBodies, "helper-bodies", 3, "With --for test, include full source for the top N ranked helpers (0 disables bodies)")
+	cmd.Flags().IntVar(&maxFunctionLines, "max-function-lines", 150, "Narrow a closure target's enclosing function to captures+literal when it is longer than N lines (0 = never narrow, always return the whole function)")
+	cmd.Flags().IntVar(&helperSignatures, "helper-signatures", 40, "With --for test, cap section e's ranked helpers (signature or body) at N total, independent of budget (0 = no cap)")
 	return cmd
 }
 
 type contextOptions struct {
-	scopes       []string
-	forTest      bool
-	uncovered    bool
-	budget       int
-	testHops     int
-	helperBodies int
+	scopes           []string
+	forTest          bool
+	uncovered        bool
+	budget           int
+	testHops         int
+	helperBodies     int
+	maxFunctionLines int
+	helperSignatures int
 }
 
 // contextItem is one budget-fillable unit of output: a pre-rendered markdown
@@ -321,7 +347,7 @@ func buildContext(idx *indexer.Indexer, targets []contextTarget, opts contextOpt
 
 	var matches []matchedNode
 	seenNode := map[string]bool{}
-	targetLine := map[string]int{} // node ID -> requested line, for A1 closure narrowing in section a
+	targetLines := map[string][]int{} // node ID -> deduped requested lines, for A1 closure narrowing in section a
 	for _, t := range targets {
 		found, err := findNodeMatches(stores, t.Symbol)
 		if err != nil {
@@ -358,7 +384,17 @@ func buildContext(idx *indexer.Indexer, targets []contextTarget, opts contextOpt
 		}
 		m := found[0]
 		if t.Line > 0 {
-			targetLine[m.node.ID] = t.Line
+			lines := targetLines[m.node.ID]
+			dup := false
+			for _, l := range lines {
+				if l == t.Line {
+					dup = true
+					break
+				}
+			}
+			if !dup {
+				targetLines[m.node.ID] = append(lines, t.Line)
+			}
 		}
 		if seenNode[m.node.ID] {
 			continue
@@ -403,30 +439,36 @@ func buildContext(idx *indexer.Indexer, targets []contextTarget, opts contextOpt
 		}
 		sourceCache[m.node.ID] = src
 
-		rendered := src
 		displayStart, displayEnd := m.node.StartLine, m.node.EndLine
-		closureOf := ""
-		if ln, ok := targetLine[m.node.ID]; ok {
-			if litSrc, litStart, litEnd, orientation, ok := narrowToEnclosingLiteral(root, m, ln); ok {
-				rendered = litSrc
-				displayStart, displayEnd = litStart, litEnd
-				closureOf = orientation
-			}
-		}
-		if opts.uncovered {
-			marked, err := markUncoveredSource(m, rendered, displayStart)
+		kept := []keptRange{{start: m.node.StartLine, end: m.node.EndLine}}
+		var targetRanges [][2]int
+		narrowed := false
+		if lines := targetLines[m.node.ID]; len(lines) > 0 {
+			cn, err := resolveClosureNarrowing(root, m, lines, opts.maxFunctionLines)
 			if err != nil {
 				return nil, err
 			}
-			rendered = marked
+			if cn != nil {
+				targetRanges = cn.targetRanges
+				narrowed = cn.narrowed
+				kept = cn.kept
+			}
 		}
+		var missed map[int]bool
+		if opts.uncovered {
+			missed, err = coverageMissedLines(m)
+			if err != nil {
+				return nil, err
+			}
+		}
+		rendered := renderKeptRanges(src, m.node.StartLine, m.node.EndLine, m.node.QualifiedName, kept, targetRanges, missed)
 		result.Sources = append(result.Sources, ContextSource{
 			Symbol: briefNode(m.node), Source: rendered,
-			ClosureOf: closureOf, StartLine: displayStart, EndLine: displayEnd,
+			Narrowed: narrowed, StartLine: displayStart, EndLine: displayEnd,
 		})
 		items = append(items, contextItem{
 			section: "a", label: "source " + m.node.QualifiedName,
-			text: renderSourceBlock(m.node.QualifiedName, m.node.FilePath, m.node.Language, displayStart, displayEnd, closureOf, rendered),
+			text: renderSourceBlock(m.node.QualifiedName, m.node.FilePath, m.node.Language, displayStart, displayEnd, narrowed, rendered),
 		})
 
 		if calleeName, ok := thinWrapperCallee(src); ok {
@@ -465,31 +507,38 @@ func buildContext(idx *indexer.Indexer, targets []contextTarget, opts contextOpt
 	items = append(items, testItems...)
 
 	// (e) --for test: package helpers/fakes, ranked and capped (B1/C1/D1)
+	var helperSignaturesCutNote string
 	if opts.forTest {
-		helperItems, helpers, err := buildHelperSection(matches, testMatches, requestedNames, opts.helperBodies, root)
+		helperItems, helpers, cutCount, err := buildHelperSection(matches, testMatches, requestedNames, opts.helperBodies, opts.helperSignatures, root)
 		if err != nil {
 			return nil, err
 		}
 		result.Helpers = helpers
 		items = append(items, helperItems...)
+		if cutCount > 0 {
+			helperSignaturesCutNote = fmt.Sprintf("e: %d more helper(s) not shown (--helper-signatures %d cap)", cutCount, opts.helperSignatures)
+		}
 	}
 
 	included, omitted := fitBudget(items, opts.budget)
 	result.TokensEstimated = included / 4
-	result.Omitted = omitted
 	applyBudgetCut(result, omitted)
+	if helperSignaturesCutNote != "" {
+		omitted = append(omitted, helperSignaturesCutNote)
+	}
+	result.Omitted = omitted
 	return result, nil
 }
 
 // renderSourceBlock is the one place section (a)'s markdown/text rendering
 // happens, shared by buildContext's budget-estimation item text and
-// printContextMarkdown, so the two never drift on the A1 closure-orientation
-// line.
-func renderSourceBlock(qualifiedName, filePath string, language model.Language, startLine, endLine int, closureOf, source string) string {
+// printContextMarkdown, so the two never drift on the A1 closure-marking
+// (narrowed) note.
+func renderSourceBlock(qualifiedName, filePath string, language model.Language, startLine, endLine int, narrowed bool, source string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n### `%s` — %s:%d-%d\n", qualifiedName, filePath, startLine, endLine)
-	if closureOf != "" {
-		fmt.Fprintf(&b, "\n_(closure; enclosing %s)_\n", closureOf)
+	if narrowed {
+		fmt.Fprint(&b, "\n_(narrowed: long enclosing function, showing target literal(s) + captures only — see elided-lines markers below; rerun with --max-function-lines 0 for the whole function)_\n")
 	}
 	fmt.Fprintf(&b, "\n```%s\n%s\n```\n", language, source)
 	return b.String()
@@ -585,8 +634,9 @@ func typeLabel(t ContextType) string {
 // coverage profile or a worklist) but not a name, most often because the
 // target is inside a switch/loop body with no name of its own. A target
 // inside a nested function literal (a closure, which also has no name of
-// its own) resolves to the same enclosing node here; narrowToEnclosingLiteral
-// then narrows what gets displayed for section (a).
+// its own) resolves to the same enclosing node here; resolveClosureNarrowing
+// then marks (and, for a long function, narrows) what gets displayed for
+// section (a).
 func resolveByFileLine(stores []*store.Store, fileHint string, line int) (*matchedNode, error) {
 	want := strings.ToLower(strings.ReplaceAll(fileHint, "\\", "/"))
 	var best *matchedNode
@@ -623,66 +673,257 @@ func resolveByFileLine(stores []*store.Store, fileHint string, line int) (*match
 	return best, nil
 }
 
-// narrowToEnclosingLiteral resolves a requested line against the raw Go AST
-// of the matched node's own file (A1): when line falls inside an anonymous
-// function literal nested in the node's body (a `RunE: func(...) {...}`
-// callback, an error-group closure, ...), it returns just that literal's own
-// line-bounded source plus a one-line signature of the enclosing named
-// function for orientation, instead of the node's full — possibly
-// hundreds-of-lines — body. Non-Go nodes, parse failures, or a line that is
-// not inside any nested literal (a switch/loop body, say — already fully
-// covered by the node's own source) report ok=false and leave the node's
-// full source untouched.
-func narrowToEnclosingLiteral(root string, m matchedNode, line int) (litSrc string, litStart, litEnd int, orientation string, ok bool) {
+// keptRange is one inclusive [start,end] source-line range rendered by
+// renderKeptRanges — either the enclosing node's whole span (the default,
+// unnarrowed render) or, in a narrowed render, one piece kept for a reason
+// (the literal itself, its captured variables' declarations, or the
+// statement that registers/calls it). Non-adjacent kept ranges get an
+// explicit elision marker between them; nothing is ever silently dropped.
+type keptRange struct{ start, end int }
+
+// closureNarrowing is what resolveClosureNarrowing found for one enclosing
+// node's requested target lines: every touched literal's own [start,end]
+// (for "// TARGET" marking, regardless of narrowing) and the kept ranges to
+// render — the whole node by default, or a narrowed set when the node is
+// longer than maxFunctionLines.
+type closureNarrowing struct {
+	targetRanges [][2]int
+	kept         []keptRange
+	narrowed     bool
+}
+
+// resolveClosureNarrowing resolves targetLines against the raw Go AST of m's
+// own file (A1): for every line that falls inside a nested anonymous
+// function literal (a `RunE: func(...) {...}` callback, an error-group
+// closure, ...), it records that literal's own line span for "// TARGET"
+// marking. By default the whole enclosing node is still kept (a closure only
+// makes sense read alongside the function that captures for and wires it up
+// — founder correction, 2026-09-25: the previous design narrowed to the
+// literal's own few lines and lost exactly that context). Only when m's own
+// line count exceeds maxFunctionLines (0 = never narrow) does it narrow the
+// kept ranges to each literal (whole), the lines declaring the free
+// variables it captures from the enclosing function (resolved via go/parser's
+// legacy Ident.Obj scope resolution — enabled by the default parser.ParseFile
+// mode used here), and the statement that registers/calls it. Returns nil
+// when no requested line falls inside any nested literal (a switch/loop
+// body, say — already fully covered by the node's own source) or the file
+// can't be parsed; the caller then renders the node's full source unmarked,
+// as before.
+func resolveClosureNarrowing(root string, m matchedNode, targetLines []int, maxFunctionLines int) (*closureNarrowing, error) {
 	if m.node.Language != model.LangGo {
-		return "", 0, 0, "", false
-	}
-	if line < m.node.StartLine || line > m.node.EndLine {
-		return "", 0, 0, "", false
+		return nil, nil
 	}
 	abs := filepath.Join(root, filepath.FromSlash(m.node.FilePath))
 	data, err := os.ReadFile(abs)
 	if err != nil {
-		return "", 0, 0, "", false
+		return nil, nil //nolint:nilerr // best effort: fall back to the unmarked full source
 	}
 	fset := token.NewFileSet()
 	// go/parser may return a partial AST even on error (ADR-003 fallback
 	// convention elsewhere in this codebase) — use it anyway when non-nil.
 	astFile, _ := parser.ParseFile(fset, abs, data, 0)
 	if astFile == nil {
-		return "", 0, 0, "", false
+		return nil, nil
 	}
-	var best *ast.FuncLit
-	bestSpan := -1
-	ast.Inspect(astFile, func(n ast.Node) bool {
-		lit, isLit := n.(*ast.FuncLit)
-		if !isLit {
+
+	type litHit struct {
+		lit        *ast.FuncLit
+		start, end int
+	}
+	var hits []litHit
+	seenLit := map[*ast.FuncLit]bool{}
+	for _, line := range targetLines {
+		if line < m.node.StartLine || line > m.node.EndLine {
+			continue
+		}
+		var best *ast.FuncLit
+		bestSpan := -1
+		ast.Inspect(astFile, func(n ast.Node) bool {
+			lit, isLit := n.(*ast.FuncLit)
+			if !isLit {
+				return true
+			}
+			start := fset.Position(lit.Pos()).Line
+			end := fset.Position(lit.End()).Line
+			if start > line || line > end {
+				return true
+			}
+			span := end - start
+			if best == nil || span < bestSpan {
+				best, bestSpan = lit, span
+			}
+			return true
+		})
+		if best != nil && !seenLit[best] {
+			seenLit[best] = true
+			hits = append(hits, litHit{best, fset.Position(best.Pos()).Line, fset.Position(best.End()).Line})
+		}
+	}
+	if len(hits) == 0 {
+		return nil, nil
+	}
+	sort.Slice(hits, func(i, j int) bool { return hits[i].start < hits[j].start })
+
+	targetRanges := make([][2]int, len(hits))
+	for i, h := range hits {
+		targetRanges[i] = [2]int{h.start, h.end}
+	}
+
+	funcLines := m.node.EndLine - m.node.StartLine + 1
+	if maxFunctionLines <= 0 || funcLines <= maxFunctionLines {
+		return &closureNarrowing{
+			targetRanges: targetRanges,
+			kept:         []keptRange{{start: m.node.StartLine, end: m.node.EndLine}},
+		}, nil
+	}
+
+	var kept []keptRange
+	for _, h := range hits {
+		kept = append(kept, keptRange{start: h.start, end: h.end})
+		if stmt := smallestEnclosingStmt(astFile, h.lit); stmt != nil {
+			kept = append(kept, keptRange{start: fset.Position(stmt.Pos()).Line, end: fset.Position(stmt.End()).Line})
+		}
+		for _, r := range capturedDeclRanges(fset, h.lit, m.node.StartLine, m.node.EndLine) {
+			kept = append(kept, keptRange{start: r[0], end: r[1]})
+		}
+	}
+	return &closureNarrowing{targetRanges: targetRanges, kept: mergeKeptRanges(kept), narrowed: true}, nil
+}
+
+// smallestEnclosingStmt returns the smallest ast.Stmt in file whose span
+// fully contains lit — the statement that registers or calls the closure
+// (an assignment, a `return`, a bare call, ...) — for a narrowed rendering.
+// When the literal is itself nested in a larger composite literal (e.g.
+// `return &cobra.Command{RunE: func(...){...}}`), that whole statement is
+// what's kept: a known trade-off, not a further narrowing.
+func smallestEnclosingStmt(file *ast.File, lit *ast.FuncLit) ast.Stmt {
+	var best ast.Stmt
+	bestSpan := token.Pos(-1)
+	ast.Inspect(file, func(n ast.Node) bool {
+		stmt, ok := n.(ast.Stmt)
+		if !ok || stmt.Pos() > lit.Pos() || stmt.End() < lit.End() {
 			return true
 		}
-		start := fset.Position(lit.Pos()).Line
-		end := fset.Position(lit.End()).Line
-		if start > line || line > end {
-			return true
-		}
-		span := end - start
+		span := stmt.End() - stmt.Pos()
 		if best == nil || span < bestSpan {
-			best = lit
-			bestSpan = span
+			best, bestSpan = stmt, span
 		}
 		return true
 	})
-	if best == nil {
-		return "", 0, 0, "", false
+	return best
+}
+
+// capturedDeclRanges returns the [start,end] line ranges declaring every
+// identifier lit's body references that resolves — via go/parser's legacy
+// object resolution (Ident.Obj, populated by the default ParseFile mode) —
+// to a declaration inside the enclosing function [funcStart,funcEnd] but
+// outside lit's own span: the free variables the closure captures from its
+// enclosing function. A declaration outside that function (package/file
+// scope, already visible without narrowing) or inside the literal itself
+// (its own params/locals, not a capture) is excluded.
+func capturedDeclRanges(fset *token.FileSet, lit *ast.FuncLit, funcStart, funcEnd int) [][2]int {
+	litStart, litEnd := fset.Position(lit.Pos()).Line, fset.Position(lit.End()).Line
+	seen := map[*ast.Object]bool{}
+	var ranges [][2]int
+	ast.Inspect(lit.Body, func(n ast.Node) bool {
+		id, ok := n.(*ast.Ident)
+		if !ok || id.Obj == nil || seen[id.Obj] {
+			return true
+		}
+		declNode, ok := id.Obj.Decl.(ast.Node)
+		if !ok {
+			return true
+		}
+		dStart, dEnd := fset.Position(declNode.Pos()).Line, fset.Position(declNode.End()).Line
+		if dStart < funcStart || dEnd > funcEnd {
+			return true // declared at package/file scope, not this function
+		}
+		if dStart >= litStart && dEnd <= litEnd {
+			return true // declared inside the literal itself, not captured
+		}
+		seen[id.Obj] = true
+		ranges = append(ranges, [2]int{dStart, dEnd})
+		return true
+	})
+	return ranges
+}
+
+// mergeKeptRanges sorts ranges by start line and merges any that overlap or
+// are adjacent, so renderKeptRanges never emits a zero-line elision gap.
+func mergeKeptRanges(ranges []keptRange) []keptRange {
+	if len(ranges) == 0 {
+		return nil
 	}
-	start := fset.Position(best.Pos()).Line
-	end := fset.Position(best.End()).Line
-	litSrc = string(lineBoundedSource(data, start, end))
-	label := m.node.QualifiedName
-	if m.node.Signature != "" {
-		label += m.node.Signature
+	sort.Slice(ranges, func(i, j int) bool { return ranges[i].start < ranges[j].start })
+	out := []keptRange{ranges[0]}
+	for _, r := range ranges[1:] {
+		last := &out[len(out)-1]
+		if r.start <= last.end+1 {
+			if r.end > last.end {
+				last.end = r.end
+			}
+			continue
+		}
+		out = append(out, r)
 	}
-	orientation = fmt.Sprintf("`%s` — `%s:%d`", label, m.node.FilePath, m.node.StartLine)
-	return litSrc, start, end, orientation, true
+	return out
+}
+
+// renderKeptRanges renders fullSrc (m's whole node source, starting at
+// nodeStart) across kept — the whole node by default, or a narrowed set of
+// ranges from resolveClosureNarrowing. Every line inside targetRanges (a
+// touched closure literal) carries a trailing "// TARGET"; every line missed
+// reports as uncovered carries "// UNCOVERED" too, alongside when both
+// apply. A gap before, between, or after kept ranges (relative to the node's
+// own [nodeStart,nodeEnd]) becomes an explicit
+// "// … N lines elided (enclosing function F is M lines; rerun with
+// --max-function-lines 0 for all)" marker — never a silent drop.
+func renderKeptRanges(fullSrc string, nodeStart, nodeEnd int, qualifiedName string, kept []keptRange, targetRanges [][2]int, missed map[int]bool) string {
+	srcLines := strings.Split(fullSrc, "\n")
+	lineText := func(abs int) (string, bool) {
+		idx := abs - nodeStart
+		if idx < 0 || idx >= len(srcLines) {
+			return "", false
+		}
+		return srcLines[idx], true
+	}
+	target := map[int]bool{}
+	for _, r := range targetRanges {
+		for ln := r[0]; ln <= r[1]; ln++ {
+			target[ln] = true
+		}
+	}
+	funcTotalLines := nodeEnd - nodeStart + 1
+
+	var b strings.Builder
+	writeElision := func(gap int) {
+		fmt.Fprintf(&b, "// … %d lines elided (enclosing function %s is %d lines; rerun with --max-function-lines 0 for all)\n", gap, qualifiedName, funcTotalLines)
+	}
+	prevEnd := nodeStart - 1
+	for _, r := range kept {
+		if r.start > prevEnd+1 {
+			writeElision(r.start - prevEnd - 1)
+		}
+		for ln := r.start; ln <= r.end; ln++ {
+			text, ok := lineText(ln)
+			if !ok {
+				continue
+			}
+			if target[ln] {
+				text += " // TARGET"
+			}
+			if missed[ln] && strings.TrimSpace(text) != "" {
+				text += " // UNCOVERED"
+			}
+			b.WriteString(text)
+			b.WriteByte('\n')
+		}
+		prevEnd = r.end
+	}
+	if nodeEnd > prevEnd {
+		writeElision(nodeEnd - prevEnd)
+	}
+	return strings.TrimSuffix(b.String(), "\n")
 }
 
 // reThinWrapperCall matches a lone statement that is a bare call or a
@@ -1324,9 +1565,13 @@ var siblingTestFakeRe = regexp.MustCompile(`(?i)(test|fake)`)
 // package (D1 — matches spanning several files in one call share a package's
 // helper bundle instead of repeating it), ranks them (B1: helpers section d's
 // tests reference first, then the rest by name similarity to the requested
-// symbols), and includes full source only for the top helperBodies-ranked
-// entries (C1) — the rest keep their signature-only rendering.
-func buildHelperSection(matches []matchedNode, testMatches []matchedNode, requestedNames []string, helperBodies int, root string) ([]contextItem, []ContextType, error) {
+// symbols), caps the ranked list at helperSignatures total (signature or
+// body — 0 means no cap) independent of the remaining --budget, and includes
+// full source only for the top helperBodies-ranked entries of what's left
+// (C1) — the rest keep their signature-only rendering. The third return
+// value is how many ranked helpers the helperSignatures cap cut, for the
+// caller to fold into the omitted list.
+func buildHelperSection(matches []matchedNode, testMatches []matchedNode, requestedNames []string, helperBodies, helperSignatures int, root string) ([]contextItem, []ContextType, int, error) {
 	var helpers []ContextType
 	seen := map[string]bool{}
 	dirsDone := map[string]bool{}
@@ -1340,7 +1585,7 @@ func buildHelperSection(matches []matchedNode, testMatches []matchedNode, reques
 
 		files, err := m.store.GetAllFiles()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, 0, err
 		}
 		var testFiles []string
 		for _, f := range files {
@@ -1353,7 +1598,7 @@ func buildHelperSection(matches []matchedNode, testMatches []matchedNode, reques
 		for _, fp := range testFiles {
 			nodes, err := m.store.GetNodesByFile(fp)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, 0, err
 			}
 			for _, n := range nodes {
 				if !isHelperCandidate(n) || seen[n.ID] {
@@ -1370,7 +1615,7 @@ func buildHelperSection(matches []matchedNode, testMatches []matchedNode, reques
 			// Sibling *test/*fake* packages this test file imports.
 			siblingSyms, err := siblingHelperSymbols(m.store, fp, root)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, 0, err
 			}
 			for _, sym := range siblingSyms {
 				if seen[sym.Symbol.ID] {
@@ -1384,9 +1629,20 @@ func buildHelperSection(matches []matchedNode, testMatches []matchedNode, reques
 
 	referenced, err := referencedHelperIDs(testMatches)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	ranked := rankHelpers(helpers, referenced, requestedNames)
+
+	// --helper-signatures caps the ranked list itself — signature or body —
+	// independent of remaining --budget (0 = no cap); the cut count is
+	// reported to the caller rather than naming each dropped helper, since
+	// the cap exists precisely to avoid enumerating dozens of them.
+	cutCount := 0
+	if helperSignatures > 0 && len(ranked) > helperSignatures {
+		cutCount = len(ranked) - helperSignatures
+		ranked = ranked[:helperSignatures]
+	}
+
 	if helperBodies < 0 {
 		helperBodies = 0
 	}
@@ -1411,7 +1667,7 @@ func buildHelperSection(matches []matchedNode, testMatches []matchedNode, reques
 			text: fmt.Sprintf("- `%s` (%s) — `%s` — %s:%d\n", h.Symbol.QualifiedName, h.Symbol.Kind, h.Symbol.Signature, h.Symbol.FilePath, h.Symbol.StartLine),
 		})
 	}
-	return items, ranked, nil
+	return items, ranked, cutCount, nil
 }
 
 // referencedHelperIDs returns the node IDs every function/method declared in
@@ -1621,21 +1877,21 @@ func path_Base(importPath string) string {
 // coverage marking
 // -----------------------------------------------------------------------
 
-// markUncoveredSource appends " // UNCOVERED" to every line of src (starting
-// at startLine, which is m.node.StartLine for a whole-symbol render or a
-// narrowed closure literal's own start line — see narrowToEnclosingLiteral)
-// that the ingested coverage profile reports as missed.
-func markUncoveredSource(m matchedNode, src string, startLine int) (string, error) {
+// coverageMissedLines returns the set of m's own file lines the ingested
+// coverage profile reports as missed (nil if nothing was ingested for that
+// file), for renderKeptRanges to mark "// UNCOVERED" alongside any
+// "// TARGET" closure marking.
+func coverageMissedLines(m matchedNode) (map[int]bool, error) {
 	row, err := m.store.GetCoverageByFile(m.node.FilePath)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if row == nil || row.Ranges == "" {
-		return src, nil
+		return nil, nil
 	}
 	var ranges []covpkg.Range
 	if err := json.Unmarshal([]byte(row.Ranges), &ranges); err != nil {
-		return "", fmt.Errorf("context: decode coverage ranges for %s: %w", m.node.FilePath, err)
+		return nil, fmt.Errorf("context: decode coverage ranges for %s: %w", m.node.FilePath, err)
 	}
 	missed := map[int]bool{}
 	for _, r := range ranges {
@@ -1646,14 +1902,7 @@ func markUncoveredSource(m matchedNode, src string, startLine int) (string, erro
 			missed[line] = true
 		}
 	}
-	lines := strings.Split(src, "\n")
-	for i := range lines {
-		lineNo := startLine + i
-		if missed[lineNo] && lines[i] != "" {
-			lines[i] += " // UNCOVERED"
-		}
-	}
-	return strings.Join(lines, "\n"), nil
+	return missed, nil
 }
 
 // -----------------------------------------------------------------------
@@ -1681,7 +1930,7 @@ func printContextMarkdown(w io.Writer, result *ContextResult) error {
 			if startLine == 0 {
 				startLine, endLine = s.Symbol.StartLine, s.Symbol.EndLine
 			}
-			if _, err := fmt.Fprint(w, renderSourceBlock(s.Symbol.QualifiedName, s.Symbol.FilePath, s.Symbol.Language, startLine, endLine, s.ClosureOf, s.Source)); err != nil {
+			if _, err := fmt.Fprint(w, renderSourceBlock(s.Symbol.QualifiedName, s.Symbol.FilePath, s.Symbol.Language, startLine, endLine, s.Narrowed, s.Source)); err != nil {
 				return err
 			}
 		}
@@ -1733,7 +1982,9 @@ func printContextMarkdown(w io.Writer, result *ContextResult) error {
 		}
 	}
 	if len(result.Omitted) > 0 {
-		if _, err := fmt.Fprintln(w, "\n## Omitted (over budget)"); err != nil {
+		// Not every entry here is a budget cut: a "--helper-signatures cap"
+		// note (buildContext) fires independent of remaining budget too.
+		if _, err := fmt.Fprintln(w, "\n## Omitted"); err != nil {
 			return err
 		}
 		for _, o := range result.Omitted {

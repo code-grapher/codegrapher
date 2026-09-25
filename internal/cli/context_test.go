@@ -137,9 +137,31 @@ func retryForClosure() error { return nil }
 
 // WithClosure has a nested anonymous closure with no name of its own — the
 // coverage/worklist file:line an agent has for it can only resolve through
-// A1 (context --file/--line narrows to the innermost function literal).
+// A1 (context --file/--line resolves to the innermost NAMED enclosing
+// function, WithClosure itself, marking the literal's lines // TARGET).
 func WithClosure() error {
 	run := func() error {
+		return retryForClosure()
+	}
+	return run()
+}
+
+// WithCapturedClosure declares label, then a few unrelated statements (so a
+// narrowed --max-function-lines rendering has a real gap to elide between
+// label's declaration and the closure that captures it), then a closure
+// referencing label — a free variable captured from this enclosing
+// function, which capturedDeclRanges must resolve via go/ast scope and keep
+// even when the function is narrowed.
+func WithCapturedClosure() error {
+	label := "closure-capture"
+	unrelatedA := 1
+	unrelatedB := 2
+	_ = unrelatedA
+	_ = unrelatedB
+	run := func() error {
+		if label == "" {
+			return nil
+		}
 		return retryForClosure()
 	}
 	return run()
@@ -533,7 +555,14 @@ func lineOf(t *testing.T, root, relPath, substr string) int {
 }
 
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/test-context#ac:line-resolves-nested-closure
-func TestContextResolvesLineIntoClosure(t *testing.T) {
+//
+// 2026-09-25 founder correction: a closure only makes sense read alongside
+// the function that declares what it captures and wires it up, so a
+// --line target inside one now resolves to the WHOLE enclosing named
+// function (WithClosure is well under --max-function-lines' default 150),
+// with the literal's own lines marked "// TARGET" — not narrowed away to
+// just the literal, which is what this test asserted before the fix.
+func TestContextClosureInShortFunctionReturnsWholeFunctionWithTargetMarks(t *testing.T) {
 	root := newContextFixture(t)
 	closureLine := lineOf(t, root, "widget.go", "return retryForClosure()")
 
@@ -546,22 +575,120 @@ func TestContextResolvesLineIntoClosure(t *testing.T) {
 		t.Fatalf("sources = %d, want 1: %+v", len(result.Sources), result.Sources)
 	}
 	src := result.Sources[0]
-	if src.ClosureOf == "" {
-		t.Fatalf("ClosureOf not set for a line resolved inside a nested literal: %+v", src)
+	if src.Narrowed {
+		t.Fatalf("a short enclosing function must not be narrowed: %+v", src)
 	}
-	if !strings.Contains(src.Source, "retryForClosure()") {
-		t.Fatalf("closure source missing its own body:\n%s", src.Source)
+	if !strings.Contains(src.Source, "func WithClosure") {
+		t.Fatalf("source must be the whole enclosing function, not narrowed to the literal:\n%s", src.Source)
 	}
-	if strings.Contains(src.Source, "func WithClosure") {
-		t.Fatalf("closure source must be narrowed to the literal, not the whole enclosing function:\n%s", src.Source)
+	// The literal's own line ("return retryForClosure()") carries the
+	// TARGET marker; the enclosing func line does not.
+	foundTarget := false
+	for _, line := range strings.Split(src.Source, "\n") {
+		if strings.Contains(line, "retryForClosure()") {
+			if !strings.Contains(line, "// TARGET") {
+				t.Fatalf("closure literal line missing // TARGET marker: %q", line)
+			}
+			foundTarget = true
+		}
+		if strings.Contains(line, "func WithClosure") && strings.Contains(line, "// TARGET") {
+			t.Fatalf("enclosing function's own signature line must not be marked TARGET: %q", line)
+		}
 	}
-	if !strings.Contains(src.ClosureOf, "WithClosure") {
-		t.Fatalf("ClosureOf must name the enclosing function for orientation: %q", src.ClosureOf)
+	if !foundTarget {
+		t.Fatalf("no line in source carried retryForClosure()/TARGET:\n%s", src.Source)
 	}
 	// The enclosing symbol identity (for b/c/d/e lookups) is still the named
 	// WithClosure function, not the anonymous literal.
 	if src.Symbol.Name != "WithClosure" {
 		t.Fatalf("resolved symbol = %q, want WithClosure (the enclosing named function)", src.Symbol.Name)
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/test-context#ac:line-resolves-nested-closure
+//
+// Two --symbols-file line targets landing in the same enclosing function
+// (one inside the closure literal, one outside it) must produce that
+// function exactly once, with the closure's lines still marked TARGET.
+func TestContextClosureTargetsDedupeSameFunction(t *testing.T) {
+	root := newContextFixture(t)
+	closureLine := lineOf(t, root, "widget.go", "return retryForClosure()")
+	otherLine := lineOf(t, root, "widget.go", "return run()")
+
+	symbolsFile := filepath.Join(t.TempDir(), "symbols.txt")
+	content := "widget.go\t" + strconv.Itoa(closureLine) + "\nwidget.go\t" + strconv.Itoa(otherLine) + "\n"
+	if err := os.WriteFile(symbolsFile, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := runContext(t, root, "--symbols-file", symbolsFile)
+
+	if len(result.Requested) != 2 {
+		t.Fatalf("requested = %+v, want 2 targets from --symbols-file", result.Requested)
+	}
+	if len(result.Unresolved) != 0 {
+		t.Fatalf("unresolved = %+v, want both targets to resolve", result.Unresolved)
+	}
+	if len(result.Sources) != 1 {
+		t.Fatalf("sources = %d, want exactly 1 (both targets land in WithClosure): %+v", len(result.Sources), result.Sources)
+	}
+	if result.Sources[0].Symbol.Name != "WithClosure" {
+		t.Fatalf("resolved symbol = %q, want WithClosure", result.Sources[0].Symbol.Name)
+	}
+	// Every line of the (one, deduped) literal is marked — "run := func()
+	// error {", "return retryForClosure()", and its closing "}" — but the
+	// second, non-literal target line ("return run()") is not, since it
+	// isn't part of any closure literal.
+	targetCount := strings.Count(result.Sources[0].Source, "// TARGET")
+	if targetCount != 3 {
+		t.Fatalf("// TARGET markers = %d, want exactly 3 (the deduped literal's own 3 lines, not the non-literal target line): %q", targetCount, result.Sources[0].Source)
+	}
+	for _, line := range strings.Split(result.Sources[0].Source, "\n") {
+		if strings.Contains(line, "return run()") && strings.Contains(line, "// TARGET") {
+			t.Fatalf("non-literal target line must not be marked TARGET: %q", line)
+		}
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/test-context#ac:line-resolves-nested-closure
+//
+// Overriding --max-function-lines below WithCapturedClosure's own line
+// count forces the narrowed path even though the fixture function is small
+// — exercising the same threshold logic a genuinely long production
+// function would hit at the real default (150), without needing a
+// 150-line fixture. Asserts the narrowed view keeps the closure literal
+// whole, the line declaring the free variable it captures (label), the
+// registering statement, and at least one elision marker for what's cut.
+func TestContextClosureInLongFunctionNarrowsWithCapturedVarsAndElision(t *testing.T) {
+	root := newContextFixture(t)
+	// "if label ==" only appears inside WithCapturedClosure's literal — the
+	// bare "return retryForClosure()" line is shared with WithClosure above
+	// it, so it can't be used to disambiguate which function this targets.
+	closureLine := lineOf(t, root, "widget.go", `if label == ""`)
+
+	result := runContext(t, root, "closure", "--file", "widget.go", "--line", strconv.Itoa(closureLine), "--max-function-lines", "2")
+
+	if len(result.Sources) != 1 {
+		t.Fatalf("sources = %d, want 1: %+v", len(result.Sources), result.Sources)
+	}
+	src := result.Sources[0]
+	if src.Symbol.Name != "WithCapturedClosure" {
+		t.Fatalf("resolved symbol = %q, want WithCapturedClosure", src.Symbol.Name)
+	}
+	if !src.Narrowed {
+		t.Fatalf("a function longer than --max-function-lines 2 must be narrowed: %+v", src)
+	}
+	if !strings.Contains(src.Source, "retryForClosure()") || !strings.Contains(src.Source, "// TARGET") {
+		t.Fatalf("narrowed source missing the closure literal or its TARGET mark:\n%s", src.Source)
+	}
+	if !strings.Contains(src.Source, `label := "closure-capture"`) {
+		t.Fatalf("narrowed source missing the declaration of label, the closure's captured free variable:\n%s", src.Source)
+	}
+	if !strings.Contains(src.Source, "lines elided") {
+		t.Fatalf("narrowed source missing an elision marker for the lines it cut:\n%s", src.Source)
+	}
+	if strings.Contains(src.Source, "unrelatedA") {
+		t.Fatalf("narrowed source must not keep unrelatedA — it is not captured by the closure and not part of the registering statement:\n%s", src.Source)
 	}
 }
 
@@ -648,6 +775,35 @@ func TestContextForTestRanksHelpersAndIncludesTopBodies(t *testing.T) {
 	}
 	if result.Helpers[unrelatedIdx].Source != "" {
 		t.Fatalf("lower-ranked helper zzzUnrelatedHelper must be signature-only beyond the --helper-bodies cap: %+v", result.Helpers[unrelatedIdx])
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/test-context#ac:helper-signatures-cap
+//
+// --helper-signatures caps how many ranked helpers appear at all (signature
+// or body), independent of --budget, and the omitted list says how many
+// were cut rather than naming each one (the fixture package has several
+// helper candidates — newFakeWidget, fakeStore, fakeStore.Save,
+// assertWidgetName, zzzUnrelatedHelper — well more than the cap of 1 used
+// here).
+func TestContextHelperSignaturesCap(t *testing.T) {
+	root := newContextFixture(t)
+	result := runContext(t, root, "Rename", "--for", "test", "--helper-signatures", "1")
+
+	if len(result.Helpers) != 1 {
+		t.Fatalf("helpers = %d, want exactly 1 (--helper-signatures 1 cap): %+v", len(result.Helpers), result.Helpers)
+	}
+	found := false
+	for _, o := range result.Omitted {
+		if strings.Contains(o, "helper-signatures") {
+			found = true
+			if !strings.Contains(o, "4") {
+				t.Fatalf("omitted note should say how many were cut (want 4 more): %q", o)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("omitted list has no --helper-signatures cap note: %v", result.Omitted)
 	}
 }
 

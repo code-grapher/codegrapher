@@ -68,20 +68,44 @@ codegrapher context --symbols-file targets.tsv --for test --uncovered --budget 3
   `RunE: func(cmd, args) error {...}` callback is the common case — coverage
   profiles/worklists only ever give you a file:line for these): pass any
   placeholder symbol name plus `--file`/`--line` pointing at a line inside
-  it. `context` resolves the innermost enclosing function or function
-  literal at that line — a closure's own narrower source, with the
-  enclosing named function's signature noted for orientation; a switch/loop
-  body (not a literal) resolves to the enclosing function's full source.
+  it. `context` resolves to the innermost NAMED enclosing function or
+  method at that line — never the literal alone: a closure only makes sense
+  read alongside the function that declares what it captures and wires it
+  up. You get that function's whole source, with every line of the target
+  literal (there may be several, if more than one of your targets lands in
+  it) marked `// TARGET`; a switch/loop body (not a literal) resolves the
+  same way but has no `// TARGET` marks, since it's already just part of
+  the function's own source. Only when the enclosing function is longer
+  than `--max-function-lines` (default 150) does `context` narrow instead —
+  see "Long enclosing functions" below.
+
+### Long enclosing functions
+
+A closure inside a function longer than `--max-function-lines` (default
+150) would otherwise dump the whole surrounding function for one small
+target, so `context` narrows: it keeps the target literal(s) whole (still
+marked `// TARGET`), the lines that declare every free variable the
+literal captures from the enclosing function, and the statement that
+registers or calls it (an assignment, a `return`, a bare call) — enough to
+see what the closure does and what it closes over, not the unrelated rest
+of a long function. Every gap it cuts becomes an explicit
+`// … N lines elided (enclosing function F is M lines; rerun with
+--max-function-lines 0 for all)` marker, never a silent drop. Pass
+`--max-function-lines 0` to always get the whole function regardless of
+length.
 
 ## Reading the output
 
 Sections render in this fixed order, deduplicated across every symbol:
 
 - **a. Source** — line-bounded source per symbol. `--uncovered` appends
-  `// UNCOVERED` to lines the ingested profile reports missed. A requested
-  function whose entire body is a single (optionally `return`'d) call — a
-  thin wrapper — also gets its callee's full source here, unasked: the
-  wrapper's own line tells you nothing about the real logic.
+  `// UNCOVERED` to lines the ingested profile reports missed; a `--line`
+  target inside a nested closure appends `// TARGET` to that literal's
+  lines (alongside `// UNCOVERED` when both apply) — see "Naming symbols"
+  above. A requested function whose entire body is a single (optionally
+  `return`'d) call — a thin wrapper — also gets its callee's full source
+  here, unasked: the wrapper's own line tells you nothing about the real
+  logic.
 - **b. Types touched** — full declarations of receiver, parameter/result,
   and field types, plus constructors of the receiver type.
 - **c. Direct callees** — signatures only, never bodies. `[seam: interface
@@ -94,9 +118,12 @@ Sections render in this fixed order, deduplicated across every symbol:
   non-`Test`/`Benchmark`/`Fuzz`/`Example` helpers and fakes, plus exported
   symbols of sibling `*test`/`*fake*` packages its test files import.
   Ranked: helpers section d's tests (and their file-mates) actually call
-  come first, then the rest by name similarity to what you requested. Only
-  the top `--helper-bodies` N (default 3) carry full source; read those
-  before assuming you need to look elsewhere for a calling convention.
+  come first, then the rest by name similarity to what you requested. The
+  ranked list itself is capped at `--helper-signatures` N (default 40,
+  independent of `--budget`) — anything beyond that doesn't appear at all,
+  and the omitted list says how many were cut. Of what's kept, only the top
+  `--helper-bodies` N (default 3) carry full source; read those before
+  assuming you need to look elsewhere for a calling convention.
 
 ### Inferred markers
 
@@ -113,7 +140,10 @@ Sections fill in order (a, b, c, d, e, across all requested symbols) up to
 `--budget` and stop the moment the next item would overflow; everything cut
 is named, by kind and symbol/type/callee/test name, in a trailing omitted
 list — never truncated mid-item. If something you need is missing, raise
-`--budget` or narrow the call.
+`--budget` or narrow the call. A `--helper-signatures` cut is a separate
+entry in the same list, but it isn't a budget cut — it fires regardless of
+remaining budget, and names a count rather than each dropped helper; raise
+`--helper-signatures` (or set it to 0) if you need more of them.
 
 ## Budget guidance
 

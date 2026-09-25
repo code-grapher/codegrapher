@@ -63,18 +63,44 @@ e. with `--for test`: signatures of the package's own test helpers and
 A requested "symbol" that does not resolve by id, name, or qualified name —
 the only way to name an anonymous function literal (a closure) or a
 switch/loop body, neither of which has a name of its own — MUST, when
-`--file` and `--line` are both given, resolve to the innermost indexed
-Function/Method node in that file whose own line range contains `--line`.
+`--file` and `--line` are both given (including a `--symbols-file` line
+target), resolve to the innermost indexed Function/Method node in that file
+whose own line range contains `--line`. Several `--line` targets that
+resolve into the same enclosing function MUST produce that function exactly
+once (the existing ordered-sections-deduplicated-across-symbols dedup rule),
+with every one of them marked as described below.
 
-When `--line` additionally falls inside a function literal nested in that
-node's body, section (a)'s source for that symbol MUST be narrowed to the
-literal's own line-bounded source (not the whole enclosing node), and MUST
-be accompanied by the enclosing named function's signature for orientation
-(`ContextSource.closureOf` in JSON). Every other section (b/c/d/e) MUST
-still be built from the resolved enclosing node, since a closure is not
-itself indexed and its calls/types are attributed to that node. A `--line`
-that does not fall inside any nested literal (e.g. a switch/loop body, which
-is not a literal) leaves section (a) as the enclosing node's full source.
+A closure captures variables from its enclosing function and is only wired
+up (assigned to a field, passed to a call, invoked) from within that
+function's own body — read on its own, a closure's few lines say nothing
+about what it closes over or when it runs. So when `--line` falls inside a
+function literal nested in the resolved node's body, section (a)'s source
+for that symbol MUST still be the WHOLE enclosing node's source by default,
+never narrowed to just the literal, with every line of the literal (there
+may be several, for several targets) marked with a trailing `// TARGET`
+(alongside `// UNCOVERED` when both apply). A `--line` that does not fall
+inside any nested literal (e.g. a switch/loop body, which is not a literal)
+leaves section (a) as the enclosing node's full source, unmarked. Every
+other section (b/c/d/e) MUST still be built from the resolved enclosing
+node, since a closure is not itself indexed and its calls/types are
+attributed to that node.
+
+Only when the enclosing node's own line count exceeds `--max-function-lines`
+(default 150; 0 disables narrowing, always returning the whole function)
+MUST section (a) narrow instead, to avoid returning a huge function for one
+small closure: the kept content is every target literal whole (still marked
+`// TARGET`), the lines declaring each free variable the literal captures
+from the enclosing function (identifiers the literal's body references that
+are declared inside the enclosing function but outside the literal itself —
+resolved via `go/ast` scope, not the graph), and the statement that
+registers or calls the literal (an assignment, a `return`, a bare call).
+Every gap between, before, or after these kept ranges — relative to the
+enclosing node's own full span — MUST become an explicit
+`// … N lines elided (enclosing function F is M lines; rerun with
+--max-function-lines 0 for all)` marker; a narrowed rendering MUST NOT
+silently drop any part of the function. `ContextSource.narrowed` (JSON)
+records whether this narrowing applied; `StartLine`/`EndLine` are always the
+enclosing node's own declared bounds, narrowed or not.
 
 ### REQ: for-test-helpers-ranked-and-capped
 
@@ -94,6 +120,16 @@ N MUST render signature-only, as section (e) always did before this REQ.
 This ranked order is also section (e)'s budget-fill order, so an omitted
 item under REQ: budget-caps-output-and-names-what-was-cut is always the
 lowest-ranked helper that did not fit, not an arbitrary one.
+
+`--helper-signatures N` (default 40) MUST cap the ranked list itself —
+signature-only or full-body, before `--helper-bodies` picks which of the
+survivors get a body — at the top N ranked entries; 0 means no cap. This cap
+applies independent of `--budget`: it MUST NOT wait for the budget to fill
+before cutting. Every helper the cap cuts is dropped from section (e)
+entirely (not even a signature), and the omitted list MUST record how many
+were cut rather than naming each one individually, since the cap exists
+precisely to bound a package with far more candidate helpers than a bundle
+should enumerate.
 
 ### REQ: symbols-file-targets-one-call-per-package
 
@@ -216,12 +252,35 @@ function's full source, as if the callee had been requested too.
 
 **Requirements:** test-context#req:line-resolves-nested-function-or-literal
 
-**Given** a named function whose body contains a nested anonymous function
-literal, and a `--line` inside that literal
+**Given** a named function under `--max-function-lines` whose body contains
+a nested anonymous function literal, and a `--line` inside that literal
 **When** running `context <any-name> --file <file> --line <line>`
 **Then** the symbol resolves to the enclosing named function, section a's
-source is narrowed to the literal's own line-bounded body, and it is
-accompanied by the enclosing function's signature for orientation.
+source is the WHOLE enclosing function (not narrowed), and every line of
+the literal is marked `// TARGET`.
+
+### AC: closure-targets-dedupe-in-one-function
+
+**Requirements:** test-context#req:line-resolves-nested-function-or-literal
+
+**Given** two `--symbols-file` line targets that resolve into the same
+enclosing function — one inside a nested closure literal, one elsewhere in
+the function
+**When** running `context --symbols-file <path>`
+**Then** that function appears exactly once in section a, with the
+closure's lines (and only those) marked `// TARGET`.
+
+### AC: closure-narrows-when-function-is-long
+
+**Requirements:** test-context#req:line-resolves-nested-function-or-literal
+
+**Given** a named function longer than `--max-function-lines` whose body
+contains a nested closure that captures a local variable declared earlier
+in the function
+**When** running `context <any-name> --file <file> --line <line-in-closure>`
+**Then** section a's source is narrowed: the closure literal is present
+whole and marked `// TARGET`, the line declaring the variable it captures
+is present, and an elision marker appears for the lines cut between them.
 
 ### AC: test-hops-default-direct-only
 
@@ -244,6 +303,17 @@ similarity with the requested symbol
 **Then** the called helper is ranked ahead of the unrelated one, and only
 the top-ranked (called) helper's full source is included — the unrelated
 helper renders signature-only.
+
+### AC: helper-signatures-cap
+
+**Requirements:** test-context#req:for-test-helpers-ranked-and-capped
+
+**Given** a package whose ranked helper candidates outnumber a small
+`--helper-signatures` cap
+**When** running `context <symbol> --for test --helper-signatures N`
+**Then** section e contains at most N helpers (the top N ranked), and the
+omitted list names how many more were cut rather than listing them
+individually.
 
 ### AC: symbols-file-spans-several-targets
 
