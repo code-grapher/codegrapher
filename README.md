@@ -35,6 +35,9 @@ codegrapher files            Indexed file tree                   (--json)
 codegrapher callers <symbol> What calls this symbol              (--json)
 codegrapher callees <symbol> What this symbol calls              (--json)
 codegrapher impact <symbol>  Blast-radius analysis               (--json)
+codegrapher context <symbol...> Bounded test-writing bundle: source, types touched,
+                              direct callees, existing tests, test helpers
+                              (--uncovered, --for test, --budget, --file, --line, --json)
 codegrapher affected [files] Test files affected by changed sources (--json)
 codegrapher watch [path]     Compatibility foreground watcher  (--verbose)
 codegrapher serve [path]     Composable foreground server       (--watch, --api, --mcp)

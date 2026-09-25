@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/strongo/cli-helpers/skillsync"
@@ -82,5 +83,67 @@ func TestSkillsSyncExposesExplicitNewerCompatibleMode(t *testing.T) {
 		if sync.Flags().Lookup(name) == nil {
 			t.Errorf("sync flag --%s is missing", name)
 		}
+	}
+}
+
+// TestTestContextSkillIsSyncedWithValidFrontmatter covers the codegrapher
+// context command's own Agent Skill (agentplugin/skills/codegrapher-test-
+// context): it must sync into a target directory alongside the original
+// codegrapher skill (proving skills.go's listing code does not assume a
+// single skill), and its frontmatter must be a valid, trigger-shaped skill
+// description.
+func TestTestContextSkillIsSyncedWithValidFrontmatter(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "skills")
+	cmd := newSkillsCmd()
+	cmd.SetArgs([]string{"sync", "--dir", dir, "--json"})
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var payload struct {
+		Changes []skillsync.Change `json:"changes"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &payload); err != nil {
+		t.Fatalf("--json output is not valid JSON: %v\n%s", err, output.String())
+	}
+	synced := map[string]bool{}
+	for _, c := range payload.Changes {
+		synced[c.Name] = true
+	}
+	if !synced["codegrapher-test-context"] {
+		t.Fatalf("codegrapher-test-context not reported as synced alongside codegrapher: %+v", payload.Changes)
+	}
+
+	installedPath := filepath.Join(dir, "codegrapher-test-context", "SKILL.md")
+	data, err := os.ReadFile(installedPath)
+	if err != nil {
+		t.Fatalf("installed skill missing: %v", err)
+	}
+	content := string(data)
+	if !strings.HasPrefix(content, "---\n") {
+		t.Fatalf("SKILL.md does not start with a frontmatter block:\n%s", content)
+	}
+	end := strings.Index(content[4:], "---")
+	if end < 0 {
+		t.Fatalf("SKILL.md frontmatter block is not closed:\n%s", content)
+	}
+	frontmatter := content[4 : 4+end]
+	if !strings.Contains(frontmatter, "name: codegrapher-test-context") {
+		t.Fatalf("frontmatter missing name: codegrapher-test-context:\n%s", frontmatter)
+	}
+	descIdx := strings.Index(frontmatter, "description:")
+	if descIdx < 0 {
+		t.Fatalf("frontmatter missing description:\n%s", frontmatter)
+	}
+	descLine := strings.TrimSpace(frontmatter[descIdx+len("description:"):])
+	if before, _, ok := strings.Cut(descLine, "\n"); ok {
+		descLine = strings.TrimSpace(before)
+	}
+	if !strings.HasPrefix(descLine, "Use when") {
+		t.Fatalf("description is not trigger-shaped (must start with %q): %q", "Use when", descLine)
+	}
+	if strings.Count(descLine, ".") > 1 {
+		t.Fatalf("description must be one sentence: %q", descLine)
 	}
 }
