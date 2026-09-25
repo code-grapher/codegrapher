@@ -64,6 +64,50 @@ func Rename(w *Widget, newName string) error {
 func Describe(w *Widget) string {
 	return w.Name
 }
+
+// Notifier is a seam interface used as a struct field's type on Recorder,
+// below — separate from Store/Widget above so nothing before this point
+// shifts line numbers (TestContextMarksUncoveredLinesFromIngestedProfile
+// hardcodes Rename's line numbers).
+type Notifier interface {
+	Notify(msg string)
+}
+
+// Recorder holds a label and a notifier field; NewRecorder is its
+// constructor, matched by findConstructors' New<T> name rule.
+type Recorder struct {
+	Label  string
+	notify Notifier
+}
+
+// NewRecorder builds a ready Recorder.
+func NewRecorder(label string, n Notifier) *Recorder {
+	return &Recorder{Label: label, notify: n}
+}
+
+// notify is a real package-level function that happens to share its name
+// with Recorder's own "notify" field (of interface type Notifier).
+// context's call-graph resolver matches calls by name, not by static type,
+// so a call resolving to this function could really be going through the
+// field at runtime — the field-seam heuristic flags it as such rather than
+// asserting it as a graph fact.
+func notify() {}
+
+// retry is a real package-level function that happens to share its name
+// with Record's own func-typed parameter below, for the same reason: a
+// call resolving to it could really be invoking the parameter.
+func retry() error { return nil }
+
+// Record is a method (real receiver) that reads its own receiver field
+// (notify) through an interface-typed field, and takes a func-typed
+// parameter — exercising receiver/constructor/field-type roles (section b)
+// and field/parameter seam flags (section c), none of which the
+// plain-function symbols above ever touch (they have no receiver).
+func (r *Recorder) Record(retry func() error) error {
+	r.notify.Notify(r.Label)
+	notify()
+	return retry()
+}
 `)
 	mustWrite(filepath.Join(root, "widget_test.go"), `package fx
 
@@ -116,6 +160,25 @@ func runContext(t *testing.T, root string, args ...string) ContextResult {
 		t.Fatalf("decode context JSON: %v\n%s", err, out.String())
 	}
 	return result
+}
+
+// runContextText runs `context` with no --format flag, i.e. the default
+// markdown/text renderer a human or agent gets from a plain `codegrapher
+// context <symbol>` invocation, and returns the raw rendered output.
+func runContextText(t *testing.T, root string, args ...string) string {
+	t.Helper()
+	cmd := newContextCmd()
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	fullArgs := append(append([]string{}, args...), "-p", root)
+	cmd.SetArgs(fullArgs)
+	cmd.SetErr(&out)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("context command failed: %v\n%s", err, out.String())
+	}
+	return out.String()
 }
 
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/test-context#ac:dedup-shared-type-across-two-symbols
@@ -262,5 +325,126 @@ func TestContextUnknownSymbolDoesNotBlockOthers(t *testing.T) {
 	}
 	if len(result.Sources) != 1 || result.Sources[0].Symbol.Name != "Rename" {
 		t.Fatalf("Rename's bundle was not returned alongside the unresolved symbol: %+v", result.Sources)
+	}
+}
+
+// TestContextMethodExercisesReceiverConstructorFieldAndSeamHeuristics runs
+// context on Record — a METHOD, not a plain function — so the receiver,
+// constructor, field-type, field-seam, and parameter-seam code paths all
+// run (they never do for Rename/Describe, which are plain functions with
+// no receiver). It asserts both the graph-verified facts (receiver,
+// constructor, interface seam) and the text-scan-derived ones (the "field"
+// role, and the "field"/"parameter" seams) come back correctly, and that
+// only the latter carry the B1 inferred marking (HeuristicRoles/SeamSource)
+// — a graph fact must never be marked, and a heuristic fact must always be.
+func TestContextMethodExercisesReceiverConstructorFieldAndSeamHeuristics(t *testing.T) {
+	root := newContextFixture(t)
+	result := runContext(t, root, "Record")
+
+	// (b) receiver role: graph-verified, must not be in HeuristicRoles.
+	var recorderDecl, newRecorderDecl, notifierDecl *ContextType
+	for i := range result.Types {
+		switch result.Types[i].Symbol.Name {
+		case "Recorder":
+			recorderDecl = &result.Types[i]
+		case "NewRecorder":
+			newRecorderDecl = &result.Types[i]
+		case "Notifier":
+			notifierDecl = &result.Types[i]
+		}
+	}
+	if recorderDecl == nil || !containsRole(recorderDecl.Roles, "receiver") {
+		t.Fatalf("Recorder decl missing receiver role: %+v", result.Types)
+	}
+	if containsRole(recorderDecl.HeuristicRoles, "receiver") || len(recorderDecl.HeuristicRoles) != 0 {
+		t.Fatalf("Recorder's receiver role must not be marked heuristic: %+v", recorderDecl)
+	}
+
+	// (b) constructor role: graph-verified (findConstructors), via New<T>.
+	if newRecorderDecl == nil || !containsRole(newRecorderDecl.Roles, "constructor") || newRecorderDecl.For != "Recorder" {
+		t.Fatalf("NewRecorder decl missing constructor role for Recorder: %+v", result.Types)
+	}
+	if len(newRecorderDecl.HeuristicRoles) != 0 {
+		t.Fatalf("NewRecorder's constructor role must not be marked heuristic: %+v", newRecorderDecl)
+	}
+
+	// (b) field-type role: text-scan-derived (fieldReadsOf/parseStructFields
+	// over Record's own source, resolving r.notify's declared type), must be
+	// marked heuristic.
+	if notifierDecl == nil || !containsRole(notifierDecl.Roles, "field") {
+		t.Fatalf("Notifier decl missing field role: %+v", result.Types)
+	}
+	if !containsRole(notifierDecl.HeuristicRoles, "field") {
+		t.Fatalf("Notifier's field role must be marked heuristic (HeuristicRoles): %+v", notifierDecl)
+	}
+
+	// (c) callees: interface seam is graph-verified; field/parameter seams
+	// are text-scan-derived and must be marked inferred via SeamSource.
+	seams := map[string]ContextCallee{}
+	for _, c := range result.Callees {
+		seams[c.Symbol.QualifiedName] = c
+	}
+	notifyCall, ok := seams["notify"]
+	if !ok {
+		t.Fatalf("notify() callee not found: %+v", result.Callees)
+	}
+	if notifyCall.Seam != "field" || notifyCall.SeamSource != "inferred" {
+		t.Fatalf("notify() seam = %q/%q, want field/inferred: %+v", notifyCall.Seam, notifyCall.SeamSource, notifyCall)
+	}
+	retryCall, ok := seams["retry"]
+	if !ok {
+		t.Fatalf("retry() callee not found: %+v", result.Callees)
+	}
+	if retryCall.Seam != "parameter" || retryCall.SeamSource != "inferred" {
+		t.Fatalf("retry() seam = %q/%q, want parameter/inferred: %+v", retryCall.Seam, retryCall.SeamSource, retryCall)
+	}
+	notifyMethodCall, ok := seams["Notifier::Notify"]
+	if !ok {
+		t.Fatalf("Notifier::Notify callee not found: %+v", result.Callees)
+	}
+	if notifyMethodCall.Seam != "interface" || notifyMethodCall.SeamSource != "graph" {
+		t.Fatalf("Notifier::Notify seam = %q/%q, want interface/graph: %+v", notifyMethodCall.Seam, notifyMethodCall.SeamSource, notifyMethodCall)
+	}
+}
+
+// TestContextDefaultMarkdownRendersSectionsAndInferredMarkers runs context
+// with no --format flag — the default output a human or agent actually gets
+// from `codegrapher context <symbol>` — which, before this test, had never
+// executed in CI (every other test passes --format json). It asserts the
+// section structure renders and that the B1 inferred markers show up in the
+// human-facing text exactly where the JSON assertions above say they should
+// (and nowhere else).
+func TestContextDefaultMarkdownRendersSectionsAndInferredMarkers(t *testing.T) {
+	root := newContextFixture(t)
+	out := runContextText(t, root, "Record")
+
+	for _, want := range []string{
+		"# Context — Record",
+		"\n## a. Source",
+		"\n## b. Types touched",
+		"\n## c. Direct callees",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("default markdown output missing %q:\n%s", want, out)
+		}
+	}
+
+	// Heuristic-derived facts carry the (inferred) tag.
+	if !strings.Contains(out, "field (inferred)") {
+		t.Fatalf("markdown missing (inferred) tag on the text-scan-derived field role:\n%s", out)
+	}
+	if !strings.Contains(out, "[seam: field (inferred)]") {
+		t.Fatalf("markdown missing (inferred) tag on the field seam:\n%s", out)
+	}
+	if !strings.Contains(out, "[seam: parameter (inferred)]") {
+		t.Fatalf("markdown missing (inferred) tag on the parameter seam:\n%s", out)
+	}
+
+	// Graph-verified facts never carry the tag.
+	if !strings.Contains(out, "receiver") || strings.Contains(out, "receiver (inferred)") {
+		t.Fatalf("graph-verified receiver role must render unmarked:\n%s", out)
+	}
+	if !strings.Contains(out, "[seam: interface]") || strings.Contains(out, "[seam: interface (inferred)]") {
+		t.Fatalf("graph-verified interface seam must render unmarked:\n%s", out)
 	}
 }

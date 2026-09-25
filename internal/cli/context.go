@@ -70,17 +70,33 @@ type ContextSource struct {
 }
 
 // ContextType is section (b)/(e): a full type or constructor declaration.
+//
+// Roles are a mix of graph-verified facts (receiver, parameter/result,
+// constructor — all real edges/lookups) and, for "field", a best-effort text
+// scan (see fieldReadsOf/parseStructFields) that can miss or misfire on a
+// shadowed receiver name, an unparsed embedded/generic field, etc.
+// HeuristicRoles names the subset of Roles that came from that text scan
+// rather than the graph, so a consumer can tell "the graph says so" from
+// "a regex guessed" instead of trusting every role at the same confidence.
 type ContextType struct {
-	Roles  []string    `json:"roles"`
-	For    string      `json:"for,omitempty"` // constructor's target type name
-	Symbol BriefSymbol `json:"symbol"`
-	Source string      `json:"source"`
+	Roles          []string    `json:"roles"`
+	HeuristicRoles []string    `json:"heuristicRoles,omitempty"` // subset of Roles that are text-scan-derived, not graph-verified
+	For            string      `json:"for,omitempty"`            // constructor's target type name
+	Symbol         BriefSymbol `json:"symbol"`
+	Source         string      `json:"source"`
 }
 
 // ContextCallee is section (c): a direct callee, signature only.
+//
+// Seam is "interface" (a real graph fact: an incoming contains edge from a
+// KindInterface owner) or "field"/"parameter" (a best-effort text scan over
+// the caller's own source/signature — see seamKind). SeamSource makes that
+// distinction explicit for consumers: "graph" for interface, "inferred" for
+// field/parameter. It is set whenever Seam is non-empty.
 type ContextCallee struct {
-	Symbol BriefSymbol `json:"symbol"`
-	Seam   string      `json:"seam,omitempty"` // interface | field | parameter
+	Symbol     BriefSymbol `json:"symbol"`
+	Seam       string      `json:"seam,omitempty"`       // interface | field | parameter
+	SeamSource string      `json:"seamSource,omitempty"` // graph | inferred; set whenever Seam is non-empty
 }
 
 // ContextTestRef is section (d): an existing test that calls the symbol.
@@ -394,12 +410,16 @@ func buildTypeSection(matches []matchedNode, sourceCache map[string]string, root
 	var decls []ContextType
 	seen := map[string]int{} // node ID -> index into decls, for role merging
 
-	add := func(role string, forType string, n model.Node, s *store.Store) error {
+	add := func(role string, forType string, n model.Node, s *store.Store, heuristic bool) error {
 		key := n.ID
 		if idx, ok := seen[key]; ok {
 			if !containsRole(decls[idx].Roles, role) {
 				decls[idx].Roles = append(decls[idx].Roles, role)
 				sort.Strings(decls[idx].Roles)
+			}
+			if heuristic && !containsRole(decls[idx].HeuristicRoles, role) {
+				decls[idx].HeuristicRoles = append(decls[idx].HeuristicRoles, role)
+				sort.Strings(decls[idx].HeuristicRoles)
 			}
 			return nil
 		}
@@ -408,6 +428,9 @@ func buildTypeSection(matches []matchedNode, sourceCache map[string]string, root
 			return err
 		}
 		decl := ContextType{Roles: []string{role}, For: forType, Symbol: briefNode(n), Source: src}
+		if heuristic {
+			decl.HeuristicRoles = []string{role}
+		}
 		seen[key] = len(decls)
 		decls = append(decls, decl)
 		return nil
@@ -431,7 +454,7 @@ func buildTypeSection(matches []matchedNode, sourceCache map[string]string, root
 			}
 			for _, rn := range recvNodes {
 				if typeDeclKinds[rn.Kind] {
-					if err := add("receiver", "", rn, s); err != nil {
+					if err := add("receiver", "", rn, s, false); err != nil {
 						return nil, nil, err
 					}
 				}
@@ -442,7 +465,7 @@ func buildTypeSection(matches []matchedNode, sourceCache map[string]string, root
 				return nil, nil, err
 			}
 			for _, c := range ctors {
-				if err := add("constructor", receiverType, c, s); err != nil {
+				if err := add("constructor", receiverType, c, s, false); err != nil {
 					return nil, nil, err
 				}
 			}
@@ -465,7 +488,7 @@ func buildTypeSection(matches []matchedNode, sourceCache map[string]string, root
 			}
 			for _, tn := range targets {
 				if typeDeclKinds[tn.Kind] {
-					if err := add("parameter/result", "", tn, s); err != nil {
+					if err := add("parameter/result", "", tn, s, false); err != nil {
 						return nil, nil, err
 					}
 				}
@@ -506,7 +529,7 @@ func buildTypeSection(matches []matchedNode, sourceCache map[string]string, root
 						}
 						for _, tn := range typeNodes {
 							if typeDeclKinds[tn.Kind] {
-								if err := add("field", "", tn, s); err != nil {
+								if err := add("field", "", tn, s, true); err != nil {
 									return nil, nil, err
 								}
 							}
@@ -528,10 +551,30 @@ func buildTypeSection(matches []matchedNode, sourceCache map[string]string, root
 		items = append(items, contextItem{
 			section: "b", label: label,
 			text: fmt.Sprintf("\n### Type — `%s` (%s, %s) — `%s:%d-%d`\n\n```%s\n%s\n```\n",
-				d.Symbol.QualifiedName, d.Symbol.Kind, strings.Join(d.Roles, ","), d.Symbol.FilePath, d.Symbol.StartLine, d.Symbol.EndLine, d.Symbol.Language, d.Source),
+				d.Symbol.QualifiedName, d.Symbol.Kind, formatRoles(d.Roles, d.HeuristicRoles), d.Symbol.FilePath, d.Symbol.StartLine, d.Symbol.EndLine, d.Symbol.Language, d.Source),
 		})
 	}
 	return items, decls, nil
+}
+
+// formatRoles renders a comma-joined role list, tagging each role that is
+// also present in heuristicRoles with " (inferred)" so a text-scan-derived
+// fact (currently only "field") is never visually indistinguishable from a
+// graph-verified one (receiver, parameter/result, constructor).
+func formatRoles(roles, heuristicRoles []string) string {
+	heuristic := make(map[string]bool, len(heuristicRoles))
+	for _, r := range heuristicRoles {
+		heuristic[r] = true
+	}
+	parts := make([]string, len(roles))
+	for i, r := range roles {
+		if heuristic[r] {
+			parts[i] = r + " (inferred)"
+		} else {
+			parts[i] = r
+		}
+	}
+	return strings.Join(parts, ",")
 }
 
 func containsRole(list []string, s string) bool {
@@ -674,7 +717,7 @@ func buildCalleeSection(matches []matchedNode, sourceCache map[string]string, ro
 			if err != nil {
 				return nil, nil, err
 			}
-			callees = append(callees, ContextCallee{Symbol: briefNode(tn), Seam: seam})
+			callees = append(callees, ContextCallee{Symbol: briefNode(tn), Seam: seam, SeamSource: seamSourceFor(seam)})
 		}
 	}
 	sort.SliceStable(callees, func(i, j int) bool {
@@ -685,16 +728,40 @@ func buildCalleeSection(matches []matchedNode, sourceCache map[string]string, ro
 	})
 	var items []contextItem
 	for _, c := range callees {
-		flag := ""
-		if c.Seam != "" {
-			flag = " [seam: " + c.Seam + "]"
-		}
 		items = append(items, contextItem{
 			section: "c", label: c.Symbol.QualifiedName,
-			text: fmt.Sprintf("- `%s`%s — `%s` — %s:%d\n", c.Symbol.QualifiedName, flag, c.Symbol.Signature, c.Symbol.FilePath, c.Symbol.StartLine),
+			text: fmt.Sprintf("- `%s`%s — `%s` — %s:%d\n", c.Symbol.QualifiedName, seamFlag(c.Seam, c.SeamSource), c.Symbol.Signature, c.Symbol.FilePath, c.Symbol.StartLine),
 		})
 	}
 	return items, callees, nil
+}
+
+// seamSourceFor maps a seam value to the marking B1 requires: "interface" is
+// a real graph fact ("graph"); "field"/"parameter" are best-effort text
+// scans over the caller's own source ("inferred"). Empty seam (no flag)
+// yields an empty source too.
+func seamSourceFor(seam string) string {
+	switch seam {
+	case "interface":
+		return "graph"
+	case "field", "parameter":
+		return "inferred"
+	default:
+		return ""
+	}
+}
+
+// seamFlag renders the "[seam: ...]" markdown suffix, tagging a text-scan-
+// derived seam with " (inferred)" so it is never visually indistinguishable
+// from the graph-verified "interface" seam.
+func seamFlag(seam, seamSource string) string {
+	if seam == "" {
+		return ""
+	}
+	if seamSource == "inferred" {
+		return " [seam: " + seam + " (inferred)]"
+	}
+	return " [seam: " + seam + "]"
 }
 
 // seamKind flags a direct callee as a seam a test double could replace:
@@ -1116,7 +1183,7 @@ func printContextMarkdown(w io.Writer, result *ContextResult) error {
 			return err
 		}
 		for _, t := range result.Types {
-			if _, err := fmt.Fprintf(w, "\n### `%s` (%s, %s)\n\n```%s\n%s\n```\n", t.Symbol.QualifiedName, t.Symbol.Kind, strings.Join(t.Roles, ","), t.Symbol.Language, t.Source); err != nil {
+			if _, err := fmt.Fprintf(w, "\n### `%s` (%s, %s)\n\n```%s\n%s\n```\n", t.Symbol.QualifiedName, t.Symbol.Kind, formatRoles(t.Roles, t.HeuristicRoles), t.Symbol.Language, t.Source); err != nil {
 				return err
 			}
 		}
@@ -1126,11 +1193,7 @@ func printContextMarkdown(w io.Writer, result *ContextResult) error {
 			return err
 		}
 		for _, c := range result.Callees {
-			flag := ""
-			if c.Seam != "" {
-				flag = " [seam: " + c.Seam + "]"
-			}
-			if _, err := fmt.Fprintf(w, "- `%s`%s — `%s` — %s:%d\n", c.Symbol.QualifiedName, flag, c.Symbol.Signature, c.Symbol.FilePath, c.Symbol.StartLine); err != nil {
+			if _, err := fmt.Fprintf(w, "- `%s`%s — `%s` — %s:%d\n", c.Symbol.QualifiedName, seamFlag(c.Seam, c.SeamSource), c.Symbol.Signature, c.Symbol.FilePath, c.Symbol.StartLine); err != nil {
 				return err
 			}
 		}

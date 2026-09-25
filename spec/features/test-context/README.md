@@ -51,6 +51,22 @@ e. with `--for test`: signatures of the package's own test helpers and
    declared in the package's `_test.go` files) plus exported symbols of
    sibling `*test`/`*fake*` packages its test files import.
 
+Most of (b) and (c) are graph-verified facts (a real edge or node lookup):
+receiver, parameter/result, and constructor roles in (b); the interface seam
+flag in (c). The "field" role in (b) and the "field"/"parameter" seam flags
+in (c) are instead a best-effort text scan over the symbol's own source
+(struct fields are not indexed as first-class nodes, so this is the only
+route to them) — a shadowed receiver-name local variable, an unparsed
+embedded/generic struct field, or a same-named function that isn't actually
+reached through the field/parameter can each produce a wrong or missing
+result. `context` MUST mark every such text-scan-derived fact as inferred,
+distinctly from graph-verified facts, in both output formats: JSON via
+`ContextType.heuristicRoles` (the subset of `roles` that are text-scan-
+derived) and `ContextCallee.seamSource` (`"graph"` for `interface`,
+`"inferred"` for `field`/`parameter`); markdown via an `(inferred)` tag
+appended to the specific role or seam flag. Graph-verified facts carry no
+such marker (or, for `seamSource`, the explicit value `"graph"`).
+
 A symbol that does not resolve (not found, or ambiguous) MUST be reported
 by name with that status and MUST NOT block the other requested symbols.
 
