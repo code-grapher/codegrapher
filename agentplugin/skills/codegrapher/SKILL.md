@@ -130,3 +130,7 @@ codegrapher impact "<symbol>" --format json
 Treat the graph as investigation evidence. `node --source` is the preferred
 source read for indexed symbols; use ordinary file reads for docs, configs, or
 when CodeGrapher reports a freshness error.
+
+Writing or extending tests, or covering uncovered lines from a coverage
+profile? Use the `codegrapher-test-context` skill's `context` command instead
+of repeating `node`/`callees` per symbol — see that skill for the workflow.

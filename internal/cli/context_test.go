@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -108,6 +109,41 @@ func (r *Recorder) Record(retry func() error) error {
 	notify()
 	return retry()
 }
+
+// RenameViaHelper is production code that calls Rename — used to exercise
+// F1's opt-in --test-hops 2: TestRenameViaHelperIndirect (widget_test.go)
+// calls this, not Rename, directly.
+func RenameViaHelper(w *Widget, newName string) error {
+	return Rename(w, newName)
+}
+
+// ForwardsToHelper is a thin wrapper: its body is a single return'd call.
+// context must surface computeReal's full source too, as if it had been
+// requested (E1) — a 1-line forwarding wrapper tells a test writer nothing
+// about the real logic living in the function it forwards to.
+func ForwardsToHelper() int {
+	return computeReal()
+}
+
+// computeReal is ForwardsToHelper's real logic.
+func computeReal() int {
+	return 42
+}
+
+// retryForClosure is a leaf function called only from WithClosure's nested
+// literal below, so its call site is a unique, greppable marker a test can
+// locate without hardcoding a line number.
+func retryForClosure() error { return nil }
+
+// WithClosure has a nested anonymous closure with no name of its own — the
+// coverage/worklist file:line an agent has for it can only resolve through
+// A1 (context --file/--line narrows to the innermost function literal).
+func WithClosure() error {
+	run := func() error {
+		return retryForClosure()
+	}
+	return run()
+}
 `)
 	mustWrite(filepath.Join(root, "widget_test.go"), `package fx
 
@@ -116,6 +152,18 @@ import "testing"
 func TestRename(t *testing.T) {
 	w := NewWidget("a", fakeStore{})
 	if err := Rename(w, "b"); err != nil {
+		t.Fatal(err)
+	}
+	assertWidgetName(t, w, "b")
+}
+
+// TestRenameViaHelperIndirect never calls Rename directly, only through the
+// production helper RenameViaHelper (widget.go) — exercises F1's opt-in
+// --test-hops 2 (default context Rename must NOT list this test; --test-hops
+// 2 must).
+func TestRenameViaHelperIndirect(t *testing.T) {
+	w := NewWidget("a", fakeStore{})
+	if err := RenameViaHelper(w, "b"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -128,6 +176,23 @@ func newFakeWidget() *Widget {
 type fakeStore struct{}
 
 func (fakeStore) Save(id string) error { return nil }
+
+// assertWidgetName is called directly by TestRename above — B1's tier-1
+// "referenced by section d's tests" ranking must place it ahead of an
+// unreferenced, dissimilarly-named helper such as zzzUnrelatedHelper below.
+func assertWidgetName(t *testing.T, w *Widget, want string) {
+	t.Helper()
+	if w.Name != want {
+		t.Fatalf("name = %q, want %q", w.Name, want)
+	}
+}
+
+// zzzUnrelatedHelper is never called by any test and shares no meaningful
+// substring with any requested symbol in TestContextForTestRanksHelpers
+// AndIncludesTopBodies — B1's tier-2 name-similarity ranking must sort it
+// behind assertWidgetName, and with a small --helper-bodies cap it must be
+// the one left with a signature-only (no Source) rendering.
+func zzzUnrelatedHelper() {}
 `)
 	runGitForWatchTest(t, root, "add", ".")
 	runGitForWatchTest(t, root, "commit", "-qm", "initial")
@@ -446,5 +511,170 @@ func TestContextDefaultMarkdownRendersSectionsAndInferredMarkers(t *testing.T) {
 	}
 	if !strings.Contains(out, "[seam: interface]") || strings.Contains(out, "[seam: interface (inferred)]") {
 		t.Fatalf("graph-verified interface seam must render unmarked:\n%s", out)
+	}
+}
+
+// lineOf locates the 1-indexed source line containing substr in root/relPath
+// — used instead of hardcoded line numbers so the new fixture functions
+// below can move freely without breaking a --line-based test.
+func lineOf(t *testing.T, root, relPath, substr string) int {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, relPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, line := range strings.Split(string(data), "\n") {
+		if strings.Contains(line, substr) {
+			return i + 1
+		}
+	}
+	t.Fatalf("substring %q not found in %s", substr, relPath)
+	return 0
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/test-context#ac:line-resolves-nested-closure
+func TestContextResolvesLineIntoClosure(t *testing.T) {
+	root := newContextFixture(t)
+	closureLine := lineOf(t, root, "widget.go", "return retryForClosure()")
+
+	result := runContext(t, root, "closure", "--file", "widget.go", "--line", strconv.Itoa(closureLine))
+
+	if len(result.Unresolved) != 0 {
+		t.Fatalf("closure at widget.go:%d did not resolve: %+v", closureLine, result.Unresolved)
+	}
+	if len(result.Sources) != 1 {
+		t.Fatalf("sources = %d, want 1: %+v", len(result.Sources), result.Sources)
+	}
+	src := result.Sources[0]
+	if src.ClosureOf == "" {
+		t.Fatalf("ClosureOf not set for a line resolved inside a nested literal: %+v", src)
+	}
+	if !strings.Contains(src.Source, "retryForClosure()") {
+		t.Fatalf("closure source missing its own body:\n%s", src.Source)
+	}
+	if strings.Contains(src.Source, "func WithClosure") {
+		t.Fatalf("closure source must be narrowed to the literal, not the whole enclosing function:\n%s", src.Source)
+	}
+	if !strings.Contains(src.ClosureOf, "WithClosure") {
+		t.Fatalf("ClosureOf must name the enclosing function for orientation: %q", src.ClosureOf)
+	}
+	// The enclosing symbol identity (for b/c/d/e lookups) is still the named
+	// WithClosure function, not the anonymous literal.
+	if src.Symbol.Name != "WithClosure" {
+		t.Fatalf("resolved symbol = %q, want WithClosure (the enclosing named function)", src.Symbol.Name)
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/test-context#ac:thin-wrapper-surfaces-callee-source
+func TestContextThinWrapperSurfacesCalleeSource(t *testing.T) {
+	root := newContextFixture(t)
+	result := runContext(t, root, "ForwardsToHelper")
+
+	names := map[string]bool{}
+	for _, s := range result.Sources {
+		names[s.Symbol.Name] = true
+	}
+	if !names["ForwardsToHelper"] {
+		t.Fatalf("requested symbol itself missing from sources: %+v", result.Sources)
+	}
+	if !names["computeReal"] {
+		t.Fatalf("thin wrapper's sole callee computeReal was not surfaced as if requested: %+v", result.Sources)
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/test-context#ac:test-hops-default-direct-only
+func TestContextDefaultsToDirectTestCallersOnly(t *testing.T) {
+	root := newContextFixture(t)
+
+	direct := runContext(t, root, "Rename")
+	names := map[string]bool{}
+	for _, tr := range direct.Tests {
+		names[tr.Name] = true
+	}
+	if !names["TestRename"] {
+		t.Fatalf("direct 1-hop caller TestRename missing by default: %+v", direct.Tests)
+	}
+	if names["TestRenameViaHelperIndirect"] {
+		t.Fatalf("2-hop caller TestRenameViaHelperIndirect must NOT appear without --test-hops 2: %+v", direct.Tests)
+	}
+
+	withHops := runContext(t, root, "Rename", "--test-hops", "2")
+	names = map[string]bool{}
+	hops := map[string]int{}
+	for _, tr := range withHops.Tests {
+		names[tr.Name] = true
+		hops[tr.Name] = tr.Hops
+	}
+	if !names["TestRenameViaHelperIndirect"] {
+		t.Fatalf("--test-hops 2 must include the 2-hop caller: %+v", withHops.Tests)
+	}
+	if hops["TestRenameViaHelperIndirect"] != 2 {
+		t.Fatalf("TestRenameViaHelperIndirect hops = %d, want 2", hops["TestRenameViaHelperIndirect"])
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/test-context#ac:helpers-ranked-and-capped
+func TestContextForTestRanksHelpersAndIncludesTopBodies(t *testing.T) {
+	root := newContextFixture(t)
+	result := runContext(t, root, "Rename", "--for", "test", "--helper-bodies", "1")
+
+	var referencedIdx, unrelatedIdx = -1, -1
+	bodies := 0
+	for i, h := range result.Helpers {
+		switch h.Symbol.Name {
+		case "assertWidgetName":
+			referencedIdx = i
+		case "zzzUnrelatedHelper":
+			unrelatedIdx = i
+		}
+		if h.Source != "" {
+			bodies++
+		}
+	}
+	if referencedIdx == -1 {
+		t.Fatalf("assertWidgetName (called directly by TestRename) missing from helpers: %+v", result.Helpers)
+	}
+	if unrelatedIdx == -1 {
+		t.Fatalf("zzzUnrelatedHelper missing from helpers: %+v", result.Helpers)
+	}
+	if referencedIdx >= unrelatedIdx {
+		t.Fatalf("referenced helper assertWidgetName (index %d) must rank ahead of unreferenced zzzUnrelatedHelper (index %d): %+v", referencedIdx, unrelatedIdx, result.Helpers)
+	}
+	if bodies != 1 {
+		t.Fatalf("helper bodies included = %d, want exactly 1 (--helper-bodies 1): %+v", bodies, result.Helpers)
+	}
+	if result.Helpers[referencedIdx].Source == "" {
+		t.Fatalf("top-ranked helper assertWidgetName must carry its full body with --helper-bodies 1: %+v", result.Helpers[referencedIdx])
+	}
+	if result.Helpers[unrelatedIdx].Source != "" {
+		t.Fatalf("lower-ranked helper zzzUnrelatedHelper must be signature-only beyond the --helper-bodies cap: %+v", result.Helpers[unrelatedIdx])
+	}
+}
+
+// specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/test-context#ac:symbols-file-spans-several-targets
+func TestContextSymbolsFileSpansMultipleTargets(t *testing.T) {
+	root := newContextFixture(t)
+	descLine := lineOf(t, root, "widget.go", "func Describe(w *Widget) string {")
+
+	symbolsFile := filepath.Join(t.TempDir(), "symbols.txt")
+	content := "widget.go\tRename\nwidget.go\t" + strconv.Itoa(descLine) + "\n"
+	if err := os.WriteFile(symbolsFile, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := runContext(t, root, "--symbols-file", symbolsFile)
+
+	if len(result.Requested) != 2 {
+		t.Fatalf("requested = %+v, want 2 targets from --symbols-file", result.Requested)
+	}
+	if len(result.Unresolved) != 0 {
+		t.Fatalf("unresolved = %+v, want both --symbols-file targets to resolve", result.Unresolved)
+	}
+	names := map[string]bool{}
+	for _, s := range result.Sources {
+		names[s.Symbol.Name] = true
+	}
+	if !names["Rename"] || !names["Describe"] {
+		t.Fatalf("sources = %+v, want both Rename (by name) and Describe (by file:line)", result.Sources)
 	}
 }

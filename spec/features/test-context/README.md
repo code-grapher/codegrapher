@@ -35,7 +35,11 @@ does (exact id, then exact name, then qualified-name/suffix match,
 narrowed by `--file`/`--line`) and assemble, in this order, a bundle
 deduplicated across every symbol in the call:
 
-a. the symbol's line-bounded source (as `node --source`);
+a. the symbol's line-bounded source (as `node --source`). When a requested
+   function's own body is a single statement — a bare call or a `return`'d
+   call — `context` MUST also include that callee's full source here, as if
+   the callee had been requested too (a thin forwarding wrapper's own body
+   tells a test writer nothing about the real logic it forwards to);
 b. full declarations of types it touches — receiver, parameter and result
    types, and types of fields it reads, when declared in the same index
    scope — plus constructors of the receiver type (`New<T>`,
@@ -45,11 +49,63 @@ c. its direct callees as signatures only (never bodies), each flagged when
    declared type is a func or interface; a call matching a func-typed
    parameter of the caller);
 d. existing test functions (declared in `_test.go` files) that call the
-   symbol directly or through one hop, by name and file;
+   symbol directly, by name and file. `--test-hops 2` also includes tests
+   that reach the symbol through one intermediate function (default 1 —
+   direct callers only; the wider match dilutes more than it adds);
 e. with `--for test`: signatures of the package's own test helpers and
    fakes (non-`Test`/`Benchmark`/`Fuzz`/`Example` functions and types
    declared in the package's `_test.go` files) plus exported symbols of
-   sibling `*test`/`*fake*` packages its test files import.
+   sibling `*test`/`*fake*` packages its test files import, ranked and
+   capped per REQ: for-test-helpers-ranked-and-capped.
+
+### REQ: line-resolves-nested-function-or-literal
+
+A requested "symbol" that does not resolve by id, name, or qualified name —
+the only way to name an anonymous function literal (a closure) or a
+switch/loop body, neither of which has a name of its own — MUST, when
+`--file` and `--line` are both given, resolve to the innermost indexed
+Function/Method node in that file whose own line range contains `--line`.
+
+When `--line` additionally falls inside a function literal nested in that
+node's body, section (a)'s source for that symbol MUST be narrowed to the
+literal's own line-bounded source (not the whole enclosing node), and MUST
+be accompanied by the enclosing named function's signature for orientation
+(`ContextSource.closureOf` in JSON). Every other section (b/c/d/e) MUST
+still be built from the resolved enclosing node, since a closure is not
+itself indexed and its calls/types are attributed to that node. A `--line`
+that does not fall inside any nested literal (e.g. a switch/loop body, which
+is not a literal) leaves section (a) as the enclosing node's full source.
+
+### REQ: for-test-helpers-ranked-and-capped
+
+Section (e)'s candidate helpers/fakes (as scoped by the existing
+ordered-sections-deduplicated-across-symbols rule) MUST be ordered into two
+ranked tiers, each internally sorted by file path then line, superseding the
+plain file/line sort every other section uses:
+
+1. helpers directly called (a `calls` edge) by any function/method declared
+   in the same `_test.go` file as one of section (d)'s existing tests;
+2. every remaining helper, ordered by name similarity to the requested
+   symbols' own names (highest first).
+
+`--helper-bodies N` (default 3 when `--for test` is set) MUST include the
+full source of the top N ranked helpers from that order; every helper beyond
+N MUST render signature-only, as section (e) always did before this REQ.
+This ranked order is also section (e)'s budget-fill order, so an omitted
+item under REQ: budget-caps-output-and-names-what-was-cut is always the
+lowest-ranked helper that did not fit, not an arbitrary one.
+
+### REQ: symbols-file-targets-one-call-per-package
+
+`--symbols-file PATH` MUST read additional targets from PATH, one per
+non-blank, non-`#`-prefixed line, each formatted `file<TAB>symbol-or-line`:
+a line whose second field parses as an integer is a bare source line
+(resolved per REQ: line-resolves-nested-function-or-literal); any other
+value is a symbol name scoped to that file (as `--file` narrows a positional
+argument). These targets MUST be resolved alongside any positional symbol
+arguments in the same call, and section (e) MUST still be assembled once per
+package (per the existing dedup rule) no matter how many of the call's
+resolved symbols/files share that package.
 
 Most of (b) and (c) are graph-verified facts (a real edge or node lookup):
 receiver, parameter/result, and constructor roles in (b); the interface seam
@@ -78,8 +134,9 @@ d, e across all requested symbols; once a section would exceed the
 remaining budget, `context` MUST stop filling and append an "omitted" list
 naming every item (by kind and symbol/type/callee/test name) that did not
 fit, instead of silently truncating mid-item. Output MUST be otherwise
-deterministic: symbols in requested order, and every section sorted by
-file path then line.
+deterministic: symbols in requested order, every section sorted by file
+path then line — except section e, whose rank order is defined by
+REQ: for-test-helpers-ranked-and-capped and is itself deterministic.
 
 ### REQ: uncovered-marks-source-from-ingested-profile
 
@@ -144,6 +201,59 @@ the index
 **When** running `context <known> <unknown>`
 **Then** the output reports `<unknown>` as not found and still returns the
 full bundle for `<known>`.
+
+### AC: thin-wrapper-surfaces-callee-source
+
+**Requirements:** test-context#req:ordered-sections-deduplicated-across-symbols
+
+**Given** a requested function whose body is a single `return`'d call to
+another function
+**When** running `context <wrapper-function>`
+**Then** section a includes both the wrapper's own source and the called
+function's full source, as if the callee had been requested too.
+
+### AC: line-resolves-nested-closure
+
+**Requirements:** test-context#req:line-resolves-nested-function-or-literal
+
+**Given** a named function whose body contains a nested anonymous function
+literal, and a `--line` inside that literal
+**When** running `context <any-name> --file <file> --line <line>`
+**Then** the symbol resolves to the enclosing named function, section a's
+source is narrowed to the literal's own line-bounded body, and it is
+accompanied by the enclosing function's signature for orientation.
+
+### AC: test-hops-default-direct-only
+
+**Requirements:** test-context#req:ordered-sections-deduplicated-across-symbols
+
+**Given** a symbol called directly by one test and indirectly (through one
+intermediate production function) by a second test
+**When** running `context <symbol>` with no `--test-hops` flag
+**Then** section d lists the direct test only; running the same call with
+`--test-hops 2` also lists the indirect test, marked as 2 hops.
+
+### AC: helpers-ranked-and-capped
+
+**Requirements:** test-context#req:for-test-helpers-ranked-and-capped
+
+**Given** a package with one helper called directly by a section-d test and
+another helper that is never called by any test and shares no name
+similarity with the requested symbol
+**When** running `context <symbol> --for test --helper-bodies 1`
+**Then** the called helper is ranked ahead of the unrelated one, and only
+the top-ranked (called) helper's full source is included — the unrelated
+helper renders signature-only.
+
+### AC: symbols-file-spans-several-targets
+
+**Requirements:** test-context#req:symbols-file-targets-one-call-per-package
+
+**Given** a `--symbols-file` naming one symbol by name and one by file:line,
+both in the same file
+**When** running `context --symbols-file <path>` with no positional symbol
+arguments
+**Then** both targets resolve and the bundle includes both symbols' source.
 
 ## Open Questions
 

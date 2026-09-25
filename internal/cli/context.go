@@ -4,11 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	covpkg "github.com/specscore/codegrapher/coverage"
@@ -64,9 +68,21 @@ type ContextNotFound struct {
 }
 
 // ContextSource is section (a): one requested symbol's line-bounded source.
+//
+// ClosureOf/StartLine/EndLine are set when the requested --line fell inside
+// a nested function literal (a closure with no name of its own — an
+// anonymous RunE callback, a switch/loop body has none of these either, but
+// those are not literals and stay unnarrowed) rather than directly in the
+// resolved symbol's own statements: Source is then the literal's own
+// line-bounded body, not the whole enclosing symbol, and ClosureOf names the
+// enclosing function for orientation. See A1 (resolveByFileLine /
+// narrowToEnclosingLiteral).
 type ContextSource struct {
-	Symbol BriefSymbol `json:"symbol"`
-	Source string      `json:"source"`
+	Symbol    BriefSymbol `json:"symbol"`
+	Source    string      `json:"source"`
+	ClosureOf string      `json:"closureOf,omitempty"`
+	StartLine int         `json:"startLine,omitempty"`
+	EndLine   int         `json:"endLine,omitempty"`
 }
 
 // ContextType is section (b)/(e): a full type or constructor declaration.
@@ -107,35 +123,112 @@ type ContextTestRef struct {
 	Hops      int    `json:"hops"` // 1 = direct, 2 = one hop
 }
 
+// contextTarget is one resolved-independently request: a symbol name (or, for
+// a --symbols-file line-number entry, a "file:line" placeholder — see
+// buildContextTargets) plus its own file/line disambiguation. --file/--line
+// on the command line become every positional symbol's target.File/Line;
+// --symbols-file lines carry their own per-target file, letting one
+// invocation span several files' worth of symbols (D1) instead of the caller
+// repeating the whole call, and paying for section e's helper bundle, once
+// per file.
+type contextTarget struct {
+	Symbol string
+	File   string
+	Line   int
+}
+
+// buildContextTargets assembles the request list from positional symbol
+// arguments (each disambiguated by the shared --file/--line) and an optional
+// --symbols-file of `path<TAB>symbol-or-line` lines (D1): a line whose second
+// field parses as an integer is a bare source line (the A1 closure/line
+// resolver is the only way to name it), anything else is a symbol name
+// scoped to that file. Blank lines and lines starting with # are skipped.
+func buildContextTargets(args []string, fileHint string, line int, symbolsFilePath string) ([]contextTarget, error) {
+	var targets []contextTarget
+	for _, a := range args {
+		targets = append(targets, contextTarget{Symbol: a, File: fileHint, Line: line})
+	}
+	if symbolsFilePath != "" {
+		data, err := os.ReadFile(symbolsFilePath)
+		if err != nil {
+			return nil, fmt.Errorf("read --symbols-file: %w", err)
+		}
+		for i, raw := range strings.Split(string(data), "\n") {
+			raw = strings.TrimRight(raw, "\r")
+			trimmed := strings.TrimSpace(raw)
+			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+				continue
+			}
+			parts := strings.SplitN(raw, "\t", 2)
+			if len(parts) != 2 {
+				return nil, fmt.Errorf("--symbols-file line %d: want file<TAB>symbol-or-line, got %q", i+1, raw)
+			}
+			file := strings.TrimSpace(parts[0])
+			rest := strings.TrimSpace(parts[1])
+			t := contextTarget{File: file}
+			if n, err := strconv.Atoi(rest); err == nil {
+				t.Line = n
+				t.Symbol = fmt.Sprintf("%s:%d", file, n)
+			} else {
+				t.Symbol = rest
+			}
+			targets = append(targets, t)
+		}
+	}
+	if len(targets) == 0 {
+		return nil, errors.New("no symbols requested: pass symbol arguments or --symbols-file")
+	}
+	return targets, nil
+}
+
 func newContextCmd() *cobra.Command {
 	var jsonOut, uncovered bool
-	var format, fileHint, scopeFlag, forFlag string
-	var line, budget int
+	var format, fileHint, scopeFlag, forFlag, symbolsFile string
+	var line, budget, testHops, helperBodies int
 	var pathFlag string
 
 	cmd := &cobra.Command{
-		Use:   "context <symbol> [symbol...]",
+		Use:   "context [symbol...]",
 		Short: "Bounded test-writing context bundle for a set of symbols",
 		Long: `Assemble everything a test writer needs about a set of symbols in one
 bounded, budget-capped read: for each requested symbol, in order —
   a. its line-bounded source (--uncovered marks lines an ingested coverage
-     profile reports as missed);
+     profile reports as missed). --file/--line also resolve a symbol with no
+     name of its own — an anonymous closure, a switch/loop body — to its
+     innermost enclosing function or function literal;
   b. full declarations of the types it touches (receiver, parameter, result,
      and field types) plus constructors of its receiver type;
-  c. its direct callees as signatures only, flagged when they are a seam;
-  d. existing tests that already call it, directly or through one hop;
-  e. with --for test, the package's own test helpers/fakes and exported
+  c. its direct callees as signatures only, flagged when they are a seam. A
+     requested function whose body is a single (optionally return'd) call is
+     a thin wrapper: its callee's full source is surfaced too, as if it had
+     been requested;
+  d. existing tests that already call it, directly by default (--test-hops 2
+     also includes one intermediate hop);
+  e. with --for test, the package's own test helpers/fakes (ranked: helpers
+     referenced by section d's tests first, then by name similarity to the
+     requested symbols; --helper-bodies N, default 3, includes the top N
+     ranked helpers' full source, not just their signature) and exported
      symbols of sibling *test/*fake* packages its tests import.
-Deduplicated across every requested symbol. --budget (default 20000,
-~4 chars/token) fills sections in order and ends with an omitted list
-naming what did not fit, instead of truncating mid-item.`,
-		Args: cobra.MinimumNArgs(1),
+Deduplicated across every requested symbol, and section e once per package
+even when several requested symbols/files share it. --symbols-file reads
+file<TAB>symbol-or-line lines so one call can span several files.
+--budget (default 20000, ~4 chars/token) fills sections in order and ends
+with an omitted list naming what did not fit, instead of truncating
+mid-item.`,
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if forFlag != "" && forFlag != "test" {
 				return errors.New(`--for must be "test"`)
 			}
 			if budget <= 0 {
 				budget = 20000
+			}
+			if testHops <= 0 {
+				testHops = 1
+			}
+			targets, err := buildContextTargets(args, fileHint, line, symbolsFile)
+			if err != nil {
+				return err
 			}
 			projectPath := ""
 			startPath := ""
@@ -163,13 +256,13 @@ naming what did not fit, instead of truncating mid-item.`,
 				return err
 			}
 
-			result, err := buildContext(idx, args, contextOptions{
-				scopes:    splitCSV(scopeFlag),
-				fileHint:  fileHint,
-				line:      line,
-				forTest:   forFlag == "test",
-				uncovered: uncovered,
-				budget:    budget,
+			result, err := buildContext(idx, targets, contextOptions{
+				scopes:       splitCSV(scopeFlag),
+				forTest:      forFlag == "test",
+				uncovered:    uncovered,
+				budget:       budget,
+				testHops:     testHops,
+				helperBodies: helperBodies,
 			})
 			if err != nil {
 				return err
@@ -187,22 +280,25 @@ naming what did not fit, instead of truncating mid-item.`,
 
 	addJSONOutputFlags(cmd, &format, &jsonOut)
 	cmd.Flags().StringVar(&fileHint, "file", "", "Disambiguate every requested symbol by indexed file path")
-	cmd.Flags().IntVar(&line, "line", 0, "Disambiguate every requested symbol by source line")
+	cmd.Flags().IntVar(&line, "line", 0, "Disambiguate every requested symbol by source line; also resolves an unnamed closure/block")
 	cmd.Flags().StringVar(&forFlag, "for", "", `Widen the bundle for a purpose: "test" adds package test helpers/fakes`)
 	cmd.Flags().BoolVar(&uncovered, "uncovered", false, "Mark source lines the ingested coverage profile reports as missed")
 	cmd.Flags().IntVar(&budget, "budget", 20000, "Approximate output budget in tokens (~4 chars/token)")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
 	cmd.Flags().StringVar(&scopeFlag, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
+	cmd.Flags().StringVar(&symbolsFile, "symbols-file", "", "Read additional file<TAB>symbol-or-line targets from this file, one per line")
+	cmd.Flags().IntVar(&testHops, "test-hops", 1, "Existing-test hops to include in section d (1 = direct callers only, 2 = one intermediate hop too)")
+	cmd.Flags().IntVar(&helperBodies, "helper-bodies", 3, "With --for test, include full source for the top N ranked helpers (0 disables bodies)")
 	return cmd
 }
 
 type contextOptions struct {
-	scopes    []string
-	fileHint  string
-	line      int
-	forTest   bool
-	uncovered bool
-	budget    int
+	scopes       []string
+	forTest      bool
+	uncovered    bool
+	budget       int
+	testHops     int
+	helperBodies int
 }
 
 // contextItem is one budget-fillable unit of output: a pre-rendered markdown
@@ -214,33 +310,56 @@ type contextItem struct {
 	text    string
 }
 
-func buildContext(idx *indexer.Indexer, symbols []string, opts contextOptions) (*ContextResult, error) {
-	result := &ContextResult{Requested: symbols, Budget: opts.budget}
+func buildContext(idx *indexer.Indexer, targets []contextTarget, opts contextOptions) (*ContextResult, error) {
+	requested := make([]string, len(targets))
+	for i, t := range targets {
+		requested[i] = t.Symbol
+	}
+	result := &ContextResult{Requested: requested, Budget: opts.budget}
+
+	stores := idx.StoresFiltered(opts.scopes)
 
 	var matches []matchedNode
 	seenNode := map[string]bool{}
-	for _, sym := range symbols {
-		found, err := findNodeMatches(idx.StoresFiltered(opts.scopes), sym)
+	targetLine := map[string]int{} // node ID -> requested line, for A1 closure narrowing in section a
+	for _, t := range targets {
+		found, err := findNodeMatches(stores, t.Symbol)
 		if err != nil {
 			return nil, err
 		}
-		found = narrowNodeMatches(found, opts.fileHint, opts.line)
+		found = narrowNodeMatches(found, t.File, t.Line)
+		if len(found) == 0 && t.File != "" && t.Line > 0 {
+			// A1: the requested "name" may be a placeholder for a symbol
+			// with no name of its own (an anonymous closure, a switch/loop
+			// body) — resolve directly to the innermost enclosing named
+			// function/method at file:line instead of failing outright.
+			lm, err := resolveByFileLine(stores, t.File, t.Line)
+			if err != nil {
+				return nil, err
+			}
+			if lm != nil {
+				found = []matchedNode{*lm}
+			}
+		}
 		if len(found) == 0 {
 			result.Unresolved = append(result.Unresolved, ContextNotFound{
-				Requested: sym, Status: "not_found",
-				Hint: "Use query --brief to discover indexed symbols.",
+				Requested: t.Symbol, Status: "not_found",
+				Hint: "Use query --brief to discover indexed symbols, or pass --file/--line to resolve an unnamed closure or block.",
 			})
 			continue
 		}
 		if len(found) > 1 {
 			result.Unresolved = append(result.Unresolved, ContextNotFound{
-				Requested: sym, Status: "ambiguous",
+				Requested: t.Symbol, Status: "ambiguous",
 				Hint:       "Retry context with an exact candidate id, --file, or --line.",
 				Candidates: briefMatches(found),
 			})
 			continue
 		}
 		m := found[0]
+		if t.Line > 0 {
+			targetLine[m.node.ID] = t.Line
+		}
 		if seenNode[m.node.ID] {
 			continue
 		}
@@ -254,32 +373,71 @@ func buildContext(idx *indexer.Indexer, symbols []string, opts contextOptions) (
 		return matches[i].node.StartLine < matches[j].node.StartLine
 	})
 
-	var items []contextItem
-	sourceCache := map[string]string{} // node ID -> verified source
-
-	// (a) source
+	// Requested symbol names, captured before wrapper expansion (below) adds
+	// surfaced callees, are the anchor section e's tier-2 similarity ranking
+	// (B1) scores helpers against.
+	requestedNames := make([]string, 0, len(matches))
 	for _, m := range matches {
-		src, err := readVerifiedIndexedNodeSource(idx.Root(), m)
+		requestedNames = append(requestedNames, m.node.Name)
+	}
+
+	var items []contextItem
+	sourceCache := map[string]string{} // node ID -> verified full source
+	root := idx.Root()
+
+	// (a) source. A requested function whose body is a single (optionally
+	// return'd) call — a thin wrapper — also surfaces its callee's full
+	// source here, as if that callee had been requested too (E1): the loop
+	// bound is re-read on each iteration so appended callees are processed.
+	processed := map[string]bool{}
+	for i := 0; i < len(matches); i++ {
+		m := matches[i]
+		if processed[m.node.ID] {
+			continue
+		}
+		processed[m.node.ID] = true
+
+		src, err := readVerifiedIndexedNodeSource(root, m)
 		if err != nil {
 			return nil, err
 		}
 		sourceCache[m.node.ID] = src
+
 		rendered := src
+		displayStart, displayEnd := m.node.StartLine, m.node.EndLine
+		closureOf := ""
+		if ln, ok := targetLine[m.node.ID]; ok {
+			if litSrc, litStart, litEnd, orientation, ok := narrowToEnclosingLiteral(root, m, ln); ok {
+				rendered = litSrc
+				displayStart, displayEnd = litStart, litEnd
+				closureOf = orientation
+			}
+		}
 		if opts.uncovered {
-			marked, err := markUncoveredSource(m, src)
+			marked, err := markUncoveredSource(m, rendered, displayStart)
 			if err != nil {
 				return nil, err
 			}
 			rendered = marked
 		}
-		result.Sources = append(result.Sources, ContextSource{Symbol: briefNode(m.node), Source: rendered})
+		result.Sources = append(result.Sources, ContextSource{
+			Symbol: briefNode(m.node), Source: rendered,
+			ClosureOf: closureOf, StartLine: displayStart, EndLine: displayEnd,
+		})
 		items = append(items, contextItem{
 			section: "a", label: "source " + m.node.QualifiedName,
-			text: fmt.Sprintf("\n### Source — `%s:%d-%d`\n\n```%s\n%s\n```\n", m.node.FilePath, m.node.StartLine, m.node.EndLine, m.node.Language, rendered),
+			text: renderSourceBlock(m.node.QualifiedName, m.node.FilePath, m.node.Language, displayStart, displayEnd, closureOf, rendered),
 		})
-	}
 
-	root := idx.Root()
+		if calleeName, ok := thinWrapperCallee(src); ok {
+			if callee, err := resolveSoleCallee(m, calleeName); err != nil {
+				return nil, err
+			} else if callee != nil && !seenNode[callee.node.ID] {
+				seenNode[callee.node.ID] = true
+				matches = append(matches, *callee)
+			}
+		}
+	}
 
 	// (b) types touched + constructors
 	typeItems, typeDecls, err := buildTypeSection(matches, sourceCache, root)
@@ -297,17 +455,18 @@ func buildContext(idx *indexer.Indexer, symbols []string, opts contextOptions) (
 	result.Callees = callees
 	items = append(items, calleeItems...)
 
-	// (d) existing tests calling the symbol directly or one hop
-	testItems, tests, err := buildTestSection(matches)
+	// (d) existing tests calling the symbol directly (or, with
+	// --test-hops 2, one intermediate hop too — F1 defaults to direct only)
+	testItems, tests, testMatches, err := buildTestSection(matches, opts.testHops)
 	if err != nil {
 		return nil, err
 	}
 	result.Tests = tests
 	items = append(items, testItems...)
 
-	// (e) --for test: package helpers/fakes
+	// (e) --for test: package helpers/fakes, ranked and capped (B1/C1/D1)
 	if opts.forTest {
-		helperItems, helpers, err := buildHelperSection(matches, root)
+		helperItems, helpers, err := buildHelperSection(matches, testMatches, requestedNames, opts.helperBodies, root)
 		if err != nil {
 			return nil, err
 		}
@@ -320,6 +479,20 @@ func buildContext(idx *indexer.Indexer, symbols []string, opts contextOptions) (
 	result.Omitted = omitted
 	applyBudgetCut(result, omitted)
 	return result, nil
+}
+
+// renderSourceBlock is the one place section (a)'s markdown/text rendering
+// happens, shared by buildContext's budget-estimation item text and
+// printContextMarkdown, so the two never drift on the A1 closure-orientation
+// line.
+func renderSourceBlock(qualifiedName, filePath string, language model.Language, startLine, endLine int, closureOf, source string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "\n### `%s` — %s:%d-%d\n", qualifiedName, filePath, startLine, endLine)
+	if closureOf != "" {
+		fmt.Fprintf(&b, "\n_(closure; enclosing %s)_\n", closureOf)
+	}
+	fmt.Fprintf(&b, "\n```%s\n%s\n```\n", language, source)
+	return b.String()
 }
 
 // fitBudget walks items in order, accumulating rendered length, and stops
@@ -399,6 +572,183 @@ func typeLabel(t ContextType) string {
 		return "constructor " + t.Symbol.QualifiedName + " for " + t.For
 	}
 	return t.Symbol.QualifiedName
+}
+
+// -----------------------------------------------------------------------
+// (a) line/closure resolution (A1) and thin-wrapper expansion (E1)
+// -----------------------------------------------------------------------
+
+// resolveByFileLine finds the innermost indexed Function/Method node in the
+// file matching fileHint whose own [StartLine,EndLine] contains line. Used
+// as a fallback when the requested "symbol" is a placeholder name that
+// cannot resolve any other way — the caller knows a file:line (from a
+// coverage profile or a worklist) but not a name, most often because the
+// target is inside a switch/loop body with no name of its own. A target
+// inside a nested function literal (a closure, which also has no name of
+// its own) resolves to the same enclosing node here; narrowToEnclosingLiteral
+// then narrows what gets displayed for section (a).
+func resolveByFileLine(stores []*store.Store, fileHint string, line int) (*matchedNode, error) {
+	want := strings.ToLower(strings.ReplaceAll(fileHint, "\\", "/"))
+	var best *matchedNode
+	bestSpan := -1
+	for _, s := range stores {
+		files, err := s.GetAllFiles()
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
+			path := strings.ToLower(f.Path)
+			if !(strings.HasSuffix(path, want) || strings.Contains(path, want)) {
+				continue
+			}
+			nodes, err := s.GetNodesByFile(f.Path)
+			if err != nil {
+				return nil, err
+			}
+			for _, n := range nodes {
+				if n.Kind != model.KindFunction && n.Kind != model.KindMethod {
+					continue
+				}
+				if n.StartLine <= line && line <= n.EndLine {
+					span := n.EndLine - n.StartLine
+					if best == nil || span < bestSpan {
+						nCopy := n
+						best = &matchedNode{node: nCopy, store: s}
+						bestSpan = span
+					}
+				}
+			}
+		}
+	}
+	return best, nil
+}
+
+// narrowToEnclosingLiteral resolves a requested line against the raw Go AST
+// of the matched node's own file (A1): when line falls inside an anonymous
+// function literal nested in the node's body (a `RunE: func(...) {...}`
+// callback, an error-group closure, ...), it returns just that literal's own
+// line-bounded source plus a one-line signature of the enclosing named
+// function for orientation, instead of the node's full — possibly
+// hundreds-of-lines — body. Non-Go nodes, parse failures, or a line that is
+// not inside any nested literal (a switch/loop body, say — already fully
+// covered by the node's own source) report ok=false and leave the node's
+// full source untouched.
+func narrowToEnclosingLiteral(root string, m matchedNode, line int) (litSrc string, litStart, litEnd int, orientation string, ok bool) {
+	if m.node.Language != model.LangGo {
+		return "", 0, 0, "", false
+	}
+	if line < m.node.StartLine || line > m.node.EndLine {
+		return "", 0, 0, "", false
+	}
+	abs := filepath.Join(root, filepath.FromSlash(m.node.FilePath))
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return "", 0, 0, "", false
+	}
+	fset := token.NewFileSet()
+	// go/parser may return a partial AST even on error (ADR-003 fallback
+	// convention elsewhere in this codebase) — use it anyway when non-nil.
+	astFile, _ := parser.ParseFile(fset, abs, data, 0)
+	if astFile == nil {
+		return "", 0, 0, "", false
+	}
+	var best *ast.FuncLit
+	bestSpan := -1
+	ast.Inspect(astFile, func(n ast.Node) bool {
+		lit, isLit := n.(*ast.FuncLit)
+		if !isLit {
+			return true
+		}
+		start := fset.Position(lit.Pos()).Line
+		end := fset.Position(lit.End()).Line
+		if start > line || line > end {
+			return true
+		}
+		span := end - start
+		if best == nil || span < bestSpan {
+			best = lit
+			bestSpan = span
+		}
+		return true
+	})
+	if best == nil {
+		return "", 0, 0, "", false
+	}
+	start := fset.Position(best.Pos()).Line
+	end := fset.Position(best.End()).Line
+	litSrc = string(lineBoundedSource(data, start, end))
+	label := m.node.QualifiedName
+	if m.node.Signature != "" {
+		label += m.node.Signature
+	}
+	orientation = fmt.Sprintf("`%s` — `%s:%d`", label, m.node.FilePath, m.node.StartLine)
+	return litSrc, start, end, orientation, true
+}
+
+// reThinWrapperCall matches a lone statement that is a bare call or a
+// `return`'d call, optionally through one package/receiver selector.
+var reThinWrapperCall = regexp.MustCompile(`^(?:return\s+)?(?:[A-Za-z_]\w*\.)?([A-Za-z_]\w*)\(.*\)$`)
+
+// thinWrapperCallee detects a function body consisting of exactly one
+// statement — a bare call or `return call(...)` (E1) — and returns the
+// called function's bare name so its full source can be surfaced too: a
+// 2-line forwarding wrapper's own body tells a test writer nothing about the
+// real logic living in the function it forwards to. Best-effort text scan,
+// not a parser; a body with comments, multiple statements, or anything
+// beyond one call is left alone.
+func thinWrapperCallee(src string) (string, bool) {
+	lines := strings.Split(src, "\n")
+	var body []string
+	started := false
+	for _, raw := range lines {
+		line := strings.TrimSpace(raw)
+		if !started {
+			if i := strings.Index(line, "{"); i >= 0 {
+				started = true
+				after := strings.TrimSpace(line[i+1:])
+				after = strings.TrimSuffix(after, "}")
+				after = strings.TrimSpace(after)
+				if after != "" {
+					body = append(body, after)
+				}
+			}
+			continue
+		}
+		if line == "" || line == "}" || strings.HasPrefix(line, "//") {
+			continue
+		}
+		body = append(body, line)
+	}
+	if len(body) != 1 {
+		return "", false
+	}
+	m := reThinWrapperCall.FindStringSubmatch(body[0])
+	if m == nil {
+		return "", false
+	}
+	return m[1], true
+}
+
+// resolveSoleCallee returns caller's one direct callee node named calleeName,
+// when caller calls exactly one node with that name — the graph-verified
+// counterpart to thinWrapperCallee's text match.
+func resolveSoleCallee(caller matchedNode, calleeName string) (*matchedNode, error) {
+	edges, err := caller.store.GetOutgoingEdges(caller.node.ID, []model.EdgeKind{model.EdgeCalls}, "")
+	if err != nil {
+		return nil, err
+	}
+	if len(edges) != 1 {
+		return nil, nil
+	}
+	targets, err := caller.store.GetNodesByIDs([]string{edges[0].Target})
+	if err != nil {
+		return nil, err
+	}
+	tn, ok := targets[edges[0].Target]
+	if !ok || !strings.EqualFold(tn.Name, calleeName) {
+		return nil, nil
+	}
+	return &matchedNode{node: tn, store: caller.store}, nil
 }
 
 // -----------------------------------------------------------------------
@@ -859,16 +1209,23 @@ func funcTypedParamNames(signature string) map[string]bool {
 }
 
 // -----------------------------------------------------------------------
-// (d) existing tests calling the symbol, directly or one hop
+// (d) existing tests calling the symbol, directly or (opt-in) one hop (F1)
 // -----------------------------------------------------------------------
 
-func buildTestSection(matches []matchedNode) ([]contextItem, []ContextTestRef, error) {
+// buildTestSection also returns the matched nodes behind each ContextTestRef
+// (not just their name/file/line) so section (e)'s ranking (B1) can query
+// their own outgoing calls without re-resolving them by name.
+func buildTestSection(matches []matchedNode, testHops int) ([]contextItem, []ContextTestRef, []matchedNode, error) {
+	if testHops < 1 {
+		testHops = 1
+	}
 	var tests []ContextTestRef
+	var testNodes []matchedNode
 	seen := map[string]bool{}
 	for _, m := range matches {
-		found, err := testCallersOf(m.store, m.node.ID)
+		found, err := testCallersOf(m.store, m.node.ID, testHops)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		for _, tc := range found {
 			if seen[tc.node.ID] {
@@ -876,6 +1233,7 @@ func buildTestSection(matches []matchedNode) ([]contextItem, []ContextTestRef, e
 			}
 			seen[tc.node.ID] = true
 			tests = append(tests, ContextTestRef{Name: tc.node.Name, FilePath: tc.node.FilePath, StartLine: tc.node.StartLine, Hops: tc.hops})
+			testNodes = append(testNodes, matchedNode{node: tc.node, store: m.store})
 		}
 	}
 	sort.SliceStable(tests, func(i, j int) bool {
@@ -891,7 +1249,7 @@ func buildTestSection(matches []matchedNode) ([]contextItem, []ContextTestRef, e
 			text: fmt.Sprintf("- `%s` — %s:%d (%d hop)\n", t.Name, t.FilePath, t.StartLine, t.Hops),
 		})
 	}
-	return items, tests, nil
+	return items, tests, testNodes, nil
 }
 
 type hoppedNode struct {
@@ -902,9 +1260,12 @@ type hoppedNode struct {
 func isGoTestFile(path string) bool { return strings.HasSuffix(path, "_test.go") }
 
 // testCallersOf returns _test.go functions/methods that call nodeID directly
-// (1 hop) or via one intermediate function (2 hops), via plain `calls`
-// incoming edges (the same edge kind callers/callees already traverse).
-func testCallersOf(s *store.Store, nodeID string) ([]hoppedNode, error) {
+// (1 hop) or, when maxHops >= 2, via one intermediate function (2 hops), via
+// plain `calls` incoming edges (the same edge kind callers/callees already
+// traverse). F1 defaults maxHops to 1: two-hop fuzzy matches dilute the
+// useful direct entries far more than they add, so the caller opts in with
+// --test-hops 2.
+func testCallersOf(s *store.Store, nodeID string, maxHops int) ([]hoppedNode, error) {
 	direct, err := s.GetIncomingEdges(nodeID, []model.EdgeKind{model.EdgeCalls})
 	if err != nil {
 		return nil, err
@@ -923,7 +1284,7 @@ func testCallersOf(s *store.Store, nodeID string) ([]hoppedNode, error) {
 		for _, n := range nodes {
 			if isGoTestFile(n.FilePath) {
 				out = append(out, hoppedNode{node: n, hops: 1})
-			} else {
+			} else if maxHops >= 2 {
 				hop1NonTest = append(hop1NonTest, n.ID)
 			}
 		}
@@ -954,12 +1315,18 @@ func testCallersOf(s *store.Store, nodeID string) ([]hoppedNode, error) {
 }
 
 // -----------------------------------------------------------------------
-// (e) --for test: package helpers/fakes
+// (e) --for test: package helpers/fakes, ranked and capped (B1/C1/D1)
 // -----------------------------------------------------------------------
 
 var siblingTestFakeRe = regexp.MustCompile(`(?i)(test|fake)`)
 
-func buildHelperSection(matches []matchedNode, root string) ([]contextItem, []ContextType, error) {
+// buildHelperSection collects the package's test helpers/fakes once per
+// package (D1 — matches spanning several files in one call share a package's
+// helper bundle instead of repeating it), ranks them (B1: helpers section d's
+// tests reference first, then the rest by name similarity to the requested
+// symbols), and includes full source only for the top helperBodies-ranked
+// entries (C1) — the rest keep their signature-only rendering.
+func buildHelperSection(matches []matchedNode, testMatches []matchedNode, requestedNames []string, helperBodies int, root string) ([]contextItem, []ContextType, error) {
 	var helpers []ContextType
 	seen := map[string]bool{}
 	dirsDone := map[string]bool{}
@@ -1014,20 +1381,153 @@ func buildHelperSection(matches []matchedNode, root string) ([]contextItem, []Co
 			}
 		}
 	}
-	sort.SliceStable(helpers, func(i, j int) bool {
-		if helpers[i].Symbol.FilePath != helpers[j].Symbol.FilePath {
-			return helpers[i].Symbol.FilePath < helpers[j].Symbol.FilePath
+
+	referenced, err := referencedHelperIDs(testMatches)
+	if err != nil {
+		return nil, nil, err
+	}
+	ranked := rankHelpers(helpers, referenced, requestedNames)
+	if helperBodies < 0 {
+		helperBodies = 0
+	}
+	for i := range ranked {
+		if i >= helperBodies {
+			ranked[i].Source = ""
 		}
-		return helpers[i].Symbol.StartLine < helpers[j].Symbol.StartLine
-	})
+	}
+
 	var items []contextItem
-	for _, h := range helpers {
+	for _, h := range ranked {
+		if h.Source != "" {
+			items = append(items, contextItem{
+				section: "e", label: typeLabel(h),
+				text: fmt.Sprintf("\n### Helper — `%s` (%s) — `%s:%d-%d`\n\n```%s\n%s\n```\n",
+					h.Symbol.QualifiedName, h.Symbol.Kind, h.Symbol.FilePath, h.Symbol.StartLine, h.Symbol.EndLine, h.Symbol.Language, h.Source),
+			})
+			continue
+		}
 		items = append(items, contextItem{
 			section: "e", label: typeLabel(h),
 			text: fmt.Sprintf("- `%s` (%s) — `%s` — %s:%d\n", h.Symbol.QualifiedName, h.Symbol.Kind, h.Symbol.Signature, h.Symbol.FilePath, h.Symbol.StartLine),
 		})
 	}
-	return items, helpers, nil
+	return items, ranked, nil
+}
+
+// referencedHelperIDs returns the node IDs every function/method declared in
+// a section-d test's own _test.go file directly calls (B1's tier-1 set):
+// not just the section-d test itself, but every test function in that same
+// file — a helper another test in the file calls is still plausibly what a
+// new test for the same package needs.
+func referencedHelperIDs(testMatches []matchedNode) (map[string]bool, error) {
+	referenced := map[string]bool{}
+	doneFile := map[string]bool{}
+	for _, tm := range testMatches {
+		key := tm.store.Path() + "|" + tm.node.FilePath
+		if doneFile[key] {
+			continue
+		}
+		doneFile[key] = true
+		nodes, err := tm.store.GetNodesByFile(tm.node.FilePath)
+		if err != nil {
+			return nil, err
+		}
+		for _, n := range nodes {
+			if n.Kind != model.KindFunction && n.Kind != model.KindMethod {
+				continue
+			}
+			edges, err := tm.store.GetOutgoingEdges(n.ID, []model.EdgeKind{model.EdgeCalls}, "")
+			if err != nil {
+				return nil, err
+			}
+			for _, e := range edges {
+				referenced[e.Target] = true
+			}
+		}
+	}
+	return referenced, nil
+}
+
+// rankHelpers orders helpers into two tiers — referenced (by section d's
+// tests or their file-mates) first, then the rest by name similarity to the
+// requested symbols — each tier sorted by file path then line for
+// determinism within it. This IS section e's final order (both for JSON and
+// for the budget-fill/omitted items below), superseding the plain file/line
+// sort every other section uses: an unranked ~580-line helper dump made only
+// ~10 lines useful in a real trial (B1).
+func rankHelpers(helpers []ContextType, referenced map[string]bool, requestedNames []string) []ContextType {
+	var tier1, tier2 []ContextType
+	for _, h := range helpers {
+		if referenced[h.Symbol.ID] {
+			tier1 = append(tier1, h)
+		} else {
+			tier2 = append(tier2, h)
+		}
+	}
+	sort.SliceStable(tier1, func(i, j int) bool {
+		if tier1[i].Symbol.FilePath != tier1[j].Symbol.FilePath {
+			return tier1[i].Symbol.FilePath < tier1[j].Symbol.FilePath
+		}
+		return tier1[i].Symbol.StartLine < tier1[j].Symbol.StartLine
+	})
+	sort.SliceStable(tier2, func(i, j int) bool {
+		si, sj := bestNameSimilarity(tier2[i].Symbol.Name, requestedNames), bestNameSimilarity(tier2[j].Symbol.Name, requestedNames)
+		if si != sj {
+			return si > sj
+		}
+		if tier2[i].Symbol.FilePath != tier2[j].Symbol.FilePath {
+			return tier2[i].Symbol.FilePath < tier2[j].Symbol.FilePath
+		}
+		return tier2[i].Symbol.StartLine < tier2[j].Symbol.StartLine
+	})
+	return append(tier1, tier2...)
+}
+
+func bestNameSimilarity(name string, requestedNames []string) int {
+	best := 0
+	for _, r := range requestedNames {
+		if s := nameSimilarity(name, r); s > best {
+			best = s
+		}
+	}
+	return best
+}
+
+// nameSimilarity is a cheap, best-effort relevance score for B1's tier-2
+// ranking: exact match scores highest, a substring relationship next, then
+// the longest common substring length — good enough to put e.g.
+// "fakeSSHClient" ahead of "unrelatedHelper" when the requested symbol is
+// "runAgentRemote" without requiring a real fuzzy-matching library.
+func nameSimilarity(a, b string) int {
+	a, b = strings.ToLower(a), strings.ToLower(b)
+	if a == "" || b == "" {
+		return 0
+	}
+	if a == b {
+		return 1000
+	}
+	if strings.Contains(a, b) || strings.Contains(b, a) {
+		return 500
+	}
+	return longestCommonSubstringLen(a, b)
+}
+
+func longestCommonSubstringLen(a, b string) int {
+	prevRow := make([]int, len(b)+1)
+	best := 0
+	for i := 1; i <= len(a); i++ {
+		curRow := make([]int, len(b)+1)
+		for j := 1; j <= len(b); j++ {
+			if a[i-1] == b[j-1] {
+				curRow[j] = prevRow[j-1] + 1
+				if curRow[j] > best {
+					best = curRow[j]
+				}
+			}
+		}
+		prevRow = curRow
+	}
+	return best
 }
 
 func isHelperCandidate(n model.Node) bool {
@@ -1121,7 +1621,11 @@ func path_Base(importPath string) string {
 // coverage marking
 // -----------------------------------------------------------------------
 
-func markUncoveredSource(m matchedNode, src string) (string, error) {
+// markUncoveredSource appends " // UNCOVERED" to every line of src (starting
+// at startLine, which is m.node.StartLine for a whole-symbol render or a
+// narrowed closure literal's own start line — see narrowToEnclosingLiteral)
+// that the ingested coverage profile reports as missed.
+func markUncoveredSource(m matchedNode, src string, startLine int) (string, error) {
 	row, err := m.store.GetCoverageByFile(m.node.FilePath)
 	if err != nil {
 		return "", err
@@ -1144,7 +1648,7 @@ func markUncoveredSource(m matchedNode, src string) (string, error) {
 	}
 	lines := strings.Split(src, "\n")
 	for i := range lines {
-		lineNo := m.node.StartLine + i
+		lineNo := startLine + i
 		if missed[lineNo] && lines[i] != "" {
 			lines[i] += " // UNCOVERED"
 		}
@@ -1173,7 +1677,11 @@ func printContextMarkdown(w io.Writer, result *ContextResult) error {
 			return err
 		}
 		for _, s := range result.Sources {
-			if _, err := fmt.Fprintf(w, "\n### `%s` — %s:%d-%d\n\n```%s\n%s\n```\n", s.Symbol.QualifiedName, s.Symbol.FilePath, s.Symbol.StartLine, s.Symbol.EndLine, s.Symbol.Language, s.Source); err != nil {
+			startLine, endLine := s.StartLine, s.EndLine
+			if startLine == 0 {
+				startLine, endLine = s.Symbol.StartLine, s.Symbol.EndLine
+			}
+			if _, err := fmt.Fprint(w, renderSourceBlock(s.Symbol.QualifiedName, s.Symbol.FilePath, s.Symbol.Language, startLine, endLine, s.ClosureOf, s.Source)); err != nil {
 				return err
 			}
 		}
@@ -1213,6 +1721,12 @@ func printContextMarkdown(w io.Writer, result *ContextResult) error {
 			return err
 		}
 		for _, h := range result.Helpers {
+			if h.Source != "" {
+				if _, err := fmt.Fprintf(w, "\n### `%s` (%s) — `%s:%d-%d`\n\n```%s\n%s\n```\n", h.Symbol.QualifiedName, h.Symbol.Kind, h.Symbol.FilePath, h.Symbol.StartLine, h.Symbol.EndLine, h.Symbol.Language, h.Source); err != nil {
+					return err
+				}
+				continue
+			}
 			if _, err := fmt.Fprintf(w, "- `%s` (%s) — `%s` — %s:%d\n", h.Symbol.QualifiedName, h.Symbol.Kind, h.Symbol.Signature, h.Symbol.FilePath, h.Symbol.StartLine); err != nil {
 				return err
 			}
