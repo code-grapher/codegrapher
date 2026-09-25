@@ -911,3 +911,111 @@ func WithShadowedCapture() string {
 		t.Fatalf("`captured` declaration (line %d) — a genuine free variable the literal references and does not redeclare — must be reported: %v", capturedLine, ranges)
 	}
 }
+
+// capturedDeclRangesForFirstLit parses src, locates its first func literal
+// and enclosing func decl, and returns capturedDeclRanges' result for that
+// literal — the common setup shared by the type-switch/select binder
+// regression tests below.
+func capturedDeclRangesForFirstLit(t *testing.T, src string) [][2]int {
+	t.Helper()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "fixture.go", src, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lit *ast.FuncLit
+	ast.Inspect(file, func(n ast.Node) bool {
+		if fl, ok := n.(*ast.FuncLit); ok && lit == nil {
+			lit = fl
+		}
+		return true
+	})
+	if lit == nil {
+		t.Fatal("no func literal found in fixture")
+	}
+	fd, ok := file.Decls[0].(*ast.FuncDecl)
+	if !ok {
+		t.Fatal("fixture's first decl is not a func decl")
+	}
+	funcStart := fset.Position(fd.Pos()).Line
+	funcEnd := fset.Position(fd.End()).Line
+	return capturedDeclRanges(fset, file, lit, funcStart, funcEnd)
+}
+
+// TestCapturedDeclRangesCapturesTypeSwitchBinder guards against the
+// regression caught in review of bc93cb4: scopeChainAt's TypeSwitchStmt
+// case defined s.Init into the outer scope chain but never s.Assign — the
+// `v` in `switch v := x.(type)` — so a closure declared inside a case body
+// that captures v from the enclosing switch silently lost that
+// declaration's line from narrowed output, even though walkIdentUses (which
+// walks the closure's own body when the switch is nested INSIDE it) always
+// handled this correctly. Fails on bc93cb4 (returns no range for the
+// `switch v := x.(type)` line); passes once scopeChainAt also defines
+// s.Assign.
+func TestCapturedDeclRangesCapturesTypeSwitchBinder(t *testing.T) {
+	src := `package fx
+
+func F(x interface{}) int {
+	switch v := x.(type) {
+	case int:
+		run := func() int { return v + 1 }
+		return run()
+	}
+	return 0
+}
+`
+	ranges := capturedDeclRangesForFirstLit(t, src)
+
+	var switchLine int
+	for i, line := range strings.Split(src, "\n") {
+		if strings.Contains(line, "switch v := x.(type)") {
+			switchLine = i + 1
+		}
+	}
+	if switchLine == 0 {
+		t.Fatal("fixture line lookup failed: switchLine=0")
+	}
+	for _, r := range ranges {
+		if r[0] <= switchLine && switchLine <= r[1] {
+			return
+		}
+	}
+	t.Fatalf("`switch v := x.(type)` declaration (line %d) — captured by the closure's `v + 1` — must be reported: %v", switchLine, ranges)
+}
+
+// TestCapturedDeclRangesCapturesSelectCommBinder is the select/comm-clause
+// twin of TestCapturedDeclRangesCapturesTypeSwitchBinder: scopeChainAt's
+// CommClause case descended into s.Body but never defined s.Comm — the `v`
+// in `case v := <-ch:` — so a closure inside the comm clause that captures
+// v from the enclosing select lost that declaration too. Fails on bc93cb4;
+// passes once scopeChainAt also defines s.Comm.
+func TestCapturedDeclRangesCapturesSelectCommBinder(t *testing.T) {
+	src := `package fx
+
+func F(ch chan int) int {
+	select {
+	case v := <-ch:
+		run := func() int { return v + 1 }
+		return run()
+	}
+	return 0
+}
+`
+	ranges := capturedDeclRangesForFirstLit(t, src)
+
+	var commLine int
+	for i, line := range strings.Split(src, "\n") {
+		if strings.Contains(line, "case v := <-ch:") {
+			commLine = i + 1
+		}
+	}
+	if commLine == 0 {
+		t.Fatal("fixture line lookup failed: commLine=0")
+	}
+	for _, r := range ranges {
+		if r[0] <= commLine && commLine <= r[1] {
+			return
+		}
+	}
+	t.Fatalf("`case v := <-ch:` declaration (line %d) — captured by the closure's `v + 1` — must be reported: %v", commLine, ranges)
+}

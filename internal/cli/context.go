@@ -988,6 +988,15 @@ func scopeChainAt(stmt ast.Node, parent *declScope, lit *ast.FuncLit, outer bool
 		if s.Init != nil {
 			defineSimpleDecl(scope, s.Init)
 		}
+		// s.Assign is the `v := x.(type)` binder (an *ast.AssignStmt with
+		// Tok==DEFINE) when the switch names its narrowed value, or a bare
+		// *ast.ExprStmt (`switch x.(type)`) when it doesn't — either way
+		// defineSimpleDecl does the right thing (defines v, or no-ops).
+		// v is visible in every case body, so it must go into scope here,
+		// before descending, exactly like walkIdentUses's own
+		// TypeSwitchStmt case does via walkIdentUses(s.Assign, child, ...)
+		// a few hundred lines below: keep these two in sync.
+		defineSimpleDecl(scope, s.Assign)
 		if spanContains(s.Body, lit) {
 			return scopeChainAt(s.Body, scope, lit, outer)
 		}
@@ -1000,6 +1009,15 @@ func scopeChainAt(stmt ast.Node, parent *declScope, lit *ast.FuncLit, outer bool
 	case *ast.CaseClause:
 		return descendBlock(s.Body)
 	case *ast.CommClause:
+		// s.Comm is the clause's own `v := <-ch` (or `v, ok := <-ch`)
+		// binder when present (nil for `default:` or a clause with no
+		// `:=`, e.g. `case <-ch:`/`case ch <- v:`); defineSimpleDecl
+		// defines whichever names it declares. Mirrors walkIdentUses's own
+		// CommClause case (walkIdentUses(s.Comm, child, ...)) below — keep
+		// these two in sync.
+		if s.Comm != nil {
+			defineSimpleDecl(scope, s.Comm)
+		}
 		return descendBlock(s.Body)
 	case *ast.LabeledStmt:
 		return scopeChainAt(s.Stmt, parent, lit, outer)
@@ -1085,6 +1103,11 @@ func walkIdentUses(stmt ast.Stmt, scope *declScope, capture func(ast.Node)) {
 		if s.Init != nil {
 			walkIdentUses(s.Init, child, capture)
 		}
+		// Defines v from `switch v := x.(type)` (a no-op for a bare
+		// `switch x.(type)`) and captures any outer use inside the type
+		// assertion itself. Mirrors scopeChainAt's own TypeSwitchStmt case
+		// (defineSimpleDecl(scope, s.Assign)) above — keep these two in
+		// sync.
 		walkIdentUses(s.Assign, child, capture)
 		walkIdentUses(s.Body, child, capture)
 	case *ast.CaseClause:
@@ -1099,6 +1122,10 @@ func walkIdentUses(stmt ast.Stmt, scope *declScope, capture func(ast.Node)) {
 		walkIdentUses(s.Body, scope, capture)
 	case *ast.CommClause:
 		child := newDeclScope(scope, false)
+		// Defines v (or v, ok) from `case v := <-ch:` when present and
+		// captures any outer use inside the comm statement itself. Mirrors
+		// scopeChainAt's own CommClause case (defineSimpleDecl(scope,
+		// s.Comm)) above — keep these two in sync.
 		if s.Comm != nil {
 			walkIdentUses(s.Comm, child, capture)
 		}
