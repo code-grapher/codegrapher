@@ -648,7 +648,7 @@ func resolveByFileLine(stores []*store.Store, fileHint string, line int) (*match
 		}
 		for _, f := range files {
 			path := strings.ToLower(f.Path)
-			if !(strings.HasSuffix(path, want) || strings.Contains(path, want)) {
+			if !strings.HasSuffix(path, want) && !strings.Contains(path, want) {
 				continue
 			}
 			nodes, err := s.GetNodesByFile(f.Path)
@@ -702,9 +702,9 @@ type closureNarrowing struct {
 // literal's own few lines and lost exactly that context). Only when m's own
 // line count exceeds maxFunctionLines (0 = never narrow) does it narrow the
 // kept ranges to each literal (whole), the lines declaring the free
-// variables it captures from the enclosing function (resolved via go/parser's
-// legacy Ident.Obj scope resolution — enabled by the default parser.ParseFile
-// mode used here), and the statement that registers/calls it. Returns nil
+// variables it captures from the enclosing function (resolved via a manual
+// lexical scope walk — see capturedDeclRanges — rather than the deprecated
+// go/ast.Object resolver), and the statement that registers/calls it. Returns nil
 // when no requested line falls inside any nested literal (a switch/loop
 // body, say — already fully covered by the node's own source) or the file
 // can't be parsed; the caller then renders the node's full source unmarked,
@@ -721,7 +721,10 @@ func resolveClosureNarrowing(root string, m matchedNode, targetLines []int, maxF
 	fset := token.NewFileSet()
 	// go/parser may return a partial AST even on error (ADR-003 fallback
 	// convention elsewhere in this codebase) — use it anyway when non-nil.
-	astFile, _ := parser.ParseFile(fset, abs, data, 0)
+	// SkipObjectResolution: capturedDeclRanges resolves captured identifiers
+	// itself via a manual lexical scope walk, so the legacy (and deprecated)
+	// go/ast.Object resolver's work is never used — skip it.
+	astFile, _ := parser.ParseFile(fset, abs, data, parser.SkipObjectResolution)
 	if astFile == nil {
 		return nil, nil
 	}
@@ -783,7 +786,7 @@ func resolveClosureNarrowing(root string, m matchedNode, targetLines []int, maxF
 		if stmt := smallestEnclosingStmt(astFile, h.lit); stmt != nil {
 			kept = append(kept, keptRange{start: fset.Position(stmt.Pos()).Line, end: fset.Position(stmt.End()).Line})
 		}
-		for _, r := range capturedDeclRanges(fset, h.lit, m.node.StartLine, m.node.EndLine) {
+		for _, r := range capturedDeclRanges(fset, astFile, h.lit, m.node.StartLine, m.node.EndLine) {
 			kept = append(kept, keptRange{start: r[0], end: r[1]})
 		}
 	}
@@ -813,37 +816,462 @@ func smallestEnclosingStmt(file *ast.File, lit *ast.FuncLit) ast.Stmt {
 	return best
 }
 
-// capturedDeclRanges returns the [start,end] line ranges declaring every
-// identifier lit's body references that resolves — via go/parser's legacy
-// object resolution (Ident.Obj, populated by the default ParseFile mode) —
-// to a declaration inside the enclosing function [funcStart,funcEnd] but
-// outside lit's own span: the free variables the closure captures from its
-// enclosing function. A declaration outside that function (package/file
-// scope, already visible without narrowing) or inside the literal itself
-// (its own params/locals, not a capture) is excluded.
-func capturedDeclRanges(fset *token.FileSet, lit *ast.FuncLit, funcStart, funcEnd int) [][2]int {
-	litStart, litEnd := fset.Position(lit.Pos()).Line, fset.Position(lit.End()).Line
-	seen := map[*ast.Object]bool{}
-	var ranges [][2]int
-	ast.Inspect(lit.Body, func(n ast.Node) bool {
-		id, ok := n.(*ast.Ident)
-		if !ok || id.Obj == nil || seen[id.Obj] {
-			return true
+// declScope is one lexical block's declarations, chained to its enclosing
+// block — the manual replacement for go/ast's deprecated legacy object
+// resolver (go/ast.Object / Ident.Obj, SA1019: "The relationship between
+// Idents and Objects cannot be correctly computed without type
+// information"). capturedDeclRanges below builds one chain of these for the
+// scopes visible at a closure literal's position in its enclosing function
+// (marked outer, since a name found there is a genuine capture) and a
+// second chain, rooted at the first, for the literal's own params/results
+// and nested blocks (marked local, not outer) — so a name the literal itself
+// (re)declares shadows the outer one, exactly like ordinary Go scoping, and
+// is correctly excluded from the capture set.
+type declScope struct {
+	parent *declScope
+	outer  bool
+	decls  map[string]ast.Node
+}
+
+func newDeclScope(parent *declScope, outer bool) *declScope {
+	return &declScope{parent: parent, outer: outer, decls: map[string]ast.Node{}}
+}
+
+func (s *declScope) define(name string, decl ast.Node) {
+	if s == nil || name == "" || name == "_" {
+		return
+	}
+	s.decls[name] = decl
+}
+
+// resolve looks up name up the scope chain, returning the node that
+// declares it and whether that declaration lives in an "outer" (enclosing-
+// function) scope — i.e. is a capture rather than the literal's own.
+func (s *declScope) resolve(name string) (decl ast.Node, outer, ok bool) {
+	for sc := s; sc != nil; sc = sc.parent {
+		if n, found := sc.decls[name]; found {
+			return n, sc.outer, true
 		}
-		declNode, ok := id.Obj.Decl.(ast.Node)
+	}
+	return nil, false, false
+}
+
+func defineFieldListNames(s *declScope, fl *ast.FieldList) {
+	if fl == nil {
+		return
+	}
+	for _, f := range fl.List {
+		for _, name := range f.Names {
+			s.define(name.Name, f)
+		}
+	}
+}
+
+// defineSimpleDecl adds the name(s) a single non-block-opening statement
+// declares (a `:=` assignment or a `var`/`const`/`type` decl) to s. Control
+// statements that open their own nested scope (if/for/switch/...) are
+// handled by their dedicated cases in scopeChainAt/walkIdentUses instead.
+func defineSimpleDecl(s *declScope, stmt ast.Stmt) {
+	switch st := stmt.(type) {
+	case *ast.AssignStmt:
+		if st.Tok != token.DEFINE {
+			return
+		}
+		for _, lhs := range st.Lhs {
+			if id, ok := lhs.(*ast.Ident); ok {
+				s.define(id.Name, st)
+			}
+		}
+	case *ast.DeclStmt:
+		gd, ok := st.Decl.(*ast.GenDecl)
 		if !ok {
+			return
+		}
+		for _, spec := range gd.Specs {
+			switch sp := spec.(type) {
+			case *ast.ValueSpec:
+				for _, id := range sp.Names {
+					s.define(id.Name, sp)
+				}
+			case *ast.TypeSpec:
+				s.define(sp.Name.Name, sp)
+			}
+		}
+	}
+}
+
+// spanContains reports whether n's source span fully contains lit.
+func spanContains(n ast.Node, lit *ast.FuncLit) bool {
+	return n != nil && n.Pos() <= lit.Pos() && lit.End() <= n.End()
+}
+
+// enclosingFuncDecl returns the top-level function/method declaration whose
+// body contains lit. Go disallows nested named-function declarations, so at
+// most one *ast.FuncDecl in file can contain any given literal.
+func enclosingFuncDecl(file *ast.File, lit *ast.FuncLit) *ast.FuncDecl {
+	for _, d := range file.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if !ok || fd.Body == nil {
+			continue
+		}
+		if spanContains(fd.Body, lit) {
+			return fd
+		}
+	}
+	return nil
+}
+
+// scopeChainAt walks stmt — a statement or block known to span lit — and
+// returns the declScope visible immediately before lit, chained to parent.
+// It only descends into whichever nested block actually contains lit,
+// accumulating declarations from each preceding sibling statement and from
+// control-statement init clauses along the way, mirroring ordinary Go block
+// scoping. Every scope it creates is marked with outer, so a single chain
+// built from a function's body (outer=true) stays outer end to end.
+func scopeChainAt(stmt ast.Node, parent *declScope, lit *ast.FuncLit, outer bool) *declScope {
+	scope := newDeclScope(parent, outer)
+	descendBlock := func(list []ast.Stmt) *declScope {
+		for _, st := range list {
+			if spanContains(st, lit) {
+				return scopeChainAt(st, scope, lit, outer)
+			}
+			if st.End() <= lit.Pos() {
+				defineSimpleDecl(scope, st)
+			}
+		}
+		return scope
+	}
+	switch s := stmt.(type) {
+	case *ast.BlockStmt:
+		return descendBlock(s.List)
+	case *ast.IfStmt:
+		if s.Init != nil {
+			defineSimpleDecl(scope, s.Init)
+		}
+		if spanContains(s.Body, lit) {
+			return scopeChainAt(s.Body, scope, lit, outer)
+		}
+		if s.Else != nil && spanContains(s.Else, lit) {
+			return scopeChainAt(s.Else, scope, lit, outer)
+		}
+		return scope
+	case *ast.ForStmt:
+		if s.Init != nil {
+			defineSimpleDecl(scope, s.Init)
+		}
+		if spanContains(s.Body, lit) {
+			return scopeChainAt(s.Body, scope, lit, outer)
+		}
+		return scope
+	case *ast.RangeStmt:
+		if s.Tok == token.DEFINE {
+			if id, ok := s.Key.(*ast.Ident); ok {
+				scope.define(id.Name, s)
+			}
+			if id, ok := s.Value.(*ast.Ident); ok {
+				scope.define(id.Name, s)
+			}
+		}
+		if spanContains(s.Body, lit) {
+			return scopeChainAt(s.Body, scope, lit, outer)
+		}
+		return scope
+	case *ast.SwitchStmt:
+		if s.Init != nil {
+			defineSimpleDecl(scope, s.Init)
+		}
+		if spanContains(s.Body, lit) {
+			return scopeChainAt(s.Body, scope, lit, outer)
+		}
+		return scope
+	case *ast.TypeSwitchStmt:
+		if s.Init != nil {
+			defineSimpleDecl(scope, s.Init)
+		}
+		if spanContains(s.Body, lit) {
+			return scopeChainAt(s.Body, scope, lit, outer)
+		}
+		return scope
+	case *ast.SelectStmt:
+		if spanContains(s.Body, lit) {
+			return scopeChainAt(s.Body, scope, lit, outer)
+		}
+		return scope
+	case *ast.CaseClause:
+		return descendBlock(s.Body)
+	case *ast.CommClause:
+		return descendBlock(s.Body)
+	case *ast.LabeledStmt:
+		return scopeChainAt(s.Stmt, parent, lit, outer)
+	default:
+		return parent
+	}
+}
+
+// enclosingScopeAtLit returns the scope chain visible in fd (parameters,
+// receiver, named results, and every `:=`/var/type declared in a block
+// enclosing lit) at the point lit appears — everything a closure literal at
+// that position can capture.
+func enclosingScopeAtLit(fd *ast.FuncDecl, lit *ast.FuncLit) *declScope {
+	base := newDeclScope(nil, true)
+	defineFieldListNames(base, fd.Recv)
+	defineFieldListNames(base, fd.Type.Params)
+	defineFieldListNames(base, fd.Type.Results)
+	if fd.Body == nil {
+		return base
+	}
+	return scopeChainAt(fd.Body, base, lit, true)
+}
+
+// walkIdentUses walks stmt within scope — which already reflects everything
+// declared before stmt in its own block — resolving every identifier
+// reference it finds (including inside any further-nested closure) and
+// calling capture(declNode) for each one that resolves to an outer-scope
+// declaration. It defines stmt's own declarations into scope exactly where
+// Go does: visible to later siblings and nested blocks, never to stmt's own
+// RHS/condition, so a name the literal redeclares shadows the outer one for
+// every use that follows.
+func walkIdentUses(stmt ast.Stmt, scope *declScope, capture func(ast.Node)) {
+	switch s := stmt.(type) {
+	case *ast.BlockStmt:
+		child := newDeclScope(scope, false)
+		for _, st := range s.List {
+			walkIdentUses(st, child, capture)
+		}
+	case *ast.IfStmt:
+		child := newDeclScope(scope, false)
+		if s.Init != nil {
+			walkIdentUses(s.Init, child, capture)
+		}
+		walkExprUses(s.Cond, child, capture)
+		walkIdentUses(s.Body, child, capture)
+		if s.Else != nil {
+			walkIdentUses(s.Else, child, capture)
+		}
+	case *ast.ForStmt:
+		child := newDeclScope(scope, false)
+		if s.Init != nil {
+			walkIdentUses(s.Init, child, capture)
+		}
+		walkExprUses(s.Cond, child, capture)
+		if s.Post != nil {
+			walkIdentUses(s.Post, child, capture)
+		}
+		walkIdentUses(s.Body, child, capture)
+	case *ast.RangeStmt:
+		walkExprUses(s.X, scope, capture)
+		child := newDeclScope(scope, false)
+		if s.Tok == token.DEFINE {
+			if id, ok := s.Key.(*ast.Ident); ok {
+				child.define(id.Name, s)
+			}
+			if id, ok := s.Value.(*ast.Ident); ok {
+				child.define(id.Name, s)
+			}
+		} else {
+			walkExprUses(s.Key, child, capture)
+			walkExprUses(s.Value, child, capture)
+		}
+		walkIdentUses(s.Body, child, capture)
+	case *ast.SwitchStmt:
+		child := newDeclScope(scope, false)
+		if s.Init != nil {
+			walkIdentUses(s.Init, child, capture)
+		}
+		walkExprUses(s.Tag, child, capture)
+		walkIdentUses(s.Body, child, capture)
+	case *ast.TypeSwitchStmt:
+		child := newDeclScope(scope, false)
+		if s.Init != nil {
+			walkIdentUses(s.Init, child, capture)
+		}
+		walkIdentUses(s.Assign, child, capture)
+		walkIdentUses(s.Body, child, capture)
+	case *ast.CaseClause:
+		child := newDeclScope(scope, false)
+		for _, e := range s.List {
+			walkExprUses(e, scope, capture)
+		}
+		for _, st := range s.Body {
+			walkIdentUses(st, child, capture)
+		}
+	case *ast.SelectStmt:
+		walkIdentUses(s.Body, scope, capture)
+	case *ast.CommClause:
+		child := newDeclScope(scope, false)
+		if s.Comm != nil {
+			walkIdentUses(s.Comm, child, capture)
+		}
+		for _, st := range s.Body {
+			walkIdentUses(st, child, capture)
+		}
+	case *ast.LabeledStmt:
+		walkIdentUses(s.Stmt, scope, capture)
+	case *ast.AssignStmt:
+		for _, e := range s.Rhs {
+			walkExprUses(e, scope, capture)
+		}
+		for _, lhs := range s.Lhs {
+			id, ok := lhs.(*ast.Ident)
+			if ok && s.Tok == token.DEFINE {
+				scope.define(id.Name, s)
+				continue
+			}
+			walkExprUses(lhs, scope, capture)
+		}
+	case *ast.DeclStmt:
+		gd, ok := s.Decl.(*ast.GenDecl)
+		if !ok {
+			return
+		}
+		for _, spec := range gd.Specs {
+			switch sp := spec.(type) {
+			case *ast.ValueSpec:
+				for _, v := range sp.Values {
+					walkExprUses(v, scope, capture)
+				}
+				walkExprUses(sp.Type, scope, capture)
+				for _, id := range sp.Names {
+					scope.define(id.Name, sp)
+				}
+			case *ast.TypeSpec:
+				scope.define(sp.Name.Name, sp)
+			}
+		}
+	case *ast.ExprStmt:
+		walkExprUses(s.X, scope, capture)
+	case *ast.ReturnStmt:
+		for _, e := range s.Results {
+			walkExprUses(e, scope, capture)
+		}
+	case *ast.GoStmt:
+		walkExprUses(s.Call, scope, capture)
+	case *ast.DeferStmt:
+		walkExprUses(s.Call, scope, capture)
+	case *ast.SendStmt:
+		walkExprUses(s.Chan, scope, capture)
+		walkExprUses(s.Value, scope, capture)
+	case *ast.IncDecStmt:
+		walkExprUses(s.X, scope, capture)
+	case *ast.BranchStmt, *ast.EmptyStmt:
+		// Labels aren't variable identifiers; nothing to resolve.
+	default:
+		// Best-effort fallback for any remaining statement kind: still find
+		// identifier uses, just without scope-accurate declare-before-use
+		// ordering (no such statement appears in this codebase's fixtures).
+		ast.Inspect(s, func(n ast.Node) bool {
+			if id, ok := n.(*ast.Ident); ok {
+				resolveCapture(id, scope, capture)
+			}
 			return true
+		})
+	}
+}
+
+// walkExprUses resolves identifier uses within expr against scope,
+// descending into any nested func literal with a fresh non-outer scope
+// chained to scope — so a closure nested inside lit can itself capture from
+// lit, while lit's own captures from the enclosing function stay reachable
+// through the chain.
+func walkExprUses(expr ast.Expr, scope *declScope, capture func(ast.Node)) {
+	if expr == nil {
+		return
+	}
+	switch e := expr.(type) {
+	case *ast.Ident:
+		resolveCapture(e, scope, capture)
+	case *ast.FuncLit:
+		child := newDeclScope(scope, false)
+		defineFieldListNames(child, e.Type.Params)
+		defineFieldListNames(child, e.Type.Results)
+		walkIdentUses(e.Body, child, capture)
+	case *ast.SelectorExpr:
+		walkExprUses(e.X, scope, capture) // e.Sel is a field/method name, not a variable use
+	case *ast.CallExpr:
+		walkExprUses(e.Fun, scope, capture)
+		for _, a := range e.Args {
+			walkExprUses(a, scope, capture)
 		}
-		dStart, dEnd := fset.Position(declNode.Pos()).Line, fset.Position(declNode.End()).Line
+	case *ast.BinaryExpr:
+		walkExprUses(e.X, scope, capture)
+		walkExprUses(e.Y, scope, capture)
+	case *ast.UnaryExpr:
+		walkExprUses(e.X, scope, capture)
+	case *ast.ParenExpr:
+		walkExprUses(e.X, scope, capture)
+	case *ast.StarExpr:
+		walkExprUses(e.X, scope, capture)
+	case *ast.IndexExpr:
+		walkExprUses(e.X, scope, capture)
+		walkExprUses(e.Index, scope, capture)
+	case *ast.IndexListExpr:
+		walkExprUses(e.X, scope, capture)
+		for _, idx := range e.Indices {
+			walkExprUses(idx, scope, capture)
+		}
+	case *ast.SliceExpr:
+		walkExprUses(e.X, scope, capture)
+		walkExprUses(e.Low, scope, capture)
+		walkExprUses(e.High, scope, capture)
+		walkExprUses(e.Max, scope, capture)
+	case *ast.TypeAssertExpr:
+		walkExprUses(e.X, scope, capture)
+	case *ast.KeyValueExpr:
+		// Key may be a struct field name (not a var use) or a map key (a var
+		// use); resolving it against scope is harmless either way, since a
+		// field name won't match anything in the variable scope chain.
+		walkExprUses(e.Key, scope, capture)
+		walkExprUses(e.Value, scope, capture)
+	case *ast.CompositeLit:
+		walkExprUses(e.Type, scope, capture)
+		for _, elt := range e.Elts {
+			walkExprUses(elt, scope, capture)
+		}
+	}
+}
+
+func resolveCapture(id *ast.Ident, scope *declScope, capture func(ast.Node)) {
+	if id.Name == "_" {
+		return
+	}
+	decl, outer, ok := scope.resolve(id.Name)
+	if ok && outer {
+		capture(decl)
+	}
+}
+
+// capturedDeclRanges returns the [start,end] line ranges declaring every
+// identifier lit's body references that resolves — via the manual lexical
+// scope walk above (declScope/enclosingScopeAtLit/walkIdentUses), not the
+// deprecated go/ast.Object resolver — to a declaration inside the enclosing
+// function [funcStart,funcEnd] but outside lit's own span: the free
+// variables the closure captures from its enclosing function. A declaration
+// outside that function (package/file scope, already visible without
+// narrowing) or inside the literal itself (its own params/locals, or a name
+// it redeclares that shadows an outer one — not a capture) is excluded.
+func capturedDeclRanges(fset *token.FileSet, file *ast.File, lit *ast.FuncLit, funcStart, funcEnd int) [][2]int {
+	fd := enclosingFuncDecl(file, lit)
+	if fd == nil {
+		return nil
+	}
+	outerScope := enclosingScopeAtLit(fd, lit)
+
+	litScope := newDeclScope(outerScope, false)
+	defineFieldListNames(litScope, lit.Type.Params)
+	defineFieldListNames(litScope, lit.Type.Results)
+
+	seen := map[ast.Node]bool{}
+	var ranges [][2]int
+	walkIdentUses(lit.Body, litScope, func(decl ast.Node) {
+		if seen[decl] {
+			return
+		}
+		seen[decl] = true
+		dStart, dEnd := fset.Position(decl.Pos()).Line, fset.Position(decl.End()).Line
 		if dStart < funcStart || dEnd > funcEnd {
-			return true // declared at package/file scope, not this function
+			return // declared at package/file scope, not this function (defensive: outerScope is already bounded to fd)
 		}
-		if dStart >= litStart && dEnd <= litEnd {
-			return true // declared inside the literal itself, not captured
-		}
-		seen[id.Obj] = true
 		ranges = append(ranges, [2]int{dStart, dEnd})
-		return true
 	})
 	return ranges
 }

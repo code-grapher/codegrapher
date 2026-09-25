@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -832,5 +835,79 @@ func TestContextSymbolsFileSpansMultipleTargets(t *testing.T) {
 	}
 	if !names["Rename"] || !names["Describe"] {
 		t.Fatalf("sources = %+v, want both Rename (by name) and Describe (by file:line)", result.Sources)
+	}
+}
+
+// TestCapturedDeclRangesRespectsShadowingInsideLiteral exercises
+// capturedDeclRanges directly (the manual lexical scope walk that replaced
+// the deprecated go/ast.Object resolver) against a closure literal that
+// redeclares an outer name via `:=`. The redeclaration must shadow the
+// outer one for every reference inside the literal, so the outer
+// declaration must NOT be reported as captured — only a genuinely free
+// variable the literal references without redeclaring should be.
+func TestCapturedDeclRangesRespectsShadowingInsideLiteral(t *testing.T) {
+	src := `package fx
+
+func WithShadowedCapture() string {
+	label := "outer"
+	captured := "keep-me"
+	run := func() string {
+		label := "inner"
+		_ = captured
+		return label
+	}
+	return run()
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "shadow.go", src, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lit *ast.FuncLit
+	ast.Inspect(file, func(n ast.Node) bool {
+		if fl, ok := n.(*ast.FuncLit); ok && lit == nil {
+			lit = fl
+		}
+		return true
+	})
+	if lit == nil {
+		t.Fatal("no func literal found in fixture")
+	}
+	fd, ok := file.Decls[0].(*ast.FuncDecl)
+	if !ok {
+		t.Fatal("fixture's first decl is not a func decl")
+	}
+	funcStart := fset.Position(fd.Pos()).Line
+	funcEnd := fset.Position(fd.End()).Line
+
+	ranges := capturedDeclRanges(fset, file, lit, funcStart, funcEnd)
+
+	var outerLabelLine, capturedLine int
+	for i, line := range strings.Split(src, "\n") {
+		switch {
+		case strings.Contains(line, `label := "outer"`):
+			outerLabelLine = i + 1
+		case strings.Contains(line, `captured := "keep-me"`):
+			capturedLine = i + 1
+		}
+	}
+	if outerLabelLine == 0 || capturedLine == 0 {
+		t.Fatalf("fixture line lookup failed: outerLabelLine=%d capturedLine=%d", outerLabelLine, capturedLine)
+	}
+
+	hasLine := func(line int) bool {
+		for _, r := range ranges {
+			if r[0] <= line && line <= r[1] {
+				return true
+			}
+		}
+		return false
+	}
+	if hasLine(outerLabelLine) {
+		t.Fatalf("outer `label` declaration (line %d) must NOT be reported as captured — the literal shadows it with its own `label := %q`: %v", outerLabelLine, "inner", ranges)
+	}
+	if !hasLine(capturedLine) {
+		t.Fatalf("`captured` declaration (line %d) — a genuine free variable the literal references and does not redeclare — must be reported: %v", capturedLine, ranges)
 	}
 }
