@@ -376,6 +376,66 @@ func TestContextMarksUncoveredLinesFromIngestedProfile(t *testing.T) {
 	}
 }
 
+func TestContextCoverageStructuredPartialAndStale(t *testing.T) {
+	root := newContextFixture(t)
+	idx, err := indexer.Open(root, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile := "mode: set\n" +
+		"example.com/fx/widget.go:21.1,21.10 2 1\n" +
+		"example.com/fx/widget.go:21.11,21.24 3 0\n" +
+		"example.com/fx/widget.go:22.1,22.25 1 0\n"
+	for _, s := range idx.Stores() {
+		if _, err := coverage.NewIngestor().Ingest(context.Background(), s, strings.NewReader(profile), coverage.Options{Root: root, Ref: "fixture"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := idx.Close(); err != nil {
+		t.Fatal(err)
+	}
+	result := runContext(t, root, "Rename", "--coverage")
+	if len(result.Sources) != 1 {
+		t.Fatalf("sources %d", len(result.Sources))
+	}
+	s := result.Sources[0]
+	if s.Coverage == nil || s.Coverage.Freshness != "current" || s.Coverage.Ref != "fixture" || s.Coverage.Covered != 2 || s.Coverage.Total != 6 {
+		t.Fatalf("coverage %+v", s.Coverage)
+	}
+	if strings.Contains(s.Source, "UNCOVERED") || strings.Contains(s.Source, "partial") {
+		t.Fatalf("source was annotated: %s", s.Source)
+	}
+	var partial bool
+	for _, l := range s.Coverage.Lines {
+		if l.Line == 21 && l.State == "partial" {
+			partial = true
+		}
+	}
+	if !partial {
+		t.Fatalf("missing partial state: %+v", s.Coverage.Lines)
+	}
+	text := runContextText(t, root, "Rename", "--coverage")
+	if !strings.Contains(text, "2/6 statements") || !strings.Contains(text, "21 partial") {
+		t.Fatalf("missing coverage gutter: %s", text)
+	}
+	path := filepath.Join(root, "widget.go")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(data, []byte("\n// production edit\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stale := runContext(t, root, "Rename", "--coverage")
+	if stale.Sources[0].Coverage == nil || stale.Sources[0].Coverage.Freshness != "stale" || len(stale.Sources[0].Coverage.Lines) != 0 {
+		t.Fatalf("stale coverage %+v", stale.Sources[0].Coverage)
+	}
+	legacy := runContext(t, root, "Rename", "--uncovered")
+	if strings.Contains(legacy.Sources[0].Source, "UNCOVERED") {
+		t.Fatal("stale --uncovered marker")
+	}
+}
+
 // specscore:verifies https://specscore.org/github.com/code-grapher/codegrapher/spec/features/test-context#ac:for-test-lists-package-helpers
 func TestContextForTestListsPackageHelpers(t *testing.T) {
 	root := newContextFixture(t)

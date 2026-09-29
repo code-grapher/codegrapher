@@ -2,6 +2,8 @@ package coverage
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -36,7 +38,11 @@ type ingestor struct{}
 // Ingest implements Ingestor. Profile files that resolve to no indexed file are
 // skipped (counted in Summary.FilesSkipped); the caller decides whether to warn.
 func (ingestor) Ingest(ctx context.Context, st *store.Store, profile io.Reader, opts Options) (Summary, error) {
-	files, _, err := parseProfiles(profile)
+	return ingestor{}.IngestMany(ctx, st, []io.Reader{profile}, opts)
+}
+
+func (ingestor) IngestMany(ctx context.Context, st *store.Store, profiles []io.Reader, opts Options) (Summary, error) {
+	files, _, err := mergeProfiles(profiles...)
 	if err != nil {
 		return Summary{}, err
 	}
@@ -53,11 +59,13 @@ func (ingestor) Ingest(ctx context.Context, st *store.Store, profile io.Reader, 
 	runAt := now()
 
 	var (
-		fileRows []store.CoverageRow
-		nodeRows []store.NodeCoverageRow
-		summary  Summary
-		totalCov int
-		totalUnc int
+		fileRows     []store.CoverageRow
+		nodeRows     []store.NodeCoverageRow
+		summary      Summary
+		totalCov     int
+		totalUnc     int
+		totalStmtCov int
+		totalStmtUnc int
 	)
 
 	for _, pf := range files {
@@ -73,26 +81,83 @@ func (ingestor) Ingest(ctx context.Context, st *store.Store, profile io.Reader, 
 			summary.FilesSkipped++
 			continue
 		}
+		if opts.Root != "" {
+			sourcePath := filepath.Join(opts.Root, filepath.FromSlash(repoPath))
+			data, readErr := os.ReadFile(sourcePath)
+			if readErr == nil {
+				digest := sha256.Sum256(data)
+				if hex.EncodeToString(digest[:]) != fr.ContentHash {
+					return Summary{}, fmt.Errorf("coverage: %s: indexed source differs from checkout; run codegrapher sync before ingest", repoPath)
+				}
+				if opts.ProfileModifiedAt > 0 {
+					info, statErr := os.Stat(sourcePath)
+					if statErr != nil {
+						return Summary{}, statErr
+					}
+					if info.ModTime().UnixMilli() > opts.ProfileModifiedAt {
+						return Summary{}, fmt.Errorf("coverage: %s: source is newer than a supplied profile; regenerate profiles from this checkout", repoPath)
+					}
+				}
+			} else if !os.IsNotExist(readErr) || opts.ProfileModifiedAt > 0 {
+				return Summary{}, fmt.Errorf("coverage: read indexed source %s: %w", repoPath, readErr)
+			}
+		}
+		if opts.Merge {
+			old, err := st.GetCoverageByFile(repoPath)
+			if err != nil {
+				return Summary{}, err
+			}
+			if old != nil {
+				if old.ContentHash != fr.ContentHash {
+					return Summary{}, fmt.Errorf("coverage: %s: stored coverage is stale after source changed; re-ingest without --merge", repoPath)
+				}
+				if old.Mode != pf.Mode {
+					return Summary{}, fmt.Errorf("coverage: %s: stored mode %q differs from incoming %q; re-ingest without --merge", repoPath, old.Mode, pf.Mode)
+				}
+				if old.Ref != opts.Ref {
+					return Summary{}, fmt.Errorf("coverage: %s: stored ref %q differs from incoming %q; re-ingest without --merge", repoPath, old.Ref, opts.Ref)
+				}
+				var blocks []Block
+				if err := json.Unmarshal([]byte(old.Blocks), &blocks); err != nil {
+					return Summary{}, fmt.Errorf("coverage: %s: stored blocks: %w", repoPath, err)
+				}
+				if len(blocks) == 0 {
+					return Summary{}, fmt.Errorf("coverage: %s: stored coverage has no exact blocks; re-ingest without --merge", repoPath)
+				}
+				if err := mergeBlocks(pf.Blocks, blocks); err != nil {
+					return Summary{}, fmt.Errorf("coverage: %s: %w", repoPath, err)
+				}
+				pf.Covered, pf.Uncovered = lineSets(pf.Blocks)
+			}
+		}
 		summary.FilesMatched++
 
 		cov := len(pf.Covered)
 		unc := len(pf.Uncovered)
 		totalCov += cov
 		totalUnc += unc
+		stmtCov, stmtUnc := statementTotals(pf.Blocks)
+		totalStmtCov += stmtCov
+		totalStmtUnc += stmtUnc
+		blocksJSON, err := json.Marshal(pf.Blocks)
+		if err != nil {
+			return Summary{}, err
+		}
 
-		ranges := encodeRanges(pf.Covered, pf.Uncovered)
+		ranges := rangesFromStates(LineStates(pf.Blocks))
 		rangesJSON, err := marshalRanges(ranges)
 		if err != nil {
 			return Summary{}, err
 		}
 		fileRows = append(fileRows, store.CoverageRow{
-			FilePath:       repoPath,
-			ContentHash:    fr.ContentHash,
-			Mode:           pf.Mode,
-			Ranges:         rangesJSON,
+			FilePath:    repoPath,
+			ContentHash: fr.ContentHash,
+			Mode:        pf.Mode,
+			Ranges:      rangesJSON,
+			Blocks:      string(blocksJSON), StatementsCovered: stmtCov, StatementsUncovered: stmtUnc, Ref: opts.Ref,
 			LinesCovered:   cov,
 			LinesUncovered: unc,
-			PctCovered:     Pct(cov, unc),
+			PctCovered:     Pct(stmtCov, stmtUnc),
 			RunAt:          runAt,
 		})
 
@@ -100,29 +165,60 @@ func (ingestor) Ingest(ctx context.Context, st *store.Store, profile io.Reader, 
 		if err != nil {
 			return Summary{}, fmt.Errorf("coverage: nodes for %s: %w", repoPath, err)
 		}
-		for _, nc := range attributeLines(nodes, pf.Covered, pf.Uncovered) {
+		lineCounts := attributeLines(nodes, pf.Covered, pf.Uncovered)
+		stmtCounts := attributeBlocks(nodes, pf.Blocks)
+		lineByID := map[string]nodeLineCount{}
+		for _, c := range lineCounts {
+			lineByID[c.NodeID] = c
+		}
+		stmtByID := map[string]nodeLineCount{}
+		for _, c := range stmtCounts {
+			stmtByID[c.NodeID] = c
+		}
+		allIDs := map[string]bool{}
+		for id := range lineByID {
+			allIDs[id] = true
+		}
+		for id := range stmtByID {
+			allIDs[id] = true
+		}
+		for id := range allIDs {
+			nc, sc := lineByID[id], stmtByID[id]
 			nodeRows = append(nodeRows, store.NodeCoverageRow{
-				NodeID:         nc.NodeID,
-				ContentHash:    fr.ContentHash,
-				LinesCovered:   nc.Covered,
-				LinesUncovered: nc.Uncovered,
-				PctCovered:     Pct(nc.Covered, nc.Uncovered),
-				RunAt:          runAt,
+				NodeID:            id,
+				ContentHash:       fr.ContentHash,
+				LinesCovered:      nc.Covered,
+				LinesUncovered:    nc.Uncovered,
+				StatementsCovered: sc.Covered, StatementsUncovered: sc.Uncovered, Ref: opts.Ref,
+				PctCovered: Pct(sc.Covered, sc.Uncovered),
+				RunAt:      runAt,
 			})
 		}
 	}
 
-	if err := st.PutCoverage(fileRows); err != nil {
-		return Summary{}, fmt.Errorf("coverage: write coverage: %w", err)
-	}
-	if err := st.PutNodeCoverage(nodeRows); err != nil {
-		return Summary{}, fmt.Errorf("coverage: write node_coverage: %w", err)
+	if !opts.ValidateOnly {
+		if err := st.ReplaceCoverage(fileRows, nodeRows); err != nil {
+			return Summary{}, fmt.Errorf("coverage: write coverage: %w", err)
+		}
 	}
 
 	summary.LinesCovered = totalCov
 	summary.LinesUncovered = totalUnc
-	summary.PctCovered = Pct(totalCov, totalUnc)
+	summary.StatementsCovered = totalStmtCov
+	summary.StatementsUncovered = totalStmtUnc
+	summary.PctCovered = Pct(totalStmtCov, totalStmtUnc)
 	return summary, nil
+}
+
+func statementTotals(blocks []Block) (covered, uncovered int) {
+	for _, b := range blocks {
+		if b.Hit {
+			covered += b.NumStmt
+		} else {
+			uncovered += b.NumStmt
+		}
+	}
+	return
 }
 
 // FileCoverageFromStore reads every per-file coverage row from st and converts
@@ -142,15 +238,21 @@ func FileCoverageFromStore(st *store.Store) ([]FileCoverage, error) {
 			}
 		}
 		out = append(out, FileCoverage{
-			FilePath:       r.FilePath,
-			ContentHash:    r.ContentHash,
-			Mode:           r.Mode,
-			Ranges:         ranges,
+			FilePath:          r.FilePath,
+			ContentHash:       r.ContentHash,
+			Mode:              r.Mode,
+			Ranges:            ranges,
+			StatementsCovered: r.StatementsCovered, StatementsUncovered: r.StatementsUncovered, Ref: r.Ref,
 			LinesCovered:   r.LinesCovered,
 			LinesUncovered: r.LinesUncovered,
-			PctCovered:     Pct(r.LinesCovered, r.LinesUncovered),
+			PctCovered:     coveragePercent(r.StatementsCovered, r.StatementsUncovered, r.LinesCovered, r.LinesUncovered),
 			RunAt:          r.RunAt,
 		})
+		if r.Blocks != "" {
+			if err := json.Unmarshal([]byte(r.Blocks), &out[len(out)-1].Blocks); err != nil {
+				return nil, fmt.Errorf("coverage: unmarshal blocks for %s: %w", r.FilePath, err)
+			}
+		}
 	}
 	return out, nil
 }
@@ -166,12 +268,13 @@ func NodeCoverageFromStore(st *store.Store) ([]NodeCoverage, error) {
 	out := make([]NodeCoverage, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, NodeCoverage{
-			NodeID:         r.NodeID,
-			ContentHash:    r.ContentHash,
-			LinesCovered:   r.LinesCovered,
-			LinesUncovered: r.LinesUncovered,
-			PctCovered:     Pct(r.LinesCovered, r.LinesUncovered),
-			RunAt:          r.RunAt,
+			NodeID:            r.NodeID,
+			ContentHash:       r.ContentHash,
+			LinesCovered:      r.LinesCovered,
+			LinesUncovered:    r.LinesUncovered,
+			StatementsCovered: r.StatementsCovered, StatementsUncovered: r.StatementsUncovered, Ref: r.Ref,
+			PctCovered: coveragePercent(r.StatementsCovered, r.StatementsUncovered, r.LinesCovered, r.LinesUncovered),
+			RunAt:      r.RunAt,
 		})
 	}
 	return out, nil

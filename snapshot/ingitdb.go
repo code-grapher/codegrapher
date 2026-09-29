@@ -261,6 +261,22 @@ columns:
     type: string
     titles:
       en: Ranges
+  blocks:
+    type: string
+    titles:
+      en: Go Blocks
+  statements_covered:
+    type: int
+    titles:
+      en: Statements Covered
+  statements_uncovered:
+    type: int
+    titles:
+      en: Statements Uncovered
+  ref:
+    type: string
+    titles:
+      en: Profile Ref
   lines_covered:
     type: int
     titles:
@@ -277,6 +293,10 @@ columns_order:
   - content_hash
   - mode
   - ranges
+  - blocks
+  - statements_covered
+  - statements_uncovered
+  - ref
   - lines_covered
   - lines_uncovered
   - run_at
@@ -305,6 +325,18 @@ columns:
     type: int
     titles:
       en: Lines Uncovered
+  statements_covered:
+    type: int
+    titles:
+      en: Statements Covered
+  statements_uncovered:
+    type: int
+    titles:
+      en: Statements Uncovered
+  ref:
+    type: string
+    titles:
+      en: Profile Ref
   run_at:
     type: int
     titles:
@@ -313,6 +345,9 @@ columns_order:
   - content_hash
   - lines_covered
   - lines_uncovered
+  - statements_covered
+  - statements_uncovered
+  - ref
   - run_at
 `
 

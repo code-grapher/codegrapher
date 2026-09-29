@@ -63,8 +63,8 @@ func TestIngest_FileAndNodeCounts(t *testing.T) {
 	if sum.LinesCovered != 3 || sum.LinesUncovered != 2 {
 		t.Errorf("summary lines = %d/%d, want 3/2", sum.LinesCovered, sum.LinesUncovered)
 	}
-	if sum.PctCovered != 60 {
-		t.Errorf("summary pct = %v, want 60", sum.PctCovered)
+	if sum.PctCovered != Pct(2, 1) {
+		t.Errorf("summary pct = %v, want 2/3 statements", sum.PctCovered)
 	}
 
 	cov, err := s.GetCoverageByFile("pkg/f.go")
@@ -74,7 +74,7 @@ func TestIngest_FileAndNodeCounts(t *testing.T) {
 	if cov.ContentHash != "hash-f" || cov.Mode != "set" || cov.RunAt != 777 {
 		t.Errorf("file coverage stamp wrong: %+v", cov)
 	}
-	if cov.LinesCovered != 3 || cov.LinesUncovered != 2 || cov.PctCovered != 60 {
+	if cov.LinesCovered != 3 || cov.LinesUncovered != 2 || cov.PctCovered != Pct(2, 1) {
 		t.Errorf("file coverage counts wrong: %+v", cov)
 	}
 

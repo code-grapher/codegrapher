@@ -2,6 +2,57 @@ package coverage
 
 import "sort"
 
+// LineStates is a navigation aid derived from exact blocks. A line touched
+// by both hit and missed blocks is partial; absent lines are unmeasured.
+func LineStates(blocks []Block) map[int]string {
+	type hits struct{ hit, miss bool }
+	seen := map[int]hits{}
+	for _, b := range blocks {
+		for ln := b.StartLine; ln <= b.EndLine; ln++ {
+			if ln == b.EndLine && b.EndCol <= 1 && ln != b.StartLine {
+				continue
+			}
+			h := seen[ln]
+			if b.Hit {
+				h.hit = true
+			} else {
+				h.miss = true
+			}
+			seen[ln] = h
+		}
+	}
+	out := map[int]string{}
+	for ln, h := range seen {
+		switch {
+		case h.hit && h.miss:
+			out[ln] = KindPartial
+		case h.hit:
+			out[ln] = KindHit
+		default:
+			out[ln] = KindMiss
+		}
+	}
+	return out
+}
+
+func rangesFromStates(states map[int]string) []Range {
+	lines := make([]int, 0, len(states))
+	for ln := range states {
+		lines = append(lines, ln)
+	}
+	sort.Ints(lines)
+	var out []Range
+	for _, ln := range lines {
+		kind := states[ln]
+		if n := len(out); n > 0 && out[n-1].Kind == kind && out[n-1].End == ln-1 {
+			out[n-1].End = ln
+		} else {
+			out = append(out, Range{Start: ln, End: ln, Kind: kind})
+		}
+	}
+	return out
+}
+
 // encodeRanges run-length-encodes covered and uncovered line sets into a single
 // ascending []Range. Adjacent lines sharing a state collapse into one Range;
 // "hit" and "miss" runs are emitted in line order. Lines absent from both sets

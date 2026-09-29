@@ -21,10 +21,14 @@ func bytesReader(b []byte) io.Reader { return bytes.NewReader(b) }
 // node_coverage ($ID = node_id)
 
 var fileCoverageCols = []ingr.ColDef{
-	{Name: "$ID"},                          // file_path
-	{Name: "content_hash"},                 //
-	{Name: "mode"},                         // set | count | atomic
-	{Name: "ranges"},                       // JSON array of Range
+	{Name: "$ID"},          // file_path
+	{Name: "content_hash"}, //
+	{Name: "mode"},         // set | count | atomic
+	{Name: "ranges"},       // JSON array of Range
+	{Name: "blocks"},
+	{Name: "statements_covered", Type: "int"},
+	{Name: "statements_uncovered", Type: "int"},
+	{Name: "ref"},
 	{Name: "lines_covered", Type: "int"},   //
 	{Name: "lines_uncovered", Type: "int"}, //
 	{Name: "run_at", Type: "int"},          // unix ms
@@ -35,7 +39,10 @@ var nodeCoverageCols = []ingr.ColDef{
 	{Name: "content_hash"},                 //
 	{Name: "lines_covered", Type: "int"},   //
 	{Name: "lines_uncovered", Type: "int"}, //
-	{Name: "run_at", Type: "int"},          // unix ms
+	{Name: "statements_covered", Type: "int"},
+	{Name: "statements_uncovered", Type: "int"},
+	{Name: "ref"},
+	{Name: "run_at", Type: "int"}, // unix ms
 }
 
 // EncodeFileCoverage writes recs as the "coverage" INGR recordset, sorted by
@@ -54,14 +61,22 @@ func EncodeFileCoverage(w io.Writer, recs []FileCoverage) error {
 		if err != nil {
 			return fmt.Errorf("coverage: marshal ranges for %s: %w", r.FilePath, err)
 		}
+		blocksJSON, err := json.Marshal(r.Blocks)
+		if err != nil {
+			return fmt.Errorf("coverage: marshal blocks for %s: %w", r.FilePath, err)
+		}
 		records = append(records, ingr.NewMapRecordEntry(r.FilePath, map[string]any{
-			"$ID":             r.FilePath,
-			"content_hash":    r.ContentHash,
-			"mode":            r.Mode,
-			"ranges":          string(rangesJSON),
-			"lines_covered":   r.LinesCovered,
-			"lines_uncovered": r.LinesUncovered,
-			"run_at":          r.RunAt,
+			"$ID":                  r.FilePath,
+			"content_hash":         r.ContentHash,
+			"mode":                 r.Mode,
+			"ranges":               string(rangesJSON),
+			"blocks":               string(blocksJSON),
+			"statements_covered":   r.StatementsCovered,
+			"statements_uncovered": r.StatementsUncovered,
+			"ref":                  r.Ref,
+			"lines_covered":        r.LinesCovered,
+			"lines_uncovered":      r.LinesUncovered,
+			"run_at":               r.RunAt,
 		}))
 	}
 	if len(records) > 0 {
@@ -85,11 +100,14 @@ func EncodeNodeCoverage(w io.Writer, recs []NodeCoverage) error {
 	records := make([]ingr.Record, 0, len(sorted))
 	for _, r := range sorted {
 		records = append(records, ingr.NewMapRecordEntry(r.NodeID, map[string]any{
-			"$ID":             r.NodeID,
-			"content_hash":    r.ContentHash,
-			"lines_covered":   r.LinesCovered,
-			"lines_uncovered": r.LinesUncovered,
-			"run_at":          r.RunAt,
+			"$ID":                  r.NodeID,
+			"content_hash":         r.ContentHash,
+			"lines_covered":        r.LinesCovered,
+			"lines_uncovered":      r.LinesUncovered,
+			"statements_covered":   r.StatementsCovered,
+			"statements_uncovered": r.StatementsUncovered,
+			"ref":                  r.Ref,
+			"run_at":               r.RunAt,
 		}))
 	}
 	if len(records) > 0 {
@@ -110,20 +128,28 @@ func DecodeFileCoverage(r io.Reader) ([]FileCoverage, error) {
 	out := make([]FileCoverage, 0, len(rows))
 	for _, row := range rows {
 		var ranges []Range
+		var blocks []Block
 		if s := str(row["ranges"]); s != "" {
 			if err := json.Unmarshal([]byte(s), &ranges); err != nil {
 				return nil, fmt.Errorf("coverage: unmarshal ranges for %q: %w", str(row["$ID"]), err)
 			}
 		}
+		if s := str(row["blocks"]); s != "" {
+			if err := json.Unmarshal([]byte(s), &blocks); err != nil {
+				return nil, fmt.Errorf("coverage: unmarshal blocks for %q: %w", str(row["$ID"]), err)
+			}
+		}
 		cov, unc := toInt(row["lines_covered"]), toInt(row["lines_uncovered"])
 		out = append(out, FileCoverage{
-			FilePath:       str(row["$ID"]),
-			ContentHash:    str(row["content_hash"]),
-			Mode:           str(row["mode"]),
-			Ranges:         ranges,
+			FilePath:          str(row["$ID"]),
+			ContentHash:       str(row["content_hash"]),
+			Mode:              str(row["mode"]),
+			Ranges:            ranges,
+			Blocks:            blocks,
+			StatementsCovered: toInt(row["statements_covered"]), StatementsUncovered: toInt(row["statements_uncovered"]), Ref: str(row["ref"]),
 			LinesCovered:   cov,
 			LinesUncovered: unc,
-			PctCovered:     Pct(cov, unc),
+			PctCovered:     coveragePercent(toInt(row["statements_covered"]), toInt(row["statements_uncovered"]), cov, unc),
 			RunAt:          int64(toInt(row["run_at"])),
 		})
 	}
@@ -141,15 +167,23 @@ func DecodeNodeCoverage(r io.Reader) ([]NodeCoverage, error) {
 	for _, row := range rows {
 		cov, unc := toInt(row["lines_covered"]), toInt(row["lines_uncovered"])
 		out = append(out, NodeCoverage{
-			NodeID:         str(row["$ID"]),
-			ContentHash:    str(row["content_hash"]),
-			LinesCovered:   cov,
-			LinesUncovered: unc,
-			PctCovered:     Pct(cov, unc),
-			RunAt:          int64(toInt(row["run_at"])),
+			NodeID:            str(row["$ID"]),
+			ContentHash:       str(row["content_hash"]),
+			LinesCovered:      cov,
+			LinesUncovered:    unc,
+			StatementsCovered: toInt(row["statements_covered"]), StatementsUncovered: toInt(row["statements_uncovered"]), Ref: str(row["ref"]),
+			PctCovered: coveragePercent(toInt(row["statements_covered"]), toInt(row["statements_uncovered"]), cov, unc),
+			RunAt:      int64(toInt(row["run_at"])),
 		})
 	}
 	return out, nil
+}
+
+func coveragePercent(stmtCov, stmtUnc, lineCov, lineUnc int) float64 {
+	if stmtCov+stmtUnc > 0 {
+		return Pct(stmtCov, stmtUnc)
+	}
+	return Pct(lineCov, lineUnc)
 }
 
 // Validate checks that data is a well-formed INGR recordset for the named
@@ -171,15 +205,20 @@ func Validate(recordset string, data []byte) error {
 			if r.ContentHash == "" {
 				return fmt.Errorf("coverage: %s: empty content_hash", r.FilePath)
 			}
-			if r.LinesCovered < 0 || r.LinesUncovered < 0 {
+			if r.LinesCovered < 0 || r.LinesUncovered < 0 || r.StatementsCovered < 0 || r.StatementsUncovered < 0 {
 				return fmt.Errorf("coverage: %s: negative line count", r.FilePath)
 			}
 			for _, rg := range r.Ranges {
-				if rg.Kind != KindHit && rg.Kind != KindMiss {
+				if rg.Kind != KindHit && rg.Kind != KindMiss && rg.Kind != KindPartial {
 					return fmt.Errorf("coverage: %s: bad range kind %q", r.FilePath, rg.Kind)
 				}
 				if rg.Start <= 0 || rg.End < rg.Start {
 					return fmt.Errorf("coverage: %s: bad range [%d,%d]", r.FilePath, rg.Start, rg.End)
+				}
+			}
+			for _, b := range r.Blocks {
+				if b.StartLine <= 0 || b.StartCol <= 0 || b.EndLine < b.StartLine || b.EndCol <= 0 || b.NumStmt < 0 {
+					return fmt.Errorf("coverage: %s: invalid Go block %+v", r.FilePath, b)
 				}
 			}
 		}
@@ -196,7 +235,7 @@ func Validate(recordset string, data []byte) error {
 			if r.ContentHash == "" {
 				return fmt.Errorf("node_coverage: %s: empty content_hash", r.NodeID)
 			}
-			if r.LinesCovered < 0 || r.LinesUncovered < 0 {
+			if r.LinesCovered < 0 || r.LinesUncovered < 0 || r.StatementsCovered < 0 || r.StatementsUncovered < 0 {
 				return fmt.Errorf("node_coverage: %s: negative line count", r.NodeID)
 			}
 		}

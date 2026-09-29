@@ -10,25 +10,57 @@ import "database/sql"
 // Ranges is the RLE JSON string exactly as stored ([[start,end,"hit"|"miss"],…]);
 // the store treats it as an opaque blob.
 type CoverageRow struct {
-	FilePath       string
-	ContentHash    string
-	Mode           string
-	Ranges         string
-	LinesCovered   int
-	LinesUncovered int
-	PctCovered     float64
-	RunAt          int64
+	FilePath            string
+	ContentHash         string
+	Mode                string
+	Ranges              string
+	Blocks              string
+	StatementsCovered   int
+	StatementsUncovered int
+	Ref                 string
+	LinesCovered        int
+	LinesUncovered      int
+	PctCovered          float64
+	RunAt               int64
 }
 
 // NodeCoverageRow is a per-function innermost-attributed coverage record (the
 // `node_coverage` table). Store-local row type, see CoverageRow.
 type NodeCoverageRow struct {
-	NodeID         string
-	ContentHash    string
-	LinesCovered   int
-	LinesUncovered int
-	PctCovered     float64
-	RunAt          int64
+	NodeID              string
+	ContentHash         string
+	LinesCovered        int
+	LinesUncovered      int
+	StatementsCovered   int
+	StatementsUncovered int
+	Ref                 string
+	PctCovered          float64
+	RunAt               int64
+}
+
+// ReplaceCoverage writes one ingest atomically. Per-node rows for the affected
+// files are reset first so a new profile cannot leave old function counts.
+func (s *Store) ReplaceCoverage(files []CoverageRow, nodes []NodeCoverageRow) error {
+	return s.Transaction(func(tx *sql.Tx) error {
+		for _, f := range files {
+			if _, err := tx.Exec(`DELETE FROM node_coverage WHERE node_id IN (SELECT id FROM nodes WHERE file_path = ?)`, f.FilePath); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(`INSERT OR REPLACE INTO coverage
+				(file_path, content_hash, mode, ranges, blocks, lines_covered, lines_uncovered, statements_covered, statements_uncovered, pct_covered, run_at, ref)
+				VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, f.FilePath, f.ContentHash, f.Mode, f.Ranges, f.Blocks, f.LinesCovered, f.LinesUncovered, f.StatementsCovered, f.StatementsUncovered, f.PctCovered, f.RunAt, f.Ref); err != nil {
+				return err
+			}
+		}
+		for _, n := range nodes {
+			if _, err := tx.Exec(`INSERT OR REPLACE INTO node_coverage
+				(node_id, content_hash, lines_covered, lines_uncovered, statements_covered, statements_uncovered, pct_covered, run_at, ref)
+				VALUES (?,?,?,?,?,?,?,?,?)`, n.NodeID, n.ContentHash, n.LinesCovered, n.LinesUncovered, n.StatementsCovered, n.StatementsUncovered, n.PctCovered, n.RunAt, n.Ref); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // PutCoverage replaces the per-file coverage rows for the given files in one
@@ -38,10 +70,10 @@ func (s *Store) PutCoverage(rows []CoverageRow) error {
 		for _, r := range rows {
 			if _, err := tx.Exec(`
 				INSERT OR REPLACE INTO coverage
-				(file_path, content_hash, mode, ranges, lines_covered, lines_uncovered, pct_covered, run_at)
-				VALUES (?,?,?,?,?,?,?,?)`,
-				r.FilePath, r.ContentHash, r.Mode, r.Ranges,
-				r.LinesCovered, r.LinesUncovered, r.PctCovered, r.RunAt,
+				(file_path, content_hash, mode, ranges, blocks, lines_covered, lines_uncovered, statements_covered, statements_uncovered, pct_covered, run_at, ref)
+				VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+				r.FilePath, r.ContentHash, r.Mode, r.Ranges, r.Blocks,
+				r.LinesCovered, r.LinesUncovered, r.StatementsCovered, r.StatementsUncovered, r.PctCovered, r.RunAt, r.Ref,
 			); err != nil {
 				return err
 			}
@@ -58,9 +90,9 @@ func (s *Store) PutNodeCoverage(rows []NodeCoverageRow) error {
 		for _, r := range rows {
 			if _, err := tx.Exec(`
 				INSERT OR REPLACE INTO node_coverage
-				(node_id, content_hash, lines_covered, lines_uncovered, pct_covered, run_at)
-				VALUES (?,?,?,?,?,?)`,
-				r.NodeID, r.ContentHash, r.LinesCovered, r.LinesUncovered, r.PctCovered, r.RunAt,
+				(node_id, content_hash, lines_covered, lines_uncovered, statements_covered, statements_uncovered, pct_covered, run_at, ref)
+				VALUES (?,?,?,?,?,?,?,?,?)`,
+				r.NodeID, r.ContentHash, r.LinesCovered, r.LinesUncovered, r.StatementsCovered, r.StatementsUncovered, r.PctCovered, r.RunAt, r.Ref,
 			); err != nil {
 				return err
 			}
@@ -72,7 +104,7 @@ func (s *Store) PutNodeCoverage(rows []NodeCoverageRow) error {
 // GetAllCoverage returns every per-file coverage row ordered by file path.
 func (s *Store) GetAllCoverage() ([]CoverageRow, error) {
 	rows, err := s.db.Query(`
-		SELECT file_path, content_hash, mode, ranges, lines_covered, lines_uncovered, pct_covered, run_at
+		SELECT file_path, content_hash, mode, ranges, blocks, lines_covered, lines_uncovered, statements_covered, statements_uncovered, pct_covered, run_at, ref
 		FROM coverage ORDER BY file_path`)
 	if err != nil {
 		return nil, err
@@ -81,8 +113,8 @@ func (s *Store) GetAllCoverage() ([]CoverageRow, error) {
 	var out []CoverageRow
 	for rows.Next() {
 		var r CoverageRow
-		if err := rows.Scan(&r.FilePath, &r.ContentHash, &r.Mode, &r.Ranges,
-			&r.LinesCovered, &r.LinesUncovered, &r.PctCovered, &r.RunAt); err != nil {
+		if err := rows.Scan(&r.FilePath, &r.ContentHash, &r.Mode, &r.Ranges, &r.Blocks,
+			&r.LinesCovered, &r.LinesUncovered, &r.StatementsCovered, &r.StatementsUncovered, &r.PctCovered, &r.RunAt, &r.Ref); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -94,10 +126,10 @@ func (s *Store) GetAllCoverage() ([]CoverageRow, error) {
 func (s *Store) GetCoverageByFile(filePath string) (*CoverageRow, error) {
 	var r CoverageRow
 	err := s.db.QueryRow(`
-		SELECT file_path, content_hash, mode, ranges, lines_covered, lines_uncovered, pct_covered, run_at
+		SELECT file_path, content_hash, mode, ranges, blocks, lines_covered, lines_uncovered, statements_covered, statements_uncovered, pct_covered, run_at, ref
 		FROM coverage WHERE file_path = ?`, filePath).Scan(
-		&r.FilePath, &r.ContentHash, &r.Mode, &r.Ranges,
-		&r.LinesCovered, &r.LinesUncovered, &r.PctCovered, &r.RunAt)
+		&r.FilePath, &r.ContentHash, &r.Mode, &r.Ranges, &r.Blocks,
+		&r.LinesCovered, &r.LinesUncovered, &r.StatementsCovered, &r.StatementsUncovered, &r.PctCovered, &r.RunAt, &r.Ref)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -110,7 +142,7 @@ func (s *Store) GetCoverageByFile(filePath string) (*CoverageRow, error) {
 // GetAllNodeCoverage returns every per-node coverage row ordered by node id.
 func (s *Store) GetAllNodeCoverage() ([]NodeCoverageRow, error) {
 	rows, err := s.db.Query(`
-		SELECT node_id, content_hash, lines_covered, lines_uncovered, pct_covered, run_at
+		SELECT node_id, content_hash, lines_covered, lines_uncovered, statements_covered, statements_uncovered, pct_covered, run_at, ref
 		FROM node_coverage ORDER BY node_id`)
 	if err != nil {
 		return nil, err
@@ -120,7 +152,7 @@ func (s *Store) GetAllNodeCoverage() ([]NodeCoverageRow, error) {
 	for rows.Next() {
 		var r NodeCoverageRow
 		if err := rows.Scan(&r.NodeID, &r.ContentHash, &r.LinesCovered,
-			&r.LinesUncovered, &r.PctCovered, &r.RunAt); err != nil {
+			&r.LinesUncovered, &r.StatementsCovered, &r.StatementsUncovered, &r.PctCovered, &r.RunAt, &r.Ref); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

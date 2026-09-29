@@ -69,6 +69,75 @@ func attributeLines(nodes []model.Node, covered, uncovered map[int]bool) []nodeL
 	return out
 }
 
+// attributeBlocks owns each Go statement block by its starting line. Blocks
+// are disjoint instrumentation units; counting NumStmt avoids line bias.
+func attributeBlocks(nodes []model.Node, blocks []Block) []nodeLineCount {
+	fns := make([]model.Node, 0, len(nodes))
+	for _, n := range nodes {
+		if isFunctionKind(n.Kind) && n.StartLine > 0 && n.EndLine >= n.StartLine {
+			fns = append(fns, n)
+		}
+	}
+	counts := map[string]*nodeLineCount{}
+	for _, b := range blocks {
+		owner := innermostPosition(fns, b.StartLine, b.StartCol-1)
+		if owner == nil {
+			continue
+		}
+		c := counts[owner.ID]
+		if c == nil {
+			c = &nodeLineCount{NodeID: owner.ID}
+			counts[owner.ID] = c
+		}
+		if b.Hit {
+			c.Covered += b.NumStmt
+		} else {
+			c.Uncovered += b.NumStmt
+		}
+	}
+	out := make([]nodeLineCount, 0, len(counts))
+	for _, c := range counts {
+		out = append(out, *c)
+	}
+	return out
+}
+
+func innermostPosition(fns []model.Node, line, col int) *model.Node {
+	var best *model.Node
+	for i := range fns {
+		n := &fns[i]
+		if line < n.StartLine || line > n.EndLine {
+			continue
+		}
+		if line == n.StartLine && col < n.StartColumn {
+			continue
+		}
+		if line == n.EndLine && n.EndColumn > 0 && col >= n.EndColumn {
+			continue
+		}
+		if best == nil || narrowerPosition(n, best) {
+			best = n
+		}
+	}
+	return best
+}
+
+func narrowerPosition(a, b *model.Node) bool {
+	if a.StartLine != b.StartLine {
+		return a.StartLine > b.StartLine
+	}
+	if a.EndLine != b.EndLine {
+		return a.EndLine < b.EndLine
+	}
+	if a.StartColumn != b.StartColumn {
+		return a.StartColumn > b.StartColumn
+	}
+	if a.EndColumn != b.EndColumn {
+		return a.EndColumn < b.EndColumn
+	}
+	return a.ID < b.ID
+}
+
 // innermost returns the function-like node with the tightest span containing
 // line, or nil if none contains it. Ties (identical spans) resolve to the node
 // with the smaller ID for determinism.

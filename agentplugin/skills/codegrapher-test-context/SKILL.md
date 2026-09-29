@@ -19,21 +19,40 @@ and burns 70-100 tool calls per ~40 covered statements in practice.
 codegrapher status --format json      # confirm the repo is indexed
 codegrapher init                      # first time only
 codegrapher sync                      # after source changes since init
-codegrapher coverage <profile>        # ingest a go test -coverprofile file, only needed for --uncovered
+codegrapher coverage <profile...>     # ingest focused Go profiles from one unchanged checkout
 ```
 
 `context` refuses to run against an uninitialized index or a different git
 worktree's index; run `init`/`sync` from the current worktree.
+
+## Efficient coverage campaign
+
+Generate several focused `go test -coverprofile` profiles from one unchanged
+source checkout. Ingest them together once per coherent batch with
+`codegrapher coverage a.out b.out`; use `--merge` for later batches only when
+the indexed file content, Go profile mode, exact blocks, and ref still agree.
+After a production source change, run `codegrapher sync`, regenerate profiles,
+and ingest without `--merge` to reset that file. A profile from another
+checkout can produce false coverage even if its lines happen to fit; keep
+profiles with the checkout that produced them.
+
+Use `codegrapher coverage targets` for zero and partial functions ranked by
+uncovered Go statements. Then request `codegrapher context ... --coverage`
+for a compact statement summary, profile provenance/freshness, and separate
+line states (`hit`, `miss`, `partial`, `unmeasured`). Source stays copyable;
+JSON returns structured coverage fields. `--uncovered` is the compatibility
+marker view and also marks partial lines.
 
 ## The workflow that measured best
 
 Do not call `context` once per symbol. Group the symbols you need to cover by
 file, then, per file (or in one `--symbols-file` call across files):
 
-1. One `context` call with `--for test --uncovered --budget N`.
+1. One `context` call with `--for test --coverage --budget N`.
 2. Save the output to one file and read it once.
 3. Write all the new tests for that file in a small number of large edits.
-4. Run the tests once with `-coverprofile`, re-ingest it, fix once.
+4. Run focused tests with `-coverprofile` from unchanged source, ingest the
+   coherent batch, and use `coverage targets` to select the next file.
 
 Calling `context` per-symbol instead of per-file repeats section (e)'s
 test-helper/fake bundle — often the biggest part of the output — for no

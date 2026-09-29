@@ -80,6 +80,13 @@ func TestInitialize_ExistingOlderSchemaRunsMigrations(t *testing.T) {
 		`INSERT INTO schema_versions (version, applied_at, description) VALUES (4, 0, 'v4')`,
 		`ALTER TABLE nodes DROP COLUMN return_type`,
 		`ALTER TABLE nodes DROP COLUMN metadata`,
+		`ALTER TABLE coverage DROP COLUMN blocks`,
+		`ALTER TABLE coverage DROP COLUMN statements_covered`,
+		`ALTER TABLE coverage DROP COLUMN statements_uncovered`,
+		`ALTER TABLE coverage DROP COLUMN ref`,
+		`ALTER TABLE node_coverage DROP COLUMN statements_covered`,
+		`ALTER TABLE node_coverage DROP COLUMN statements_uncovered`,
+		`ALTER TABLE node_coverage DROP COLUMN ref`,
 	} {
 		if _, err := s.db.Exec(stmt); err != nil {
 			t.Fatalf("downgrade %q: %v", stmt, err)
@@ -535,6 +542,13 @@ func TestMigrations_FromV1(t *testing.T) {
 		`DROP INDEX IF EXISTS idx_nodes_lower_name`,
 		`ALTER TABLE nodes DROP COLUMN return_type`,
 		`ALTER TABLE nodes DROP COLUMN metadata`,
+		`ALTER TABLE coverage DROP COLUMN blocks`,
+		`ALTER TABLE coverage DROP COLUMN statements_covered`,
+		`ALTER TABLE coverage DROP COLUMN statements_uncovered`,
+		`ALTER TABLE coverage DROP COLUMN ref`,
+		`ALTER TABLE node_coverage DROP COLUMN statements_covered`,
+		`ALTER TABLE node_coverage DROP COLUMN statements_uncovered`,
+		`ALTER TABLE node_coverage DROP COLUMN ref`,
 		`ALTER TABLE edges DROP COLUMN provenance`,
 		`ALTER TABLE unresolved_refs DROP COLUMN file_path`,
 		`ALTER TABLE unresolved_refs DROP COLUMN language`,

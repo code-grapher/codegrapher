@@ -120,3 +120,59 @@ func TestMigrations_FromV5(t *testing.T) {
 		t.Errorf("coverage table after migration: %v", err)
 	}
 }
+
+func TestCoverageMigrationFromV8(t *testing.T) {
+	path := filepath.Join(t.TempDir(), DatabaseFilename)
+	s, err := Initialize(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stmt := range []string{
+		`ALTER TABLE coverage DROP COLUMN blocks`,
+		`ALTER TABLE coverage DROP COLUMN statements_covered`,
+		`ALTER TABLE coverage DROP COLUMN statements_uncovered`,
+		`ALTER TABLE coverage DROP COLUMN ref`,
+		`ALTER TABLE node_coverage DROP COLUMN statements_covered`,
+		`ALTER TABLE node_coverage DROP COLUMN statements_uncovered`,
+		`ALTER TABLE node_coverage DROP COLUMN ref`,
+		`DELETE FROM schema_versions WHERE version = 9`,
+		`INSERT INTO schema_versions (version, applied_at, description) VALUES (8, 0, 'v8')`,
+	} {
+		if _, err := s.db.Exec(stmt); err != nil {
+			t.Fatalf("downgrade %q: %v", stmt, err)
+		}
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close() }()
+	if err := s.PutCoverage([]CoverageRow{{FilePath: "f.go", ContentHash: "h", Mode: "set", Ranges: "[]", Blocks: "[]", StatementsCovered: 2, Ref: "r"}}); err != nil {
+		t.Fatal(err)
+	}
+	r, err := s.GetCoverageByFile("f.go")
+	if err != nil || r == nil || r.StatementsCovered != 2 || r.Ref != "r" {
+		t.Fatalf("migrated row %+v: %v", r, err)
+	}
+}
+
+func TestReplaceCoverageClearsPreviousNodeRows(t *testing.T) {
+	s := newTestStore(t)
+	n := testNode("function:f", "f", "f.go", 1)
+	if err := s.InsertNode(n); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReplaceCoverage([]CoverageRow{{FilePath: "f.go", ContentHash: "h", Mode: "set", Ranges: "[]", Blocks: "[]"}}, []NodeCoverageRow{{NodeID: n.ID, ContentHash: "h", StatementsCovered: 2}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReplaceCoverage([]CoverageRow{{FilePath: "f.go", ContentHash: "h", Mode: "set", Ranges: "[]", Blocks: "[]"}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := s.GetAllNodeCoverage()
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("stale node rows %+v: %v", rows, err)
+	}
+}

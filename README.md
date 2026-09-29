@@ -37,7 +37,9 @@ codegrapher callees <symbol> What this symbol calls              (--json)
 codegrapher impact <symbol>  Blast-radius analysis               (--json)
 codegrapher context <symbol...> Bounded test-writing bundle: source, types touched,
                               direct callees, existing tests, test helpers
-                              (--uncovered, --for test, --budget, --file, --line, --json)
+                              (--coverage, --uncovered, --for test, --budget, --file, --line, --json)
+codegrapher coverage <profile...> Ingest and compose Go profiles (--merge, --ref, --out)
+codegrapher coverage targets   Rank functions by uncovered statements (--format json)
 codegrapher affected [files] Test files affected by changed sources (--json)
 codegrapher watch [path]     Compatibility foreground watcher  (--verbose)
 codegrapher serve [path]     Composable foreground server       (--watch, --api, --mcp)
@@ -49,6 +51,41 @@ codegrapher import [path]    Import an INGR snapshot into the local store
 codegrapher unlock [path]    Remove a stale lock file
 codegrapher version          Print version
 ```
+
+### Coverage campaign
+
+Generate focused Go coverprofiles from one unchanged, indexed checkout, then
+ingest a coherent batch together:
+
+```sh
+go test -coverprofile=/tmp/part-a.out ./pkg/a
+go test -coverprofile=/tmp/part-b.out ./pkg/b
+codegrapher sync
+codegrapher coverage /tmp/part-a.out /tmp/part-b.out --ref "$(git rev-parse HEAD)"
+codegrapher coverage targets
+codegrapher context MyFunction --coverage --for test
+```
+
+`coverage` joins hits for identical Go blocks. `--merge` accumulates a later
+focused batch against stored coverage only when source hash, mode, exact block
+layout, and ref agree. Without `--merge`, files in the supplied profiles are
+replaced. Mixed profile modes and differing block layouts are rejected. The
+CLI also refuses a profile older than a matching source file or an index that
+differs from the checkout. Profiles must come from the indexed checkout;
+coverprofiles do not themselves contain a source hash, so copying an old
+profile and changing its timestamp cannot be detected. After production source
+changes, regenerate profiles and ingest without `--merge` to reset affected
+files. `codegrapher sync` marks earlier coverage stale when its file hash no
+longer matches.
+
+The ranked inventory and percentages use Go `NumStmt`, not measured line
+counts. `context --coverage` leaves source text copyable and puts the statement
+summary, ref, freshness, and `hit`/`miss`/`partial`/`unmeasured` line states
+beside it. `coverage targets --json` returns `targets` plus `staleFiles` so a
+sync that replaces function nodes cannot silently hide old coverage. JSON
+context returns structured `coverage` data. The older
+`--uncovered` marker remains available; it includes partial lines and suppresses
+stale coverage.
 
 ### Trace a precise code route
 
