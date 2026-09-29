@@ -88,11 +88,27 @@ type ContextNotFound struct {
 // the statement that registers/calls each literal, joined by explicit
 // "// … N lines elided" markers — never a silent drop.
 type ContextSource struct {
-	Symbol    BriefSymbol `json:"symbol"`
-	Source    string      `json:"source"`
-	Narrowed  bool        `json:"narrowed,omitempty"`
-	StartLine int         `json:"startLine,omitempty"`
-	EndLine   int         `json:"endLine,omitempty"`
+	Symbol    BriefSymbol      `json:"symbol"`
+	Source    string           `json:"source"`
+	Coverage  *ContextCoverage `json:"coverage,omitempty"`
+	Narrowed  bool             `json:"narrowed,omitempty"`
+	StartLine int              `json:"startLine,omitempty"`
+	EndLine   int              `json:"endLine,omitempty"`
+}
+
+type CoverageLine struct {
+	Line  int    `json:"line"`
+	State string `json:"state"` // hit | miss | partial | unmeasured
+}
+
+type ContextCoverage struct {
+	Freshness string         `json:"freshness"` // current | stale | unavailable
+	Ref       string         `json:"ref,omitempty"`
+	RunAt     int64          `json:"runAt,omitempty"`
+	Covered   int            `json:"statementsCovered"`
+	Total     int            `json:"statementsTotal"`
+	Percent   float64        `json:"percent"`
+	Lines     []CoverageLine `json:"lines,omitempty"`
 }
 
 // ContextType is section (b)/(e): a full type or constructor declaration.
@@ -192,7 +208,7 @@ func buildContextTargets(args []string, fileHint string, line int, symbolsFilePa
 }
 
 func newContextCmd() *cobra.Command {
-	var jsonOut, uncovered bool
+	var jsonOut, uncovered, withCoverage bool
 	var format, fileHint, scopeFlag, forFlag, symbolsFile string
 	var line, budget, testHops, helperBodies, maxFunctionLines, helperSignatures int
 	var pathFlag string
@@ -202,8 +218,10 @@ func newContextCmd() *cobra.Command {
 		Short: "Bounded test-writing context bundle for a set of symbols",
 		Long: `Assemble everything a test writer needs about a set of symbols in one
 bounded, budget-capped read: for each requested symbol, in order —
-  a. its line-bounded source (--uncovered marks lines an ingested coverage
-     profile reports as missed). --file/--line also resolve a symbol with no
+  a. its line-bounded source (--coverage adds a separate statement summary,
+     provenance, freshness and hit/miss/partial/unmeasured line states;
+     --uncovered retains source comment markers for missed or partial lines).
+     --file/--line also resolve a symbol with no
      name of its own — an anonymous closure, a switch/loop body — to its
      innermost NAMED enclosing function/method and return that function's
      WHOLE source (a closure only makes sense alongside the function that
@@ -280,6 +298,7 @@ mid-item.`,
 				scopes:           splitCSV(scopeFlag),
 				forTest:          forFlag == "test",
 				uncovered:        uncovered,
+				coverage:         withCoverage,
 				budget:           budget,
 				testHops:         testHops,
 				helperBodies:     helperBodies,
@@ -305,6 +324,7 @@ mid-item.`,
 	cmd.Flags().IntVar(&line, "line", 0, "Disambiguate every requested symbol by source line; also resolves an unnamed closure/block")
 	cmd.Flags().StringVar(&forFlag, "for", "", `Widen the bundle for a purpose: "test" adds package test helpers/fakes`)
 	cmd.Flags().BoolVar(&uncovered, "uncovered", false, "Mark source lines the ingested coverage profile reports as missed")
+	cmd.Flags().BoolVar(&withCoverage, "coverage", false, "Include statement coverage, provenance, freshness, and separate per-line states without changing source text")
 	cmd.Flags().IntVar(&budget, "budget", 20000, "Approximate output budget in tokens (~4 chars/token)")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
 	cmd.Flags().StringVar(&scopeFlag, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
@@ -320,6 +340,7 @@ type contextOptions struct {
 	scopes           []string
 	forTest          bool
 	uncovered        bool
+	coverage         bool
 	budget           int
 	testHops         int
 	helperBodies     int
@@ -461,14 +482,21 @@ func buildContext(idx *indexer.Indexer, targets []contextTarget, opts contextOpt
 				return nil, err
 			}
 		}
+		var cov *ContextCoverage
+		if opts.coverage {
+			cov, err = coverageForNode(m)
+			if err != nil {
+				return nil, err
+			}
+		}
 		rendered := renderKeptRanges(src, m.node.StartLine, m.node.EndLine, m.node.QualifiedName, kept, targetRanges, missed)
 		result.Sources = append(result.Sources, ContextSource{
-			Symbol: briefNode(m.node), Source: rendered,
+			Symbol: briefNode(m.node), Source: rendered, Coverage: cov,
 			Narrowed: narrowed, StartLine: displayStart, EndLine: displayEnd,
 		})
 		items = append(items, contextItem{
 			section: "a", label: "source " + m.node.QualifiedName,
-			text: renderSourceBlock(m.node.QualifiedName, m.node.FilePath, m.node.Language, displayStart, displayEnd, narrowed, rendered),
+			text: renderSourceBlock(m.node.QualifiedName, m.node.FilePath, m.node.Language, displayStart, displayEnd, narrowed, rendered) + renderContextCoverage(cov),
 		})
 
 		if calleeName, ok := thinWrapperCallee(src); ok {
@@ -2344,13 +2372,20 @@ func coverageMissedLines(m matchedNode) (map[int]bool, error) {
 	if row == nil || row.Ranges == "" {
 		return nil, nil
 	}
+	file, err := m.store.GetFileByPath(m.node.FilePath)
+	if err != nil {
+		return nil, err
+	}
+	if file == nil || file.ContentHash != row.ContentHash {
+		return nil, nil
+	}
 	var ranges []covpkg.Range
 	if err := json.Unmarshal([]byte(row.Ranges), &ranges); err != nil {
 		return nil, fmt.Errorf("context: decode coverage ranges for %s: %w", m.node.FilePath, err)
 	}
 	missed := map[int]bool{}
 	for _, r := range ranges {
-		if r.Kind != covpkg.KindMiss {
+		if r.Kind != covpkg.KindMiss && r.Kind != covpkg.KindPartial {
 			continue
 		}
 		for line := r.Start; line <= r.End; line++ {
@@ -2358,6 +2393,79 @@ func coverageMissedLines(m matchedNode) (map[int]bool, error) {
 		}
 	}
 	return missed, nil
+}
+
+func coverageForNode(m matchedNode) (*ContextCoverage, error) {
+	row, err := m.store.GetCoverageByFile(m.node.FilePath)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return &ContextCoverage{Freshness: "unavailable"}, nil
+	}
+	c := &ContextCoverage{Freshness: "stale", Ref: row.Ref, RunAt: row.RunAt}
+	file, err := m.store.GetFileByPath(m.node.FilePath)
+	if err != nil {
+		return nil, err
+	}
+	if file == nil || file.ContentHash != row.ContentHash {
+		return c, nil
+	}
+	c.Freshness = "current"
+	var blocks []covpkg.Block
+	if row.Blocks != "" {
+		if err := json.Unmarshal([]byte(row.Blocks), &blocks); err != nil {
+			return nil, fmt.Errorf("context: decode blocks for %s: %w", m.node.FilePath, err)
+		}
+	}
+	if len(blocks) == 0 {
+		c.Freshness = "unavailable"
+		return c, nil
+	}
+	states := covpkg.LineStates(blocks)
+	for ln := m.node.StartLine; ln <= m.node.EndLine; ln++ {
+		state := states[ln]
+		if state == "" {
+			state = "unmeasured"
+		}
+		c.Lines = append(c.Lines, CoverageLine{Line: ln, State: state})
+	}
+	nodeRows, err := m.store.GetAllNodeCoverage()
+	if err != nil {
+		return nil, err
+	}
+	for _, n := range nodeRows {
+		if n.NodeID == m.node.ID && n.ContentHash == row.ContentHash {
+			c.Covered = n.StatementsCovered
+			c.Total = n.StatementsCovered + n.StatementsUncovered
+			break
+		}
+	}
+	c.Percent = covpkg.Pct(c.Covered, c.Total-c.Covered)
+	return c, nil
+}
+
+func renderContextCoverage(c *ContextCoverage) string {
+	if c == nil {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\nCoverage: %s", c.Freshness)
+	if c.Ref != "" {
+		fmt.Fprintf(&b, " (ref %s)", c.Ref)
+	}
+	if c.RunAt != 0 {
+		fmt.Fprintf(&b, ", run %d", c.RunAt)
+	}
+	if c.Freshness == "current" {
+		fmt.Fprintf(&b, "; %d/%d statements (%.1f%%)\n", c.Covered, c.Total, c.Percent)
+		for _, ln := range c.Lines {
+			fmt.Fprintf(&b, "%4d %s\n", ln.Line, ln.State)
+		}
+	} else {
+		b.WriteString("; source coverage unavailable until a fresh profile is ingested\n")
+	}
+	return b.String()
 }
 
 // -----------------------------------------------------------------------
@@ -2385,7 +2493,7 @@ func printContextMarkdown(w io.Writer, result *ContextResult) error {
 			if startLine == 0 {
 				startLine, endLine = s.Symbol.StartLine, s.Symbol.EndLine
 			}
-			if _, err := fmt.Fprint(w, renderSourceBlock(s.Symbol.QualifiedName, s.Symbol.FilePath, s.Symbol.Language, startLine, endLine, s.Narrowed, s.Source)); err != nil {
+			if _, err := fmt.Fprint(w, renderSourceBlock(s.Symbol.QualifiedName, s.Symbol.FilePath, s.Symbol.Language, startLine, endLine, s.Narrowed, s.Source)+renderContextCoverage(s.Coverage)); err != nil {
 				return err
 			}
 		}

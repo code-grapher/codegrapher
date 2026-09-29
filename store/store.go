@@ -32,7 +32,7 @@ var schemaSQL string
 const DatabaseFilename = "codegraph.db"
 
 // CurrentSchemaVersion mirrors CURRENT_SCHEMA_VERSION in the original.
-const CurrentSchemaVersion = 8
+const CurrentSchemaVersion = 9
 
 // NowFunc returns the current time in Unix milliseconds. Injectable for tests.
 type NowFunc func() int64
@@ -355,6 +355,14 @@ var migrations = []migration{
 		CREATE INDEX IF NOT EXISTS idx_trace_nodes_reference ON trace_nodes(reference);
 		CREATE INDEX IF NOT EXISTS idx_trace_edges_target ON trace_edges(target_id, relation, accepted);
 		CREATE INDEX IF NOT EXISTS idx_trace_edges_source ON trace_edges(source_id, relation);`},
+	{9, "Preserve exact Go coverage blocks, statement totals, and ref", `
+		ALTER TABLE coverage ADD COLUMN blocks TEXT NOT NULL DEFAULT '[]';
+		ALTER TABLE coverage ADD COLUMN statements_covered INTEGER NOT NULL DEFAULT 0;
+		ALTER TABLE coverage ADD COLUMN statements_uncovered INTEGER NOT NULL DEFAULT 0;
+		ALTER TABLE coverage ADD COLUMN ref TEXT NOT NULL DEFAULT '';
+		ALTER TABLE node_coverage ADD COLUMN statements_covered INTEGER NOT NULL DEFAULT 0;
+		ALTER TABLE node_coverage ADD COLUMN statements_uncovered INTEGER NOT NULL DEFAULT 0;
+		ALTER TABLE node_coverage ADD COLUMN ref TEXT NOT NULL DEFAULT '';`},
 }
 
 func (s *Store) runMigrations(from int) error {

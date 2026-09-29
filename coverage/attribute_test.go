@@ -128,3 +128,18 @@ func sortKeys(m map[int]bool) []int {
 	sort.Ints(ks)
 	return ks
 }
+
+func TestAttributeBlocksUsesColumnsOnSharedLine(t *testing.T) {
+	nodes := []model.Node{
+		{ID: "outer", Kind: model.KindFunction, StartLine: 10, EndLine: 10, StartColumn: 0, EndColumn: 80},
+		{ID: "inner", Kind: model.KindFunction, StartLine: 10, EndLine: 10, StartColumn: 30, EndColumn: 60},
+	}
+	blocks := []Block{
+		{StartLine: 10, StartCol: 10, EndLine: 10, EndCol: 20, NumStmt: 2, Hit: true},
+		{StartLine: 10, StartCol: 40, EndLine: 10, EndCol: 50, NumStmt: 3, Hit: false},
+	}
+	got := countsByID(attributeBlocks(nodes, blocks))
+	if got["outer"].Covered != 2 || got["outer"].Uncovered != 0 || got["inner"].Covered != 0 || got["inner"].Uncovered != 3 {
+		t.Fatalf("shared-line attribution %+v", got)
+	}
+}

@@ -163,6 +163,10 @@ CREATE TABLE IF NOT EXISTS coverage (
     content_hash  TEXT NOT NULL,        -- hash at ingest time; mismatch => stale
     mode          TEXT NOT NULL,        -- go profile mode: set|count|atomic
     ranges        TEXT NOT NULL,        -- RLE JSON: [[start,end,"hit"|"miss"], ...]
+    blocks        TEXT NOT NULL DEFAULT '[]', -- exact Go blocks, empty for legacy rows
+    statements_covered INTEGER NOT NULL DEFAULT 0,
+    statements_uncovered INTEGER NOT NULL DEFAULT 0,
+    ref TEXT NOT NULL DEFAULT '',
     lines_covered   INTEGER NOT NULL,
     lines_uncovered INTEGER NOT NULL,
     pct_covered     REAL NOT NULL,
@@ -176,6 +180,9 @@ CREATE TABLE IF NOT EXISTS node_coverage (
     content_hash    TEXT NOT NULL,
     lines_covered   INTEGER NOT NULL,
     lines_uncovered INTEGER NOT NULL,
+    statements_covered INTEGER NOT NULL DEFAULT 0,
+    statements_uncovered INTEGER NOT NULL DEFAULT 0,
+    ref TEXT NOT NULL DEFAULT '',
     pct_covered     REAL NOT NULL,
     run_at          INTEGER NOT NULL,
     PRIMARY KEY (node_id),

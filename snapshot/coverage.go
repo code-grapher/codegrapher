@@ -79,11 +79,16 @@ func importCoverage(s *store.Store, path string) error {
 		if err != nil {
 			return err
 		}
+		blocksJSON, err := json.Marshal(r.Blocks)
+		if err != nil {
+			return err
+		}
 		rows = append(rows, store.CoverageRow{
-			FilePath:       r.FilePath,
-			ContentHash:    r.ContentHash,
-			Mode:           r.Mode,
-			Ranges:         string(rangesJSON),
+			FilePath:    r.FilePath,
+			ContentHash: r.ContentHash,
+			Mode:        r.Mode,
+			Ranges:      string(rangesJSON),
+			Blocks:      string(blocksJSON), StatementsCovered: r.StatementsCovered, StatementsUncovered: r.StatementsUncovered, Ref: r.Ref,
 			LinesCovered:   r.LinesCovered,
 			LinesUncovered: r.LinesUncovered,
 			PctCovered:     r.PctCovered,
@@ -107,12 +112,13 @@ func importNodeCoverage(s *store.Store, path string) error {
 	rows := make([]store.NodeCoverageRow, 0, len(recs))
 	for _, r := range recs {
 		rows = append(rows, store.NodeCoverageRow{
-			NodeID:         r.NodeID,
-			ContentHash:    r.ContentHash,
-			LinesCovered:   r.LinesCovered,
-			LinesUncovered: r.LinesUncovered,
-			PctCovered:     r.PctCovered,
-			RunAt:          r.RunAt,
+			NodeID:            r.NodeID,
+			ContentHash:       r.ContentHash,
+			LinesCovered:      r.LinesCovered,
+			LinesUncovered:    r.LinesUncovered,
+			StatementsCovered: r.StatementsCovered, StatementsUncovered: r.StatementsUncovered, Ref: r.Ref,
+			PctCovered: r.PctCovered,
+			RunAt:      r.RunAt,
 		})
 	}
 	return s.PutNodeCoverage(rows)

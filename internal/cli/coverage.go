@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,23 +19,26 @@ func newCoverageCmd() *cobra.Command {
 	var ref string
 	var root string
 	var outDir string
+	var merge bool
 
 	cmd := &cobra.Command{
-		Use:   "coverage <profile.out>",
+		Use:   "coverage <profile.out> [profile.out...]",
 		Short: "Ingest a Go coverage profile into the index",
-		Long: `Ingest a Go coverage profile (go test -coverprofile) into the codegraph
-index, attributing covered/uncovered lines to files and innermost functions.
+		Long: `Ingest one or more Go coverprofiles from the indexed checkout. Hits
+compose by exact block; modes and layouts must agree. Go NumStmt determines
+the authoritative statement percentage. --merge accumulates a later focused
+batch only when stored source hash, mode, layout, and ref agree.
 
 Resolves each profile (module) path to the repo-relative file stored in the
 graph, computes per-file line coverage and innermost per-function counts,
-and stamps each record with the file's current content_hash. Profile files
+and stamps each record with the file's current content_hash. Profiles older
+than their source files are refused; regenerate after source changes. Files
 with no matching indexed file are reported and skipped (non-fatal).
 
 With --out, also writes coverage.ingr and node_coverage.ingr to that
 directory — the recordsets the CLI uploads to the server.`,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			profilePath := args[0]
 
 			projectPath := root
 			if projectPath == "" {
@@ -56,17 +60,49 @@ directory — the recordsets the CLI uploads to the server.`,
 			}
 			defer func() { _ = reg.Close() }()
 
-			opts := coverage.Options{Ref: ref, Root: projectPath}
-			ing := coverage.NewIngestor()
-
-			var matched, skipped, linesCov, linesUnc int
-			for _, s := range reg.Stores() {
-				f, err := os.Open(profilePath)
+			opts := coverage.Options{Ref: ref, Root: projectPath, Merge: merge}
+			for _, profilePath := range args {
+				info, err := os.Stat(profilePath)
 				if err != nil {
-					return fmt.Errorf("coverage: open profile: %w", err)
+					return fmt.Errorf("coverage: stat profile %s: %w", profilePath, err)
 				}
-				sum, err := ing.Ingest(context.Background(), s, f, opts)
-				_ = f.Close()
+				stamp := info.ModTime().UnixMilli()
+				if opts.ProfileModifiedAt == 0 || stamp < opts.ProfileModifiedAt {
+					opts.ProfileModifiedAt = stamp
+				}
+			}
+			ing := coverage.NewIngestor()
+			ingestStore := func(s *store.Store, runOpts coverage.Options) (coverage.Summary, error) {
+				var readers []io.Reader
+				var opened []*os.File
+				for _, profilePath := range args {
+					f, err := os.Open(profilePath)
+					if err != nil {
+						for _, o := range opened {
+							_ = o.Close()
+						}
+						return coverage.Summary{}, fmt.Errorf("coverage: open profile %s: %w", profilePath, err)
+					}
+					opened = append(opened, f)
+					readers = append(readers, f)
+				}
+				sum, err := ing.IngestMany(context.Background(), s, readers, runOpts)
+				for _, o := range opened {
+					_ = o.Close()
+				}
+				return sum, err
+			}
+			preflight := opts
+			preflight.ValidateOnly = true
+			for _, s := range reg.Stores() {
+				if _, err := ingestStore(s, preflight); err != nil {
+					return fmt.Errorf("coverage: preflight: %w", err)
+				}
+			}
+			var matched, skipped, linesCov, linesUnc int
+			var stmtCov, stmtUnc int
+			for _, s := range reg.Stores() {
+				sum, err := ingestStore(s, opts)
 				if err != nil {
 					return fmt.Errorf("coverage: ingest: %w", err)
 				}
@@ -74,6 +110,8 @@ directory — the recordsets the CLI uploads to the server.`,
 				skipped += sum.FilesSkipped
 				linesCov += sum.LinesCovered
 				linesUnc += sum.LinesUncovered
+				stmtCov += sum.StatementsCovered
+				stmtUnc += sum.StatementsUncovered
 			}
 
 			if matched == 0 {
@@ -81,8 +119,8 @@ directory — the recordsets the CLI uploads to the server.`,
 			}
 			printSuccess(fmt.Sprintf("Coverage ingested (ref %s)", ref))
 			printInfo(fmt.Sprintf("  %d files matched, %d unmatched (skipped)", matched, skipped))
-			printInfo(fmt.Sprintf("  %d lines covered, %d uncovered (%.1f%%)",
-				linesCov, linesUnc, coverage.Pct(linesCov, linesUnc)))
+			printInfo(fmt.Sprintf("  %d/%d statements covered (%.1f%%); %d lines hit, %d missed",
+				stmtCov, stmtCov+stmtUnc, coverage.Pct(stmtCov, stmtUnc), linesCov, linesUnc))
 
 			if outDir != "" {
 				if err := writeCoverageRecordsets(reg.Stores(), outDir); err != nil {
@@ -97,6 +135,8 @@ directory — the recordsets the CLI uploads to the server.`,
 	cmd.Flags().StringVar(&ref, "ref", "", "Git ref segment (default: current branch, else HEAD)")
 	cmd.Flags().StringVar(&root, "root", "", "Repository root for module-path resolution (default: project path)")
 	cmd.Flags().StringVar(&outDir, "out", "", "Also write coverage.ingr + node_coverage.ingr to this directory")
+	cmd.Flags().BoolVar(&merge, "merge", false, "Accumulate exact block hits from prior coverage of the same indexed source, mode, layout, and ref")
+	cmd.AddCommand(newCoverageTargetsCmd())
 	return cmd
 }
 
