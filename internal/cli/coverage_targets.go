@@ -153,13 +153,19 @@ func newCoverageTargetsCmd() *cobra.Command {
 			return enc.Encode(coverageTargetsResult{Targets: targets, StaleFiles: staleFiles})
 		}
 		for _, t := range targets {
-			fmt.Fprintf(cmd.OutOrStdout(), "%5d missed  %5d/%-5d  %5.1f%%  %-7s  %s:%d  %s\n", t.StatementsTotal-t.StatementsCovered, t.StatementsCovered, t.StatementsTotal, t.Percent, t.Freshness, t.FilePath, t.Line, t.QualifiedName)
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%5d missed  %5d/%-5d  %5.1f%%  %-7s  %s:%d  %s\n", t.StatementsTotal-t.StatementsCovered, t.StatementsCovered, t.StatementsTotal, t.Percent, t.Freshness, t.FilePath, t.Line, t.QualifiedName); err != nil {
+				return err
+			}
 		}
 		if len(targets) == 0 && len(staleFiles) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "No uncovered measured functions. Ingest a Go profile to populate targets.")
+			if _, err := fmt.Fprintln(cmd.OutOrStdout(), "No uncovered measured functions. Ingest a Go profile to populate targets."); err != nil {
+				return err
+			}
 		}
 		for _, path := range staleFiles {
-			fmt.Fprintf(cmd.OutOrStdout(), "stale coverage: %s (regenerate profiles after source changed)\n", path)
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "stale coverage: %s (regenerate profiles after source changed)\n", path); err != nil {
+				return err
+			}
 		}
 		return nil
 	}}
