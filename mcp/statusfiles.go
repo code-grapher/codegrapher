@@ -30,21 +30,20 @@ func (h *toolHandlers) handleStatus(_ map[string]any) toolResult {
 		fmt.Sprintf("**Total nodes:** %d", stats.NodeCount),
 		fmt.Sprintf("**Total edges:** %d", stats.EdgeCount),
 		fmt.Sprintf("**Database size:** %s MB", toFixed2(float64(stats.DBSizeBytes)/1024/1024)),
-		// Upstream reports its Node built-in SQLite backend; reproduced
-		// verbatim for golden parity (the backend string is part of the
-		// captured spec, like the CLI status payload's "node-sqlite").
-		"**Backend:** node:sqlite (Node built-in) — full WAL + FTS5",
+		"**Backend:** SQLite (rollback journal) — FTS5",
 	}
 
-	if stats.JournalMode == "wal" {
-		lines = append(lines, "**Journal mode:** wal (concurrent reads safe)")
-	} else {
+	switch stats.JournalMode {
+	case "delete":
+		lines = append(lines, "**Journal mode:** delete")
+	case "wal":
+		lines = append(lines, "**Journal mode:** ⚠ wal — legacy index; run `codegrapher sync` to convert it to the default rollback journal")
+	default:
 		mode := stats.JournalMode
 		if mode == "" {
 			mode = "unknown"
 		}
-		lines = append(lines, fmt.Sprintf(
-			"**Journal mode:** ⚠ %s — WAL not active, so reads can block on a concurrent write (WAL appears unsupported on this filesystem)", mode))
+		lines = append(lines, fmt.Sprintf("**Journal mode:** %s", mode))
 	}
 
 	lines = append(lines, "", "### Nodes by Kind:")

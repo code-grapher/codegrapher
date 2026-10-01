@@ -9,7 +9,7 @@
   "edgeCount": 40,
   "dbSizeBytes": 176128,
   "backend": "node-sqlite",
-  "journalMode": "wal",
+  "journalMode": "delete",
   "nodesByKind": {
     "class": 5,
     "enum": 1,
