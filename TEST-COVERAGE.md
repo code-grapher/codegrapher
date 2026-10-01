@@ -67,5 +67,5 @@ two Go parsers stay in sync as the codebase evolves.
 | `watch` | Linux inotify per-dir registration cap (50 K dirs) | Requires a large fixture or a mock FS; cost outweighs value for v1 |
 | `lock` | Windows PID-liveness path (`alive_windows.go`) | Needs a Windows runner; macOS/Linux CI covers the Unix path |
 | `snapshot` | Import error paths (corrupt INGR files, version mismatch) | Missing negative-test fixtures |
-| `store` | WAL checkpoint + busy_timeout retry loops | Requires concurrent writers under controlled timing |
+| `store` | busy_timeout retry loops | Requires concurrent writers under controlled timing |
 | `resolve` | Remaining ~20 heuristic resolution patterns (dotted chains > 2 levels, cross-package interface conformance) | Needs richer fixture repos with those patterns |

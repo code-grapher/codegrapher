@@ -23,7 +23,8 @@ SQLite persistence layer using `modernc.org/sqlite` (pure Go, FTS5 supported).
 Schema ported verbatim from `db/migrations.ts`: tables `schema_versions`, `nodes`,
 `edges`, `files`, `unresolved_refs`, `project_metadata`; FTS5 virtual table
 `nodes_fts` with sync triggers; migration runner. All PRAGMAs preserved
-(WAL, synchronous=NORMAL, 64 MB cache, 256 MB mmap, busy_timeout 5000 ms).
+(synchronous=NORMAL, 64 MB cache, 256 MB mmap, busy_timeout 5000 ms; WAL dropped in
+favor of the default rollback journal so read commands can open read-only).
 Node/edge CRUD, stats queries, FTS5 BM25 search, language aggregation, file hash
 tracking, and pending-change detection are all ported. Sources: `db/sqlite-backend.ts`,
 `db/migrations.ts`, `graph/index.ts`, `search/index.ts`.

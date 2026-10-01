@@ -26,6 +26,15 @@ Refresh a previously initialized index after source changes:
 codegrapher sync
 ```
 
+Read commands (`status`, `query`, `node`, `callers`, `callees`, `impact`,
+`path`, `files`, `affected`, `context`, `stacktrace`, `trace`,
+`coverage targets`) open the index read-only and never modify it or scan for
+changes; they answer from the index as it is. Add `--refresh` to run `sync`
+first. `codegrapher status` reports pending changes (use `--no-pending` for a
+cheap stats-only call; `pendingChanges` is then `null`). An index from an older
+release fails with an "index needs upgrade" error (exit code 3); run
+`codegrapher sync` or add `--refresh`.
+
 For continuous freshness, compose the foreground server or start the durable
 background owner:
 
@@ -71,12 +80,11 @@ never guesses a body. It exits non-zero as a disambiguation response; retry it
 with `node "<exact id>" --source` (or `--file` / `--line`) using a candidate
 from `query --brief`. Do not fall back to grep or a surrounding-file read.
 
-Before node lookup, CodeGrapher compares the persisted Git revision with the
-current revision, then uses Git's dirty/untracked candidates and persisted file
-hashes to refresh only relevant files. This also catches a clean commit made
-after indexing. When `--source` is requested it verifies the current file bytes
-against the indexed hash; it refreshes once or returns an explicit stale/lock/
-read error rather than slicing a stale range.
+`node` reads the index as it is and does not refresh it. When `--source` is
+requested it verifies the current file bytes against the indexed hash: if the
+file changed since indexing it withholds the source, marks the result
+`"stale": true`, and tells you to rerun with `--refresh`, which syncs the index
+first and then returns current source. It never slices a stale range.
 
 In a Git worktree, `node` refuses an index owned by another checkout. Run
 `codegrapher init` from the current worktree to create the local index; explicit

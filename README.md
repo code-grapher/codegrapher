@@ -26,7 +26,7 @@ codegrapher init [path]      Initialize .codegraph/ and build the initial index
 codegrapher uninit [path]    Remove .codegraph/ from a project
 codegrapher index [path]     Full re-index
 codegrapher sync [path]      Incremental re-index (`--init` initializes when missing)
-codegrapher status [path]    Index stats                         (--json)
+codegrapher status [path]    Index stats and pending changes     (--json, --no-pending, --refresh)
 codegrapher query <search>   Symbol search                       (-l limit, -k kind, --brief, --json)
 codegrapher node <symbol>    Symbol metadata/source/relations    (--source[=footer|inline], --relations, --file, --line, --json)
 codegrapher path <from> <to> One bounded static call path        (--max-hops, --max-nodes, --max-edges, --source[=footer|inline], --json)
@@ -126,6 +126,28 @@ Input bytes and mapped-frame count are bounded. A runtime function name that
 contradicts the symbol containing its `file:line` is reported as `mismatch`,
 and a shifted line with a matching name in the same file is reported as
 `stale`; neither silently returns source.
+### Read-only reads, `--refresh`, and index upgrades
+
+Read commands (`status`, `query`, `node`, `callers`, `callees`, `impact`, `path`,
+`files`, `affected`, `context`, `stacktrace`, `trace`, `coverage targets`, and
+`serve`'s own handle) open the index **read-only**: they never migrate, convert,
+re-index, or create `-wal`/`-shm` files, and they do not scan the tree for
+changes. The index uses SQLite's default rollback journal (no WAL), so an idle
+reader holds no lock and a concurrent `sync` is never blocked by one.
+
+- `--refresh` (on every read command) runs a read-write sync first, then answers.
+  Without it a command answers from the index as it is; `node --source` withholds
+  source whose file changed since indexing and labels it `stale`.
+- An index with an old schema, or one still in WAL mode from an earlier release,
+  fails read commands with an "index needs upgrade" error (exit code 3) that
+  names `codegrapher sync` and `--refresh`; either performs the upgrade.
+- `status` is where staleness is reported: it scans for pending changes unless
+  `--no-pending` is given (JSON `pendingChanges` is then `null`, "unknown", not
+  zeros), prints what it can for an index needing upgrade plus the notice
+  (exit code 3), and warns when `.codegraph/` is not Git-ignored or is tracked.
+  `init` and `sync` repair the ignore entries (`.codegraph/.gitignore`,
+  `.git/info/exclude`; a tracked `.gitignore` is never edited).
+
 After refreshing, each command takes the index's short cross-process read lock
 while it resolves relationships and verifies source. If indexing is active it
 returns a busy/retry error rather than combining an old graph with new code.
