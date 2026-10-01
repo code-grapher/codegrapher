@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
@@ -17,6 +18,8 @@ func newTraceCmd() *cobra.Command {
 	var format string
 	var jsonOut bool
 
+	var refresh bool
+
 	cmd := &cobra.Command{
 		Use:   "trace <spec-reference>",
 		Short: "Show accepted SpecScore source links for a feature, REQ, AC, or scenario",
@@ -31,26 +34,14 @@ func newTraceCmd() *cobra.Command {
 			if !indexer.IsInitialized(projectPath) {
 				return fmt.Errorf("no codegraph index found at %s — run 'codegrapher init' first", projectPath)
 			}
-			reg, err := indexer.OpenRegistry(projectPath)
+			idx, err := openIndexForRead(projectPath, refresh)
 			if err != nil {
 				return fmt.Errorf("trace: open index: %w", err)
 			}
-			defer func() { _ = reg.Close() }()
-			projection, err := reg.Store(scope.Scope{Language: "trace", Version: "1"})
+			defer func() { _ = idx.Close() }()
+			projection, sourceStores, err := splitTraceStores(idx.Registry().Stores())
 			if err != nil {
-				return fmt.Errorf("trace: open projection: %w", err)
-			}
-			stores := reg.Stores()
-			var sourceStores = make([]*store.Store, 0, len(stores))
-			for sc, st := range stores {
-				if sc.Language != "trace" {
-					sourceStores = append(sourceStores, st)
-				}
-			}
-			if revision, _ := projection.GetMetadata("trace_indexed_revision"); revision == "" {
-				if err := trace.Index(projectPath, sourceStores, projection); err != nil {
-					return err
-				}
+				return err
 			}
 			result, err := trace.Query(args[0], projection, sourceStores, projectPath)
 			if err != nil {
@@ -66,5 +57,29 @@ func newTraceCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&root, "root", "", "Repository root (default: nearest initialized project)")
 	addJSONOutputFlags(cmd, &format, &jsonOut)
+	addRefreshFlag(cmd, &refresh)
 	return cmd
+}
+
+// splitTraceStores separates the SpecScore trace projection from the source
+// stores. The command is read-only, so a missing or never-built projection is
+// reported instead of built on demand.
+func splitTraceStores(stores map[scope.Scope]*store.Store) (*store.Store, []*store.Store, error) {
+	var projection *store.Store
+	sourceStores := make([]*store.Store, 0, len(stores))
+	for sc, st := range stores {
+		if sc.Language == "trace" {
+			projection = st
+			continue
+		}
+		sourceStores = append(sourceStores, st)
+	}
+	// indexTrace stamps indexed_with_version once the projection is complete;
+	// trace_indexed_revision is empty for a built projection of a non-Git tree.
+	if projection != nil {
+		if built, _ := projection.GetMetadata("indexed_with_version"); built != "" {
+			return projection, sourceStores, nil
+		}
+	}
+	return nil, nil, errors.New("trace projection is not built; run `codegrapher sync` or pass --refresh")
 }

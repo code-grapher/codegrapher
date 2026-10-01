@@ -54,6 +54,7 @@ func newSyncCmdWithRunner(runSync syncRunner) *cobra.Command {
 				defer func() { _ = idx.Close() }()
 				if !quiet {
 					printIndexResult(result, projectPath)
+					printWarnings(indexer.EnsureDataDirIgnored(projectPath))
 				}
 				if !result.Success {
 					os.Exit(1)
@@ -69,6 +70,9 @@ func newSyncCmdWithRunner(runSync syncRunner) *cobra.Command {
 				os.Exit(1)
 			}
 			defer func() { _ = idx.Close() }()
+			if warnings := indexer.EnsureDataDirIgnored(projectPath); !quiet {
+				printWarnings(warnings)
+			}
 
 			opts := indexer.Options{}
 			if isTTY() && !quiet {

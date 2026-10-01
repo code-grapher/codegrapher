@@ -58,7 +58,7 @@ func TestNodeCommandReturnsSourceWithUnrelatedNonfatalCandidates(t *testing.T) {
 	cmd.SilenceErrors = true
 	var out bytes.Buffer
 	cmd.SetOut(&out)
-	cmd.SetArgs([]string{"Good", "--source=inline", "--path", root})
+	cmd.SetArgs([]string{"Good", "--source=inline", "--refresh", "--path", root})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("node command failed: %v\n%s", err, out.String())
 	}
@@ -96,7 +96,7 @@ func TestNodeCommandReturnsSourceWithUnrelatedNonfatalCandidates(t *testing.T) {
 	fatalCmd := newNodeCmd()
 	fatalCmd.SilenceUsage = true
 	fatalCmd.SilenceErrors = true
-	fatalCmd.SetArgs([]string{"Good", "--source=inline", "--path", root})
+	fatalCmd.SetArgs([]string{"Good", "--source=inline", "--refresh", "--path", root})
 	if err := fatalCmd.Execute(); err == nil || !strings.Contains(err.Error(), "fatal.go") {
 		t.Fatalf("fatal candidate error = %v", err)
 	}

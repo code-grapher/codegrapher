@@ -213,6 +213,8 @@ func newContextCmd() *cobra.Command {
 	var line, budget, testHops, helperBodies, maxFunctionLines, helperSignatures int
 	var pathFlag string
 
+	var refresh bool
+
 	cmd := &cobra.Command{
 		Use:   "context [symbol...]",
 		Short: "Bounded test-writing context bundle for a set of symbols",
@@ -284,15 +286,11 @@ mid-item.`,
 			if !indexer.IsInitialized(projectPath) {
 				return fmt.Errorf("CodeGraph not initialized in %s", projectPath)
 			}
-			idx, err := indexer.Open(projectPath, indexer.Options{})
+			idx, err := openIndexForRead(projectPath, refresh)
 			if err != nil {
 				return fmt.Errorf("open index: %w", err)
 			}
 			defer func() { _ = idx.Close() }()
-
-			if _, err := idx.RefreshForRead(indexer.Options{}); err != nil {
-				return err
-			}
 
 			result, err := buildContext(idx, targets, contextOptions{
 				scopes:           splitCSV(scopeFlag),
@@ -333,6 +331,7 @@ mid-item.`,
 	cmd.Flags().IntVar(&helperBodies, "helper-bodies", 3, "With --for test, include full source for the top N ranked helpers (0 disables bodies)")
 	cmd.Flags().IntVar(&maxFunctionLines, "max-function-lines", 150, "Narrow a closure target's enclosing function to captures+literal when it is longer than N lines (0 = never narrow, always return the whole function)")
 	cmd.Flags().IntVar(&helperSignatures, "helper-signatures", 40, "With --for test, cap section e's ranked helpers (signature or body) at N total, independent of budget (0 = no cap)")
+	addRefreshFlag(cmd, &refresh)
 	return cmd
 }
 

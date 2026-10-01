@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/specscore/codegrapher/indexer"
+	"github.com/specscore/codegrapher/model"
 	"github.com/spf13/cobra"
 )
 
@@ -15,11 +16,23 @@ func newStatusCmd() *cobra.Command {
 	var format string
 	var pathFlag string
 	var scope string
+	var noPending bool
+
+	var refresh bool
 
 	cmd := &cobra.Command{
 		Use:   "status [path]",
 		Short: "Show index status and statistics",
-		Args:  cobra.MaximumNArgs(1),
+		Long: `Show index statistics and pending changes. Opens the index read-only: it never
+migrates, converts or modifies it and leaves no -wal/-shm files.
+
+By default status scans for pending changes (the one place staleness is
+reported); --no-pending skips that scan and reports stats only, with JSON
+pendingChanges null ("unknown", not zeros). An index that needs an upgrade (old
+schema, or WAL from an earlier release) still prints what it can plus the
+notice, and exits with code 3; run "codegrapher sync" or pass --refresh.
+It also warns when .codegraph/ is not Git-ignored or is tracked.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var projectPath string
 			if pathFlag != "" {
@@ -47,26 +60,45 @@ func newStatusCmd() *cobra.Command {
 				return nil
 			}
 
-			idx, err := indexer.Open(projectPath, indexer.Options{})
+			if refresh {
+				if _, err := refreshIndex(projectPath); err != nil {
+					printError(fmt.Sprintf("Failed to refresh index: %s", err))
+					return &ExitError{Code: 1}
+				}
+			}
+			// Read-only open that tolerates an index needing upgrade, so status can
+			// still report what it can alongside the upgrade notice.
+			idx, err := indexer.OpenReadOnly(projectPath, indexer.Options{AllowStale: true})
 			if err != nil {
 				printError(fmt.Sprintf("Failed to open index: %s", err))
-				os.Exit(1)
+				return &ExitError{Code: ExitCodeFor(err)}
 			}
 			defer func() { _ = idx.Close() }()
+			upgrade := idx.UpgradeNeeded()
 
 			q := NewStoreQuerier(idx.StoresFiltered(splitCSV(scope))...)
 			status, err := q.Status(projectPath)
 			if err != nil {
-				printError(fmt.Sprintf("Failed to get status: %s", err))
-				os.Exit(1)
+				if upgrade == nil {
+					printError(fmt.Sprintf("Failed to get status: %s", err))
+					return &ExitError{Code: 1}
+				}
+				// An old schema may lack tables status reads: report the notice only.
+				status = &StatusResult{NodesByKind: map[model.NodeKind]int{}}
 			}
-
-			// Populate pending changes from indexer.
-			changed := idx.GetChangedFiles()
-			status.PendingChanges = PendingChanges{
-				Added:    len(changed.Added),
-				Modified: len(changed.Modified),
-				Removed:  len(changed.Removed),
+			status.Initialized = true
+			status.ProjectPath = projectPath
+			status.PendingChanges = nil
+			status.Warnings = indexer.CheckDataDirIgnored(projectPath)
+			if upgrade != nil {
+				status.UpgradeNeeded = upgrade.Error()
+			} else if !noPending {
+				changed := idx.GetChangedFiles()
+				status.PendingChanges = &PendingChanges{
+					Added:    len(changed.Added),
+					Modified: len(changed.Modified),
+					Removed:  len(changed.Removed),
+				}
 			}
 
 			// Worktree mismatch detection.
@@ -84,7 +116,7 @@ func newStatusCmd() *cobra.Command {
 				if err := enc.Encode(status); err != nil {
 					return err
 				}
-				return nil
+				return statusExit(upgrade)
 			}
 
 			printBold("\nCodeGraph Status\n")
@@ -126,30 +158,52 @@ func newStatusCmd() *cobra.Command {
 			}
 			fmt.Println()
 
-			totalChanges := status.PendingChanges.Added + status.PendingChanges.Modified + status.PendingChanges.Removed
-			if totalChanges > 0 {
-				printBold("Pending Changes:")
-				if status.PendingChanges.Added > 0 {
-					fmt.Printf("  Added:     %d files\n", status.PendingChanges.Added)
-				}
-				if status.PendingChanges.Modified > 0 {
-					fmt.Printf("  Modified:  %d files\n", status.PendingChanges.Modified)
-				}
-				if status.PendingChanges.Removed > 0 {
-					fmt.Printf("  Removed:   %d files\n", status.PendingChanges.Removed)
-				}
-				printInfo("Run \"codegrapher sync\" to update the index")
-			} else {
-				printSuccess("Index is up to date")
-			}
-			fmt.Println()
-
-			return nil
+			printStatusFooter(status)
+			return statusExit(upgrade)
 		},
 	}
 
 	addJSONOutputFlags(cmd, &format, &jsonOut)
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
 	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
+	cmd.Flags().BoolVar(&noPending, "no-pending", false, "Skip the pending-change scan and report stats only (JSON pendingChanges is null)")
+	addRefreshFlag(cmd, &refresh)
 	return cmd
+}
+
+// statusExit turns an upgrade notice into the distinct exit code.
+func statusExit(upgrade error) error {
+	if upgrade != nil {
+		return &ExitError{Code: ExitNeedsUpgrade}
+	}
+	return nil
+}
+
+// printStatusFooter prints the upgrade notice, pending changes and warnings.
+func printStatusFooter(status *StatusResult) {
+	if status.UpgradeNeeded != "" {
+		printWarn(status.UpgradeNeeded)
+		printInfo("Run \"codegrapher sync\" (or pass --refresh to any read command) to upgrade the index")
+		fmt.Println()
+	} else if status.PendingChanges == nil {
+		printInfo("Pending changes not checked (--no-pending)")
+		fmt.Println()
+	} else if total := status.PendingChanges.Added + status.PendingChanges.Modified + status.PendingChanges.Removed; total > 0 {
+		printBold("Pending Changes:")
+		if status.PendingChanges.Added > 0 {
+			fmt.Printf("  Added:     %d files\n", status.PendingChanges.Added)
+		}
+		if status.PendingChanges.Modified > 0 {
+			fmt.Printf("  Modified:  %d files\n", status.PendingChanges.Modified)
+		}
+		if status.PendingChanges.Removed > 0 {
+			fmt.Printf("  Removed:   %d files\n", status.PendingChanges.Removed)
+		}
+		printInfo("Run \"codegrapher sync\" to update the index")
+		fmt.Println()
+	} else {
+		printSuccess("Index is up to date")
+		fmt.Println()
+	}
+	printWarnings(status.Warnings)
 }

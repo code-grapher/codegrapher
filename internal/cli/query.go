@@ -19,6 +19,8 @@ func newQueryCmd() *cobra.Command {
 	var pathFlag string
 	var scope string
 
+	var refresh bool
+
 	cmd := &cobra.Command{
 		Use:   "query <search>",
 		Short: "Search for symbols in the codebase",
@@ -38,10 +40,9 @@ func newQueryCmd() *cobra.Command {
 				os.Exit(1)
 			}
 
-			idx, err := indexer.Open(projectPath, indexer.Options{})
+			idx, err := openIndexForRead(projectPath, refresh)
 			if err != nil {
-				printError(fmt.Sprintf("Failed to open index: %s", err))
-				os.Exit(1)
+				failOpen(err)
 			}
 			defer func() { _ = idx.Close() }()
 
@@ -96,6 +97,7 @@ func newQueryCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&kind, "kind", "k", "", "Filter by node kind")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
 	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
+	addRefreshFlag(cmd, &refresh)
 	return cmd
 }
 

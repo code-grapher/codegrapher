@@ -188,7 +188,7 @@ func TestStatusJSONShape(t *testing.T) {
 					model.KindFunction: 6,
 				},
 				Languages: []string{"go"},
-				PendingChanges: PendingChanges{
+				PendingChanges: &PendingChanges{
 					Added: 0, Modified: 0, Removed: 0,
 				},
 				WorktreeMismatch: nil,
@@ -341,8 +341,8 @@ func TestE2EInitSyncUninit(t *testing.T) {
 	if status.Backend != "node-sqlite" {
 		t.Errorf("expected backend=node-sqlite, got %q", status.Backend)
 	}
-	if status.JournalMode != "wal" {
-		t.Errorf("expected journalMode=wal, got %q", status.JournalMode)
+	if status.JournalMode != "delete" {
+		t.Errorf("expected journalMode=delete, got %q", status.JournalMode)
 	}
 
 	// Sync should succeed on an already-indexed project with no changes.

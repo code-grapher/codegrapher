@@ -19,7 +19,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/specscore/codegrapher/internal/cli"
@@ -28,7 +27,6 @@ import (
 func main() {
 	root := cli.NewRootCmd()
 	if err := root.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		os.Exit(cli.ReportAndExitCode(err, os.Stderr))
 	}
 }

@@ -16,6 +16,8 @@ func newImpactCmd() *cobra.Command {
 	var pathFlag string
 	var scope string
 
+	var refresh bool
+
 	cmd := &cobra.Command{
 		Use:   "impact <symbol>",
 		Short: "Analyze what code is affected by changing a symbol",
@@ -35,10 +37,9 @@ func newImpactCmd() *cobra.Command {
 				os.Exit(1)
 			}
 
-			idx, err := indexer.Open(projectPath, indexer.Options{})
+			idx, err := openIndexForRead(projectPath, refresh)
 			if err != nil {
-				printError(fmt.Sprintf("Failed to open index: %s", err))
-				os.Exit(1)
+				failOpen(err)
 			}
 			defer func() { _ = idx.Close() }()
 
@@ -88,5 +89,6 @@ func newImpactCmd() *cobra.Command {
 	cmd.Flags().IntVarP(&depth, "depth", "d", 2, "Traversal depth")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
 	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
+	addRefreshFlag(cmd, &refresh)
 	return cmd
 }

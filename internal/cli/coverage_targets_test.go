@@ -57,7 +57,7 @@ func TestCoverageTargetsRankAndJSON(t *testing.T) {
 	out.Reset()
 	cmd = newCoverageTargetsCmd()
 	cmd.SetOut(&out)
-	cmd.SetArgs([]string{"--root", root, "--json"})
+	cmd.SetArgs([]string{"--root", root, "--json", "--refresh"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}

@@ -22,6 +22,8 @@ func newFilesCmd() *cobra.Command {
 	var noMetadata bool
 	var scope string
 
+	var refresh bool
+
 	cmd := &cobra.Command{
 		Use:   "files",
 		Short: "Show project file structure from the index",
@@ -40,10 +42,9 @@ func newFilesCmd() *cobra.Command {
 				os.Exit(1)
 			}
 
-			idx, err := indexer.Open(projectPath, indexer.Options{})
+			idx, err := openIndexForRead(projectPath, refresh)
 			if err != nil {
-				printError(fmt.Sprintf("Failed to open index: %s", err))
-				os.Exit(1)
+				failOpen(err)
 			}
 			defer func() { _ = idx.Close() }()
 
@@ -150,6 +151,7 @@ func newFilesCmd() *cobra.Command {
 	cmd.Flags().IntVar(&maxDepth, "max-depth", 0, "Maximum directory depth for tree format (0 = unlimited)")
 	cmd.Flags().BoolVar(&noMetadata, "no-metadata", false, "Hide file metadata")
 	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
+	addRefreshFlag(cmd, &refresh)
 	return cmd
 }
 

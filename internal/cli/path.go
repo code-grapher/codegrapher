@@ -58,6 +58,8 @@ func newPathCmd() *cobra.Command {
 	var jsonOut bool
 	var format, sourceMode, pathFlag, scope string
 	var maxHops, maxNodes, maxEdges int
+	var refresh bool
+
 	cmd := &cobra.Command{
 		Use:   "path <start-symbol-or-id> <target-symbol-or-id>",
 		Short: "Find one bounded directed call path between two symbols",
@@ -73,15 +75,12 @@ func newPathCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			idx, err := indexer.Open(root, indexer.Options{})
+			idx, refreshed, err := openIndexForReadResult(root, refresh)
 			if err != nil {
 				return fmt.Errorf("open index: %w", err)
 			}
 			defer func() { _ = idx.Close() }()
-			fresh, err := refreshNodeIndex(idx)
-			if err != nil {
-				return err
-			}
+			fresh := nodeFreshnessFor(refresh, refreshed)
 			var result PathResult
 			if err := idx.WithConsistentRead(func() error {
 				var readErr error
@@ -115,6 +114,7 @@ func newPathCmd() *cobra.Command {
 	cmd.Flags().IntVar(&maxEdges, "max-edges", defaultPathMaxEdges, "Maximum graph edges to inspect")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
 	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
+	addRefreshFlag(cmd, &refresh)
 	return cmd
 }
 

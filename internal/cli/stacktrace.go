@@ -78,6 +78,8 @@ func newStacktraceCmd() *cobra.Command {
 	var format, sourceMode, pathFlag, scope, expectedRevision string
 	var maxBytes int64
 	var maxFrames int
+	var refresh bool
+
 	cmd := &cobra.Command{
 		Use:   "stacktrace [trace-file|-]",
 		Short: "Map runtime stack frames to indexed symbols",
@@ -97,15 +99,12 @@ func newStacktraceCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			idx, err := indexer.Open(root, indexer.Options{})
+			idx, refreshed, err := openIndexForReadResult(root, refresh)
 			if err != nil {
 				return fmt.Errorf("open index: %w", err)
 			}
 			defer func() { _ = idx.Close() }()
-			fresh, err := refreshNodeIndex(idx)
-			if err != nil {
-				return err
-			}
+			fresh := nodeFreshnessFor(refresh, refreshed)
 			var result StackTraceResult
 			if err := idx.WithConsistentRead(func() error {
 				var readErr error
@@ -134,6 +133,7 @@ func newStacktraceCmd() *cobra.Command {
 	cmd.Flags().StringVar(&expectedRevision, "revision", "", "Require this indexed Git revision before mapping")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
 	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
+	addRefreshFlag(cmd, &refresh)
 	return cmd
 }
 

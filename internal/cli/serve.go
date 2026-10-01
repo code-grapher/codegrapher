@@ -35,6 +35,8 @@ func newServeCmd() *cobra.Command {
 	var apiExternalTLS bool
 	var corsOrigins []string
 
+	var refresh bool
+
 	cmd := &cobra.Command{
 		Use:   "serve [path]",
 		Short: "Serve CodeGrapher capabilities in the foreground",
@@ -91,7 +93,7 @@ func newServeCmd() *cobra.Command {
 				idx = owner.Indexer()
 			} else {
 				var err error
-				idx, err = indexer.Open(projectPath, indexer.Options{})
+				idx, err = openIndexForRead(projectPath, refresh)
 				if err != nil {
 					return fmt.Errorf("open served index: %w", err)
 				}
@@ -165,6 +167,7 @@ func newServeCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&noWatch, "no-watch", false, "Disable watching when using the default capability set")
 	_ = cmd.Flags().MarkDeprecated("no-watch", "use explicit capability flags to select only the services you need")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show watcher events, operations, timings, and batch statistics")
+	addRefreshFlag(cmd, &refresh)
 	return cmd
 }
 
