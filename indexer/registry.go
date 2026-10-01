@@ -1,6 +1,7 @@
 package indexer
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -49,6 +50,14 @@ type Registry struct {
 	root string
 	opts []store.Option
 
+	// readOnly registries open every scope database with store.OpenReadOnly
+	// and never create one. allowStale tolerates old-schema databases (and
+	// skips legacy WAL ones) so diagnostics can still report; the skipped and
+	// stale databases are recorded in upgrade.
+	readOnly   bool
+	allowStale bool
+	upgrade    []error
+
 	mu     sync.Mutex
 	stores map[scope.Scope]*store.Store
 }
@@ -56,11 +65,25 @@ type Registry struct {
 // OpenRegistry creates a registry for projectRoot and discovers (but does not
 // open) the scope databases already present in its .codegraph directory.
 func OpenRegistry(projectRoot string, opts ...store.Option) (*Registry, error) {
+	return openRegistry(projectRoot, false, false, opts)
+}
+
+// OpenRegistryReadOnly is OpenRegistry for read-only consumers: every scope
+// database is opened read-only (no migration, no journal conversion) and no
+// database is ever created. A stale-schema or legacy-WAL database fails with
+// a *store.NeedsUpgradeError, unless allowStale is set, in which case
+// stale-schema databases are opened anyway, WAL ones are skipped, and both
+// are reported by UpgradeNeeded.
+func OpenRegistryReadOnly(projectRoot string, allowStale bool, opts ...store.Option) (*Registry, error) {
+	return openRegistry(projectRoot, true, allowStale, opts)
+}
+
+func openRegistry(projectRoot string, readOnly, allowStale bool, opts []store.Option) (*Registry, error) {
 	root, err := filepath.Abs(projectRoot)
 	if err != nil {
 		return nil, err
 	}
-	r := &Registry{root: root, opts: opts, stores: map[scope.Scope]*store.Store{}}
+	r := &Registry{root: root, opts: opts, readOnly: readOnly, allowStale: allowStale, stores: map[scope.Scope]*store.Store{}}
 
 	matches, err := filepath.Glob(filepath.Join(GetCodeGraphDir(root), dbPrefix+"*"+dbSuffix))
 	if err != nil {
@@ -71,14 +94,46 @@ func OpenRegistry(projectRoot string, opts ...store.Option) (*Registry, error) {
 		if !ok {
 			continue
 		}
-		s, err := store.Open(m, r.opts...)
+		s, err := r.openExisting(m)
 		if err != nil {
+			var nu *store.NeedsUpgradeError
+			if r.allowStale && errors.As(err, &nu) {
+				r.upgrade = append(r.upgrade, err)
+				continue
+			}
 			_ = r.Close()
 			return nil, err
+		}
+		if reason := s.UpgradeReason(); reason != "" {
+			r.upgrade = append(r.upgrade, &store.NeedsUpgradeError{Path: m, Reason: reason})
 		}
 		r.stores[sc] = s
 	}
 	return r, nil
+}
+
+func (r *Registry) openExisting(path string) (*store.Store, error) {
+	if !r.readOnly {
+		return store.Open(path, r.opts...)
+	}
+	opts := r.opts
+	if r.allowStale {
+		opts = append(append([]store.Option{}, opts...), store.WithAllowStale())
+	}
+	return store.OpenReadOnly(path, opts...)
+}
+
+// ReadOnly reports whether the registry was opened with OpenRegistryReadOnly.
+func (r *Registry) ReadOnly() bool { return r.readOnly }
+
+// UpgradeNeeded returns a *store.NeedsUpgradeError (the first one, when
+// several databases need it) for a registry opened with allowStale that found
+// a stale-schema or legacy-WAL database, else nil.
+func (r *Registry) UpgradeNeeded() error {
+	if len(r.upgrade) == 0 {
+		return nil
+	}
+	return r.upgrade[0]
 }
 
 // Store returns the store for a scope, creating (and initializing) its database
@@ -89,6 +144,9 @@ func (r *Registry) Store(sc scope.Scope) (*store.Store, error) {
 
 	if s, ok := r.stores[sc]; ok {
 		return s, nil
+	}
+	if r.readOnly {
+		return nil, fmt.Errorf("registry: scope %s has no database and the index is open read-only", sc.Key())
 	}
 	// OpenRegistry pre-loads every existing scope DB, so a cache miss means the
 	// scope is new: initialize its database.

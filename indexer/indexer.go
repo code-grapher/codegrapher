@@ -95,6 +95,11 @@ type Options struct {
 	// Clock returns the current time in Unix milliseconds. Injectable for
 	// deterministic tests (0/nil = time.Now).
 	Clock func() int64
+
+	// AllowStale applies to OpenReadOnly only: tolerate old-schema databases
+	// (and skip legacy WAL ones) so diagnostics can still report. The caller
+	// must check Indexer.UpgradeNeeded.
+	AllowStale bool
 }
 
 // DefaultWorkers is the default extraction pool size.
@@ -156,6 +161,32 @@ func Open(projectRoot string, opts Options) (*Indexer, error) {
 	}
 	return newIndexer(root, reg), nil
 }
+
+// OpenReadOnly opens an existing CodeGraph project for reading only: nothing
+// is migrated, converted or created. A stale-schema or legacy-WAL index fails
+// with a *store.NeedsUpgradeError naming `codegrapher sync` and `--refresh`,
+// unless opts.AllowStale is set (see OpenRegistryReadOnly and
+// Indexer.UpgradeNeeded). Do not call write operations (Sync, IndexAll, ...)
+// on the result.
+func OpenReadOnly(projectRoot string, opts Options) (*Indexer, error) {
+	root, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	if !IsInitialized(root) {
+		return nil, fmt.Errorf("CodeGraph not initialized in %s. Run Init first", root)
+	}
+	reg, err := OpenRegistryReadOnly(root, opts.AllowStale, storeOptsFrom(opts)...)
+	if err != nil {
+		return nil, err
+	}
+	return newIndexer(root, reg), nil
+}
+
+// UpgradeNeeded reports, for an index opened with Options.AllowStale, the
+// *store.NeedsUpgradeError of the first database that needs a read-write
+// upgrade; nil when none does.
+func (idx *Indexer) UpgradeNeeded() error { return idx.reg.UpgradeNeeded() }
 
 func newIndexer(root string, reg *Registry) *Indexer {
 	return &Indexer{

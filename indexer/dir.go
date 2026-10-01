@@ -179,6 +179,88 @@ func ensureDataDirectoryGitExclude(projectRoot string) error {
 	return nil
 }
 
+// gitIgnoreState probes whether the data directory's contents are ignored by
+// Git. isRepo is false outside a Git repository (nothing to check or repair).
+// The probe path is never a real file (so it is never tracked, which would
+// mask the ignore rules); check-ignore evaluates patterns only.
+func gitIgnoreState(projectRoot string) (ignored, isRepo bool) {
+	probe := filepath.ToSlash(filepath.Join(CodeGraphDirName(), ".ignore-probe"))
+	err := exec.Command("git", "-C", projectRoot, "check-ignore", "-q", "--", probe).Run()
+	if err == nil {
+		return true, true
+	}
+	if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 1 {
+		return false, true
+	}
+	return false, false
+}
+
+// trackedDataFiles lists data-directory files Git tracks, excluding the
+// directory's own .gitignore (committing that file is harmless and allowed).
+func trackedDataFiles(projectRoot string) []string {
+	dir := filepath.ToSlash(CodeGraphDirName())
+	out, err := exec.Command("git", "-C", projectRoot, "ls-files", "--", dir).Output()
+	if err != nil {
+		return nil
+	}
+	var tracked []string
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && line != dir+"/.gitignore" {
+			tracked = append(tracked, line)
+		}
+	}
+	return tracked
+}
+
+func dataDirWarnings(projectRoot string, ignored bool, repairHint string) []string {
+	dir := CodeGraphDirName()
+	var warnings []string
+	if !ignored {
+		warnings = append(warnings, fmt.Sprintf("%s/ is not ignored by Git; %s", dir, repairHint))
+	}
+	if tracked := trackedDataFiles(projectRoot); len(tracked) > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"%s/ has %d file(s) tracked by Git (e.g. %s); untrack with `git rm -r --cached %s`",
+			dir, len(tracked), tracked[0], dir))
+	}
+	return warnings
+}
+
+// CheckDataDirIgnored reports, without writing anything, whether the data
+// directory is ignored by Git and whether Git tracks any of its files. Outside
+// a Git repository it returns nil.
+func CheckDataDirIgnored(projectRoot string) []string {
+	ignored, isRepo := gitIgnoreState(projectRoot)
+	if !isRepo {
+		return nil
+	}
+	return dataDirWarnings(projectRoot, ignored, "run `codegrapher sync` to repair")
+}
+
+// EnsureDataDirIgnored repairs the cheap, local ways the data directory can
+// end up visible to Git: it writes <dir>/.gitignore when missing and adds the
+// <dir>/ entry to .git/info/exclude. It never edits a tracked .gitignore. The
+// returned warnings describe what is still wrong (tracked data files, a repair
+// that did not take effect); nil outside a Git repository.
+func EnsureDataDirIgnored(projectRoot string) []string {
+	ignored, isRepo := gitIgnoreState(projectRoot)
+	if !isRepo {
+		return nil
+	}
+	if !ignored {
+		if fi, err := os.Stat(GetCodeGraphDir(projectRoot)); err == nil && fi.IsDir() {
+			giPath := filepath.Join(GetCodeGraphDir(projectRoot), ".gitignore")
+			if _, err := os.Stat(giPath); os.IsNotExist(err) {
+				_ = os.WriteFile(giPath, []byte(dataDirGitignore), 0o644)
+			}
+		}
+		_ = ensureDataDirectoryGitExclude(projectRoot)
+		ignored, _ = gitIgnoreState(projectRoot)
+	}
+	return dataDirWarnings(projectRoot, ignored, "automatic repair failed; add it to .git/info/exclude")
+}
+
 // RemoveDirectory removes the .codegraph directory. A symlinked .codegraph is
 // unlinked, never followed (mirrors removeDirectory in src/directory.ts).
 func RemoveDirectory(projectRoot string) error {
