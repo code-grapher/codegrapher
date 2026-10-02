@@ -83,6 +83,12 @@ func openRegistry(projectRoot string, readOnly, allowStale bool, opts []store.Op
 	if err != nil {
 		return nil, err
 	}
+	if !readOnly {
+		// Write registries (init, sync, watch, daemon, coverage, export) bulk-write
+		// the derived index: skip fsync and keep the rollback journal in memory.
+		// See store.WithFastWrites for the crash-safety trade-off.
+		opts = append(append([]store.Option{}, opts...), store.WithFastWrites())
+	}
 	r := &Registry{root: root, opts: opts, readOnly: readOnly, allowStale: allowStale, stores: map[scope.Scope]*store.Store{}}
 
 	matches, err := filepath.Glob(filepath.Join(GetCodeGraphDir(root), dbPrefix+"*"+dbSuffix))

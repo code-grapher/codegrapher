@@ -289,3 +289,29 @@ func TestEnsureDataDirIgnored_RepairFailureWarns(t *testing.T) {
 		t.Errorf("warnings = %v", w)
 	}
 }
+
+func TestWriteRegistriesAreTunedAndReadOnlyOnesAreNot(t *testing.T) {
+	root, _ := initGoProject(t)
+
+	rw, err := Open(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range rw.Stores() {
+		if got := s.JournalMode(); got != "memory" {
+			t.Errorf("write store journal mode = %q, want memory", got)
+		}
+	}
+	_ = rw.Close()
+
+	ro, err := OpenReadOnly(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ro.Close() }()
+	for _, s := range ro.Stores() {
+		if got := s.JournalMode(); got != "delete" {
+			t.Errorf("read-only store journal mode = %q, want delete", got)
+		}
+	}
+}

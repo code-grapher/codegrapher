@@ -341,8 +341,11 @@ func TestE2EInitSyncUninit(t *testing.T) {
 	if status.Backend != "node-sqlite" {
 		t.Errorf("expected backend=node-sqlite, got %q", status.Backend)
 	}
-	if status.JournalMode != "delete" {
-		t.Errorf("expected journalMode=delete, got %q", status.JournalMode)
+	// This status comes from the read-write indexer handle, which runs with
+	// WithFastWrites (in-memory journal); `codegrapher status` itself is
+	// read-only and reports "delete" (see TestStatusIsReadOnlyOnFreshIndex).
+	if status.JournalMode != "memory" {
+		t.Errorf("expected journalMode=memory, got %q", status.JournalMode)
 	}
 
 	// Sync should succeed on an already-indexed project with no changes.

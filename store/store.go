@@ -51,6 +51,7 @@ type Store struct {
 
 	allowStale    bool
 	upgradeReason string
+	fastWrites    bool
 }
 
 // Option configures a Store.
@@ -65,6 +66,77 @@ func WithNowFunc(now NowFunc) Option {
 // CurrentSchemaVersion (for diagnostics such as `status`) instead of failing.
 func WithAllowStale() Option {
 	return func(s *Store) { s.allowStale = true }
+}
+
+// WithFastWrites tunes a READ-WRITE handle for bulk indexing speed:
+// synchronous=OFF (no fsync) and journal_mode=MEMORY (the rollback journal
+// lives in RAM, so a write transaction does not create/delete a -journal file).
+// Both are per-connection; nothing is persisted, so readers (which never use
+// this option) keep SQLite's defaults and still never write.
+//
+// Crash safety: with these settings an OS crash or power loss in the middle of
+// a write transaction can leave the database file corrupt, and a process crash
+// mid-transaction cannot be rolled back. That is acceptable here because the
+// index is derived, rebuildable data: a corrupt index is reported as a
+// *CorruptError telling the user to delete it (`codegrapher uninit`) and
+// rebuild it (`codegrapher init`).
+func WithFastWrites() Option {
+	return func(s *Store) { s.fastWrites = true }
+}
+
+// tuneWrites applies WithFastWrites. It fails loudly if SQLite does not report
+// the requested journal mode, instead of silently running untuned.
+func (s *Store) tuneWrites() error {
+	if !s.fastWrites {
+		return nil
+	}
+	if _, err := s.db.Exec("PRAGMA synchronous=OFF"); err != nil {
+		return fmt.Errorf("store: tune %s: %w", s.path, err)
+	}
+	var mode string
+	if err := s.db.QueryRow("PRAGMA journal_mode=MEMORY").Scan(&mode); err != nil {
+		return fmt.Errorf("store: tune %s: %w", s.path, err)
+	}
+	return requireJournalMode(s.path, "memory", mode)
+}
+
+// requireJournalMode fails when SQLite reports a journal mode other than the
+// requested one (it silently keeps the old mode when a switch is not possible).
+func requireJournalMode(path, want, got string) error {
+	if !strings.EqualFold(got, want) {
+		return fmt.Errorf("store: tune %s: journal_mode=%s not applied (database reports %q)", path, strings.ToUpper(want), got)
+	}
+	return nil
+}
+
+// ErrCorrupt is matched (errors.Is) by every corrupt-index error.
+var ErrCorrupt = errors.New("index is corrupt")
+
+// CorruptError reports an unreadable or malformed index database.
+type CorruptError struct {
+	Path string
+	Err  error
+}
+
+func (e *CorruptError) Error() string {
+	return fmt.Sprintf("index is corrupt: %s (%v); it is derived data: run `codegrapher uninit` then `codegrapher init` to rebuild it", e.Path, e.Err)
+}
+
+func (e *CorruptError) Unwrap() error { return e.Err }
+
+// Is makes errors.Is(err, ErrCorrupt) true.
+func (e *CorruptError) Is(target error) bool { return target == ErrCorrupt }
+
+// classify turns SQLite "malformed"/"not a database" failures into CorruptError.
+func classify(path string, err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "malformed") || strings.Contains(msg, "not a database") || strings.Contains(msg, "SQLITE_CORRUPT") || strings.Contains(msg, "SQLITE_NOTADB") {
+		return &CorruptError{Path: path, Err: err}
+	}
+	return err
 }
 
 // dsn builds the modernc.org/sqlite DSN with the same connection-level
@@ -189,7 +261,7 @@ func OpenReadOnly(path string, opts ...Option) (*Store, error) {
 	v, err := s.schemaVersion()
 	if err != nil {
 		_ = s.db.Close()
-		return nil, err
+		return nil, classify(path, err)
 	}
 	if v < CurrentSchemaVersion {
 		s.upgradeReason = fmt.Sprintf("schema v%d, current v%d", v, CurrentSchemaVersion)
@@ -218,17 +290,21 @@ func Initialize(path string, opts ...Option) (*Store, error) {
 	}
 	if err := s.convertJournal(); err != nil {
 		_ = s.db.Close()
-		return nil, err
+		return nil, classify(path, err)
+	}
+	if err := s.tuneWrites(); err != nil {
+		_ = s.db.Close()
+		return nil, classify(path, err)
 	}
 	fresh, err := s.bootstrapSchema()
 	if err != nil {
 		_ = s.db.Close()
-		return nil, err
+		return nil, classify(path, err)
 	}
 	v, err := s.schemaVersion()
 	if err != nil {
 		_ = s.db.Close()
-		return nil, err
+		return nil, classify(path, err)
 	}
 	if !fresh && v < CurrentSchemaVersion {
 		if err := s.runMigrations(v); err != nil {
@@ -309,12 +385,16 @@ func Open(path string, opts ...Option) (*Store, error) {
 	}
 	if err := s.convertJournal(); err != nil {
 		_ = s.db.Close()
-		return nil, err
+		return nil, classify(path, err)
+	}
+	if err := s.tuneWrites(); err != nil {
+		_ = s.db.Close()
+		return nil, classify(path, err)
 	}
 	v, err := s.schemaVersion()
 	if err != nil {
 		_ = s.db.Close()
-		return nil, err
+		return nil, classify(path, err)
 	}
 	if v < CurrentSchemaVersion {
 		if err := s.runMigrations(v); err != nil {
