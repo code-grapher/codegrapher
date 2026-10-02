@@ -142,12 +142,13 @@ tracked in `db/migrations.ts`): tables `schema_versions`, `nodes`, `edges`, `fil
 `unresolved_refs`, `project_metadata`; **FTS5** virtual table `nodes_fts(id, name,
 qualified_name, docstring, signature)` with sync triggers; composite edge indexes
 (`(source,kind)`, `(target,kind)` — narrow ones deliberately dropped in migration v4).
-PRAGMAs: busy_timeout 5000, WAL, synchronous=NORMAL, 64 MB cache, 256 MB mmap.
+PRAGMAs: busy_timeout 5000, synchronous=NORMAL, 64 MB cache, 256 MB mmap. (Original: WAL.
+DIVERGENCE: codegrapher uses the default rollback journal — see README "Read-only reads".)
 
 Go port: `modernc.org/sqlite` (pure Go, FTS5 supported). Schema is ours to own
 (no consumer reads it directly) but porting it verbatim minimizes behavior drift.
 
-`.codegraph/` layout: `.gitignore`, `codegraph.db{,-wal,-shm}`, `codegraph.lock`,
+`.codegraph/` layout: `.gitignore`, `codegraph.db` (legacy WAL indexes also had `-wal`/`-shm`), `codegraph.lock`,
 `daemon.pid`, `daemon.sock`. No config file — all config via `CODEGRAPH_*` env vars
 (~22 of them; see module map). `project_metadata` table stores version/extraction-version.
 

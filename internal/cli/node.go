@@ -33,6 +33,9 @@ type NodeResult struct {
 type NodeFreshness struct {
 	Refreshed bool `json:"refreshed"`
 	Verified  bool `json:"verified"`
+	// Stale is set when the file on disk no longer matches the index and the
+	// command did not refresh (run it with --refresh to see current source).
+	Stale bool `json:"stale,omitempty"`
 }
 
 type NodeRelation struct {
@@ -54,6 +57,8 @@ func newNodeCmd() *cobra.Command {
 	var format, fileHint, scope, sourceMode string
 	var line, limit int
 	var pathFlag string
+
+	var refresh bool
 
 	cmd := &cobra.Command{
 		Use:   "node <symbol> [symbol...]",
@@ -83,16 +88,13 @@ func newNodeCmd() *cobra.Command {
 			if !indexer.IsInitialized(projectPath) {
 				return fmt.Errorf("CodeGraph not initialized in %s", projectPath)
 			}
-			idx, err := indexer.Open(projectPath, indexer.Options{})
+			idx, refreshed, err := openIndexForReadResult(projectPath, refresh)
 			if err != nil {
 				return fmt.Errorf("open index: %w", err)
 			}
 			defer func() { _ = idx.Close() }()
 
-			fresh, err := refreshNodeIndex(idx)
-			if err != nil {
-				return err
-			}
+			fresh := nodeFreshnessFor(refresh, refreshed)
 			var results []NodeResult
 			incomplete := false
 			for _, symbol := range args {
@@ -148,15 +150,17 @@ func newNodeCmd() *cobra.Command {
 	cmd.Flags().IntVarP(&limit, "limit", "l", 12, "Maximum relationships in each direction")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
 	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
+	addRefreshFlag(cmd, &refresh)
 	return cmd
 }
 
-func refreshNodeIndex(idx *indexer.Indexer) (NodeFreshness, error) {
-	res, err := idx.RefreshForRead(indexer.Options{})
-	if err != nil {
-		return NodeFreshness{}, err
+// nodeFreshnessFor reports what --refresh did: Refreshed means the sync
+// changed the index. Without --refresh nothing is refreshed.
+func nodeFreshnessFor(refresh bool, res indexer.SyncResult) NodeFreshness {
+	if !refresh {
+		return NodeFreshness{}
 	}
-	return NodeFreshness{Refreshed: res.FilesAdded > 0 || res.FilesModified > 0 || res.FilesRemoved > 0 || res.FullReindex}, nil
+	return NodeFreshness{Refreshed: res.FilesAdded > 0 || res.FilesModified > 0 || res.FilesRemoved > 0 || res.FullReindex}
 }
 
 func resolveNode(idx *indexer.Indexer, scopes []string, symbol, fileHint string, line int, wantSource, wantRelations bool, limit int, freshness NodeFreshness) (NodeResult, error) {
@@ -181,35 +185,21 @@ func resolveNode(idx *indexer.Indexer, scopes []string, symbol, fileHint string,
 			return NodeResult{}, err
 		}
 		if indexer.HashContent(content.all) != rec.ContentHash {
-			res := idx.SyncFiles([]string{match.node.FilePath}, indexer.Options{})
-			if res.LockUnavailable {
-				return NodeResult{}, errors.New("index is locked; cannot safely refresh changed source")
-			}
-			if len(res.Errors) > 0 {
-				return NodeResult{}, fmt.Errorf("refresh %s: %s", match.node.FilePath, res.Errors[0].Message)
-			}
-			freshness.Refreshed = true
-			matches, err = findNodeMatches(idx.StoresFiltered(scopes), symbol)
-			if err != nil {
-				return NodeResult{}, err
-			}
-			matches = narrowNodeMatches(matches, fileHint, line)
-			if len(matches) != 1 {
-				return NodeResult{}, fmt.Errorf("symbol %q changed while refreshing; run node again", symbol)
-			}
-			match = matches[0]
-			symbolBrief = briefNode(match.node)
-			result.Symbol = &symbolBrief
-			content, rec, err = readIndexedNodeSource(idx.Root(), match)
-			if err != nil || indexer.HashContent(content.all) != rec.ContentHash {
-				return NodeResult{}, fmt.Errorf("source %s changed during retrieval; no stale source returned", match.node.FilePath)
-			}
+			// The index is never modified here. The file changed since it was
+			// indexed (or during a --refresh): withhold the stale source.
+			result.Freshness.Stale = true
+			result.Hint = staleSourceHint
+			return withRelations(result, match, wantRelations, limit)
 		}
 		result.Source = string(content.node)
 		result.SourceRange = "line-bounded"
 		result.Freshness = freshness
 		result.Freshness.Verified = true
 	}
+	return withRelations(result, match, wantRelations, limit)
+}
+
+func withRelations(result NodeResult, match matchedNode, wantRelations bool, limit int) (NodeResult, error) {
 	if wantRelations {
 		rels, err := nodeRelations(match, limit)
 		if err != nil {
@@ -239,6 +229,13 @@ func readIndexedNodeSource(root string, match matchedNode) (nodeSource, *model.F
 	return nodeSource{all: data, node: lineBoundedSource(data, match.node.StartLine, match.node.EndLine)}, rec, nil
 }
 
+// errStaleSource marks source that no longer matches the index. node, path and
+// stacktrace withhold such source and report it as stale instead of failing.
+var errStaleSource = errors.New("stale source")
+
+// staleSourceHint is the user-facing explanation for withheld stale source.
+const staleSourceHint = "Source changed since indexing; rerun with --refresh to index and show current source."
+
 // readVerifiedIndexedNodeSource never mutates the index. Callers refresh once
 // before resolving graph identities, then use this to ensure the returned body
 // still belongs to that same indexed revision. A mismatch must be retried from
@@ -249,10 +246,10 @@ func readVerifiedIndexedNodeSource(root string, match matchedNode) (string, erro
 		return "", err
 	}
 	if indexer.HashContent(content.all) != rec.ContentHash {
-		return "", fmt.Errorf("source %s changed during retrieval; rerun after refresh", match.node.FilePath)
+		return "", fmt.Errorf("%w: %s changed since indexing; rerun with --refresh", errStaleSource, match.node.FilePath)
 	}
 	if len(content.node) == 0 {
-		return "", fmt.Errorf("indexed source range %s:%d-%d is no longer readable; rerun after refresh", match.node.FilePath, match.node.StartLine, match.node.EndLine)
+		return "", fmt.Errorf("%w: indexed source range %s:%d-%d is no longer readable; rerun with --refresh", errStaleSource, match.node.FilePath, match.node.StartLine, match.node.EndLine)
 	}
 	return string(content.node), nil
 }
@@ -437,6 +434,11 @@ func printNodeMarkdown(w io.Writer, result NodeResult, requestedSource bool) err
 	}
 	if s.Signature != "" {
 		if _, err := fmt.Fprintf(w, "- Signature: `%s`\n", s.Signature); err != nil {
+			return err
+		}
+	}
+	if result.Freshness.Stale {
+		if _, err := fmt.Fprintln(w, "- Freshness: stale (source changed since indexing; rerun with --refresh)"); err != nil {
 			return err
 		}
 	}

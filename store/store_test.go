@@ -45,8 +45,8 @@ func TestInitialize_SchemaVersionRecorded(t *testing.T) {
 	if v != CurrentSchemaVersion {
 		t.Errorf("schema version = %d, want %d", v, CurrentSchemaVersion)
 	}
-	if got := s.JournalMode(); got != "wal" {
-		t.Errorf("journal mode = %q, want wal", got)
+	if got := s.JournalMode(); got != "delete" {
+		t.Errorf("journal mode = %q, want delete", got)
 	}
 }
 

@@ -83,10 +83,13 @@ capture() {
 
   local sym
   for sym in "$@"; do
+    # File names replace every ':' with '__' (cmd/codegrapher goldenSymbolFilename),
+    # so "Store::Get" is stored as callers-Store____Get.json.
+    local file="${sym//:/__}"
     (cd "$dir" \
-      && "$BIN" callers "$sym" --json > "$out/callers-$sym.json" 2>/dev/null \
-      && "$BIN" callees "$sym" --json > "$out/callees-$sym.json" 2>/dev/null \
-      && "$BIN" impact  "$sym" --json > "$out/impact-$sym.json"  2>/dev/null) || true
+      && "$BIN" callers "$sym" --json > "$out/callers-$file.json" 2>/dev/null \
+      && "$BIN" callees "$sym" --json > "$out/callees-$file.json" 2>/dev/null \
+      && "$BIN" impact  "$sym" --json > "$out/impact-$file.json"  2>/dev/null) || true
   done
 
   # Extraction goldens (post-resolution DB dumps, matching capture-extraction-golden.sh).

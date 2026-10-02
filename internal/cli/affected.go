@@ -25,6 +25,8 @@ func newAffectedCmd() *cobra.Command {
 	var filterGlob string
 	var scope string
 
+	var refresh bool
+
 	cmd := &cobra.Command{
 		Use:   "affected [files...]",
 		Short: "Find test files affected by changed source files",
@@ -62,10 +64,9 @@ func newAffectedCmd() *cobra.Command {
 				return nil
 			}
 
-			idx, err := indexer.Open(projectPath, indexer.Options{})
+			idx, err := openIndexForRead(projectPath, refresh)
 			if err != nil {
-				printError(fmt.Sprintf("Failed to open index: %s", err))
-				os.Exit(1)
+				failOpen(err)
 			}
 			defer func() { _ = idx.Close() }()
 
@@ -112,6 +113,7 @@ func newAffectedCmd() *cobra.Command {
 	cmd.Flags().IntVarP(&depth, "depth", "d", 5, "Max dependency traversal depth")
 	cmd.Flags().StringVarP(&filterGlob, "filter", "f", "", "Custom glob filter for test files")
 	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
+	addRefreshFlag(cmd, &refresh)
 	return cmd
 }
 

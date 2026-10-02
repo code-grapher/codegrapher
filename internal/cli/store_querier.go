@@ -220,7 +220,7 @@ func (q *StoreQuerier) Status(projectPath string) (*StatusResult, error) {
 			out.LastIndexed = r.LastIndexed
 			out.Backend = r.Backend
 			out.JournalMode = r.JournalMode
-			out.PendingChanges = PendingChanges{
+			out.PendingChanges = &PendingChanges{
 				Added:    r.PendingChanges.Added,
 				Modified: r.PendingChanges.Modified,
 				Removed:  r.PendingChanges.Removed,

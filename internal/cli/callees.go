@@ -16,6 +16,8 @@ func newCalleesCmd() *cobra.Command {
 	var pathFlag string
 	var scope string
 
+	var refresh bool
+
 	cmd := &cobra.Command{
 		Use:   "callees <symbol>",
 		Short: "Find all functions/methods that a specific symbol calls",
@@ -35,10 +37,9 @@ func newCalleesCmd() *cobra.Command {
 				os.Exit(1)
 			}
 
-			idx, err := indexer.Open(projectPath, indexer.Options{})
+			idx, err := openIndexForRead(projectPath, refresh)
 			if err != nil {
-				printError(fmt.Sprintf("Failed to open index: %s", err))
-				os.Exit(1)
+				failOpen(err)
 			}
 			defer func() { _ = idx.Close() }()
 
@@ -77,5 +78,6 @@ func newCalleesCmd() *cobra.Command {
 	cmd.Flags().IntVarP(&limit, "limit", "l", 20, "Maximum results")
 	cmd.Flags().StringVarP(&pathFlag, "path", "p", "", "Project path")
 	cmd.Flags().StringVar(&scope, "scope", "", "Comma-separated scope keys to query (default: all scopes)")
+	addRefreshFlag(cmd, &refresh)
 	return cmd
 }

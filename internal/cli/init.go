@@ -45,6 +45,7 @@ func newInitCmd() *cobra.Command {
 			defer func() { _ = idx.Close() }()
 
 			printIndexResult(result, projectPath)
+			printWarnings(indexer.EnsureDataDirIgnored(projectPath))
 			if !result.Success {
 				os.Exit(1)
 			}

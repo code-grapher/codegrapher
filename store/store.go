@@ -9,14 +9,18 @@
 //
 // Like the original (one node:sqlite handle), the Store uses a single
 // connection; concurrent use is safe via database/sql's serialization plus
-// WAL mode and busy_timeout.
+// busy_timeout. The index is derived, rebuildable data with rare, short
+// writes, so SQLite's default rollback journal is used (no WAL): there are no
+// -wal/-shm side files, and an idle connection holds no lock.
 package store
 
 import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,6 +48,10 @@ type Store struct {
 	db   *sql.DB
 	path string
 	now  NowFunc
+
+	allowStale    bool
+	upgradeReason string
+	fastWrites    bool
 }
 
 // Option configures a Store.
@@ -54,27 +62,158 @@ func WithNowFunc(now NowFunc) Option {
 	return func(s *Store) { s.now = now }
 }
 
+// WithAllowStale lets OpenReadOnly open a database whose schema is older than
+// CurrentSchemaVersion (for diagnostics such as `status`) instead of failing.
+func WithAllowStale() Option {
+	return func(s *Store) { s.allowStale = true }
+}
+
+// WithFastWrites tunes a READ-WRITE handle for bulk indexing speed:
+// synchronous=OFF (no fsync) and journal_mode=MEMORY (the rollback journal
+// lives in RAM, so a write transaction does not create/delete a -journal file).
+// Both are per-connection; nothing is persisted, so readers (which never use
+// this option) keep SQLite's defaults and still never write.
+//
+// Crash safety: with these settings an OS crash or power loss in the middle of
+// a write transaction can leave the database file corrupt, and a process crash
+// mid-transaction cannot be rolled back. That is acceptable here because the
+// index is derived, rebuildable data: a corrupt index is reported as a
+// *CorruptError telling the user to delete it (`codegrapher uninit`) and
+// rebuild it (`codegrapher init`).
+func WithFastWrites() Option {
+	return func(s *Store) { s.fastWrites = true }
+}
+
+// tuneWrites applies WithFastWrites. It fails loudly if SQLite does not report
+// the requested journal mode, instead of silently running untuned.
+func (s *Store) tuneWrites() error {
+	if !s.fastWrites {
+		return nil
+	}
+	if _, err := s.db.Exec("PRAGMA synchronous=OFF"); err != nil {
+		return fmt.Errorf("store: tune %s: %w", s.path, err)
+	}
+	var mode string
+	if err := s.db.QueryRow("PRAGMA journal_mode=MEMORY").Scan(&mode); err != nil {
+		return fmt.Errorf("store: tune %s: %w", s.path, err)
+	}
+	return requireJournalMode(s.path, "memory", mode)
+}
+
+// requireJournalMode fails when SQLite reports a journal mode other than the
+// requested one (it silently keeps the old mode when a switch is not possible).
+func requireJournalMode(path, want, got string) error {
+	if !strings.EqualFold(got, want) {
+		return fmt.Errorf("store: tune %s: journal_mode=%s not applied (database reports %q)", path, strings.ToUpper(want), got)
+	}
+	return nil
+}
+
+// ErrCorrupt is matched (errors.Is) by every corrupt-index error.
+var ErrCorrupt = errors.New("index is corrupt")
+
+// CorruptError reports an unreadable or malformed index database.
+type CorruptError struct {
+	Path string
+	Err  error
+}
+
+func (e *CorruptError) Error() string {
+	if e.Path == "" {
+		return fmt.Sprintf("index is corrupt (%v); %s", e.Err, RebuildAdvice)
+	}
+	return fmt.Sprintf("index is corrupt: %s (%v); %s", e.Path, e.Err, RebuildAdvice)
+}
+
+func (e *CorruptError) Unwrap() error { return e.Err }
+
+// Is makes errors.Is(err, ErrCorrupt) true.
+func (e *CorruptError) Is(target error) bool { return target == ErrCorrupt }
+
+// RebuildAdvice tells the user how to recover from a corrupt index.
+const RebuildAdvice = "the index is derived data: run `codegrapher uninit` then `codegrapher init` to rebuild it"
+
+// LooksCorrupt reports whether an error message is SQLite's "malformed" or
+// "not a database" failure (result codes 11 and 26). Corruption can surface
+// from any query long after open, so the CLI error reporters use this to attach
+// RebuildAdvice centrally.
+func LooksCorrupt(msg string) bool {
+	return strings.Contains(msg, "malformed") || strings.Contains(msg, "not a database") ||
+		strings.Contains(msg, "SQLITE_CORRUPT") || strings.Contains(msg, "SQLITE_NOTADB")
+}
+
+// classify turns SQLite "malformed"/"not a database" failures into CorruptError.
+func classify(path string, err error) error {
+	if err != nil && LooksCorrupt(err.Error()) {
+		return &CorruptError{Path: path, Err: err}
+	}
+	return err
+}
+
+// AsCorrupt wraps a corruption error whose database path is unknown (it
+// surfaced from a query) as a *CorruptError; other errors pass through.
+func AsCorrupt(err error) error {
+	if err == nil || errors.Is(err, ErrCorrupt) {
+		return err
+	}
+	return classify("", err)
+}
+
 // dsn builds the modernc.org/sqlite DSN with the same connection-level
 // pragmas the original applies (busy_timeout first — see src/db/index.ts).
 func dsn(path string) string {
+	return buildDSN(path, false)
+}
+
+// readOnlyDSN is the DSN for a read-only handle: mode=ro plus only the
+// connection-local pragmas that never write to the database file.
+func readOnlyDSN(path string) string {
+	return buildDSN(path, true)
+}
+
+func buildDSN(path string, readOnly bool) string {
 	pragmas := []string{
 		"busy_timeout(5000)",
 		"foreign_keys(ON)",
-		"journal_mode(WAL)",
 		"synchronous(NORMAL)",
 		"cache_size(-64000)",
 		"temp_store(MEMORY)",
 		"mmap_size(268435456)",
 	}
-	parts := make([]string, len(pragmas))
-	for i, p := range pragmas {
-		parts[i] = "_pragma=" + p
+	parts := make([]string, 0, len(pragmas)+1)
+	if readOnly {
+		parts = append(parts, "mode=ro")
+	}
+	for _, p := range pragmas {
+		parts = append(parts, "_pragma="+p)
 	}
 	return "file:" + path + "?" + strings.Join(parts, "&")
 }
 
+// ErrNeedsUpgrade is matched (errors.Is) by every "index needs upgrade" error.
+var ErrNeedsUpgrade = errors.New("index needs upgrade")
+
+// NeedsUpgradeError reports that an index cannot be read without a
+// read-write upgrade: its schema is older than CurrentSchemaVersion, or it is
+// still in WAL journal mode. Its message names the commands that upgrade it.
+type NeedsUpgradeError struct {
+	Path   string
+	Reason string
+}
+
+func (e *NeedsUpgradeError) Error() string {
+	return fmt.Sprintf("index needs upgrade: %s (%s); run `codegrapher sync` or pass --refresh to upgrade it", e.Path, e.Reason)
+}
+
+// Is makes errors.Is(err, ErrNeedsUpgrade) true.
+func (e *NeedsUpgradeError) Is(target error) bool { return target == ErrNeedsUpgrade }
+
 func openDB(path string, opts []Option) (*Store, error) {
-	db, err := sql.Open("sqlite", dsn(path))
+	return openDSN(path, dsn(path), opts)
+}
+
+func openDSN(path, dataSource string, opts []Option) (*Store, error) {
+	db, err := sql.Open("sqlite", dataSource)
 	if err != nil {
 		return nil, fmt.Errorf("store: open %s: %w", path, err)
 	}
@@ -90,6 +229,92 @@ func openDB(path string, opts []Option) (*Store, error) {
 	return s, nil
 }
 
+// convertJournal switches a legacy WAL index to the default rollback journal.
+// It runs only on read-write opens: it is the explicit upgrade step.
+func (s *Store) convertJournal() error {
+	if s.JournalMode() != "wal" {
+		return nil
+	}
+	if _, err := s.db.Exec("PRAGMA journal_mode=DELETE"); err != nil {
+		return fmt.Errorf("store: convert %s from WAL: %w", s.path, err)
+	}
+	return nil
+}
+
+// sqliteHeaderSize is the size of the SQLite database header; a file shorter
+// than this cannot be a database that was ever written.
+const sqliteHeaderSize = 100
+
+// checkHeaderLength reports a zero-byte or header-less index file (an
+// interrupted create, a truncated copy) as corrupt rather than as an index that
+// merely needs an upgrade.
+func checkHeaderLength(path string) error {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("store: database not found: %s", path)
+	}
+	if fi.Size() < sqliteHeaderSize {
+		return &CorruptError{Path: path, Err: fmt.Errorf("file is %d bytes, shorter than a database header", fi.Size())}
+	}
+	return nil
+}
+
+// fileIsWAL reports whether the SQLite header at path declares WAL mode
+// (file-format version bytes 18 and 19 equal 2). Reading the header directly
+// avoids opening the database, which for a WAL file would create -shm.
+func fileIsWAL(path string) (bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = f.Close() }()
+	hdr := make([]byte, 20)
+	if _, err := io.ReadFull(f, hdr); err != nil {
+		// Shorter than a header: empty or not yet a database; nothing to convert.
+		return false, nil
+	}
+	return hdr[18] == 2 || hdr[19] == 2, nil
+}
+
+// OpenReadOnly opens an existing database without writing to it: no
+// migration, no journal conversion, no write pragmas. A database that is
+// still in WAL mode, or whose schema is older than CurrentSchemaVersion,
+// yields a *NeedsUpgradeError (WAL is never opened; with WithAllowStale a
+// stale schema is opened anyway and reported through UpgradeReason).
+func OpenReadOnly(path string, opts ...Option) (*Store, error) {
+	if err := checkHeaderLength(path); err != nil {
+		return nil, err
+	}
+	wal, err := fileIsWAL(path)
+	if err != nil {
+		return nil, fmt.Errorf("store: read header %s: %w", path, err)
+	}
+	if wal {
+		return nil, &NeedsUpgradeError{Path: path, Reason: "legacy WAL journal mode"}
+	}
+	s, err := openDSN(path, readOnlyDSN(path), opts)
+	if err != nil {
+		return nil, err
+	}
+	v, err := s.schemaVersion()
+	if err != nil {
+		_ = s.db.Close()
+		return nil, classify(path, err)
+	}
+	if v < CurrentSchemaVersion {
+		s.upgradeReason = fmt.Sprintf("schema v%d, current v%d", v, CurrentSchemaVersion)
+		if !s.allowStale {
+			_ = s.db.Close()
+			return nil, &NeedsUpgradeError{Path: path, Reason: s.upgradeReason}
+		}
+	}
+	return s, nil
+}
+
+// UpgradeReason is non-empty when a stale-schema database was opened
+// read-only with WithAllowStale; it explains why an upgrade is needed.
+func (s *Store) UpgradeReason() string { return s.upgradeReason }
+
 // Initialize creates a database at path when needed, or opens and migrates an
 // existing database. Bootstrap runs under an immediate transaction so two
 // initializers cannot both observe a partially-created schema.
@@ -101,15 +326,23 @@ func Initialize(path string, opts ...Option) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := s.convertJournal(); err != nil {
+		_ = s.db.Close()
+		return nil, classify(path, err)
+	}
+	if err := s.tuneWrites(); err != nil {
+		_ = s.db.Close()
+		return nil, classify(path, err)
+	}
 	fresh, err := s.bootstrapSchema()
 	if err != nil {
 		_ = s.db.Close()
-		return nil, err
+		return nil, classify(path, err)
 	}
 	v, err := s.schemaVersion()
 	if err != nil {
 		_ = s.db.Close()
-		return nil, err
+		return nil, classify(path, err)
 	}
 	if !fresh && v < CurrentSchemaVersion {
 		if err := s.runMigrations(v); err != nil {
@@ -181,17 +414,25 @@ func (s *Store) bootstrapSchemaOnce() (fresh bool, err error) {
 
 // Open opens an existing database and applies any pending migrations.
 func Open(path string, opts ...Option) (*Store, error) {
-	if _, err := os.Stat(path); err != nil {
-		return nil, fmt.Errorf("store: database not found: %s", path)
+	if err := checkHeaderLength(path); err != nil {
+		return nil, err
 	}
 	s, err := openDB(path, opts)
 	if err != nil {
 		return nil, err
 	}
+	if err := s.convertJournal(); err != nil {
+		_ = s.db.Close()
+		return nil, classify(path, err)
+	}
+	if err := s.tuneWrites(); err != nil {
+		_ = s.db.Close()
+		return nil, classify(path, err)
+	}
 	v, err := s.schemaVersion()
 	if err != nil {
 		_ = s.db.Close()
-		return nil, err
+		return nil, classify(path, err)
 	}
 	if v < CurrentSchemaVersion {
 		if err := s.runMigrations(v); err != nil {
@@ -217,10 +458,18 @@ func (s *Store) Size() (int64, error) {
 	return fi.Size(), nil
 }
 
-// JournalMode reports the journal mode actually in effect ("wal", "delete",
-// …). SQLite silently keeps the prior mode when WAL can't be enabled (e.g.
-// network mounts), so this is surfaced in status for triage (issue #238).
+// JournalMode reports the journal mode actually in effect: "delete" for a
+// current index, "wal" for a legacy one not yet upgraded. Surfaced in status.
+//
+// It reports the file-level mode, not the per-connection tuning applied by
+// WithFastWrites (whose in-memory journal would otherwise show up as "memory").
 func (s *Store) JournalMode() string {
+	if s.fastWrites {
+		if wal, err := fileIsWAL(s.path); err == nil && wal {
+			return "wal"
+		}
+		return "delete"
+	}
 	var mode string
 	if err := s.db.QueryRow("PRAGMA journal_mode").Scan(&mode); err != nil {
 		return ""
@@ -242,10 +491,9 @@ func (s *Store) Transaction(fn func(tx *sql.Tx) error) error {
 }
 
 // RunMaintenance performs lightweight post-bulk-write maintenance
-// (PRAGMA optimize + passive WAL checkpoint). Best-effort: errors ignored.
+// (PRAGMA optimize). Best-effort: errors ignored.
 func (s *Store) RunMaintenance() {
-	s.db.Exec("PRAGMA optimize")                //nolint:errcheck
-	s.db.Exec("PRAGMA wal_checkpoint(PASSIVE)") //nolint:errcheck
+	s.db.Exec("PRAGMA optimize") //nolint:errcheck
 }
 
 // Optimize vacuums and analyzes the database.

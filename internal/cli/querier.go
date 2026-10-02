@@ -83,9 +83,14 @@ type StatusResult struct {
 	JournalMode      string                 `json:"journalMode"`
 	NodesByKind      map[model.NodeKind]int `json:"nodesByKind"`
 	Languages        []string               `json:"languages"`
-	PendingChanges   PendingChanges         `json:"pendingChanges"`
+	PendingChanges   *PendingChanges        `json:"pendingChanges"` // null when not checked (--no-pending, stale index)
 	WorktreeMismatch any                    `json:"worktreeMismatch"`
 	Index            IndexInfo              `json:"index"`
+	// UpgradeNeeded is set when the index cannot be read fully until
+	// `codegrapher sync` (or --refresh) upgrades it; the other fields are then
+	// best-effort.
+	UpgradeNeeded string   `json:"upgradeNeeded,omitempty"`
+	Warnings      []string `json:"warnings,omitempty"`
 }
 
 // SearchOptions controls result set size and filtering.

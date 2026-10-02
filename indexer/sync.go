@@ -638,6 +638,38 @@ func (idx *Indexer) changedFilesForRead() (ChangedFiles, error) {
 // candidates, and stamps the observed revision only when HEAD did not move
 // during the operation.
 func (idx *Indexer) RefreshForRead(opts Options) (SyncResult, error) {
+	res, err := idx.refreshForRead(opts)
+	if err != nil {
+		return res, err
+	}
+	// A refresh that found nothing to change must still leave a complete index:
+	// build the trace projection if it was never built (or its database was lost).
+	if err := idx.ensureTraceProjection(); err != nil {
+		return res, fmt.Errorf("build trace projection: %w", err)
+	}
+	return res, nil
+}
+
+// ensureTraceProjection builds the cross-scope trace projection when it is
+// missing or was never completed. It takes the writer lock like Sync does.
+func (idx *Indexer) ensureTraceProjection() error {
+	for sc, st := range idx.reg.Stores() {
+		if sc.Language == model.Language("trace") {
+			if built, _ := st.GetMetadata("indexed_with_version"); built != "" {
+				return nil
+			}
+		}
+	}
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	if err := idx.lock.Acquire(); err != nil {
+		return fmt.Errorf("index is locked: %w", err)
+	}
+	defer idx.lock.Release()
+	return idx.indexTrace()
+}
+
+func (idx *Indexer) refreshForRead(opts Options) (SyncResult, error) {
 	if idx.indexVersionStale() {
 		observedHead, gitRepo := gitHead(idx.root)
 		if err := idx.invalidateGitHead(); err != nil {

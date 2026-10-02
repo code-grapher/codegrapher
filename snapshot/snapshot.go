@@ -82,7 +82,7 @@ func Export(dbPath, outDir, projectRoot string) error {
 func Import(dbPath, inDir string) error {
 	// Remove existing DB so Initialize creates a fresh one.
 	_ = os.Remove(dbPath)
-	s, err := store.Initialize(dbPath)
+	s, err := store.Initialize(dbPath, store.WithFastWrites())
 	if err != nil {
 		return fmt.Errorf("snapshot: init store: %w", err)
 	}

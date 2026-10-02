@@ -115,6 +115,8 @@ func coverageTargets(stores []*store.Store) ([]coverageTarget, error) {
 func newCoverageTargetsCmd() *cobra.Command {
 	var root, format string
 	var jsonOut bool
+	var refresh bool
+
 	cmd := &cobra.Command{Use: "targets", Short: "Rank zero and partial functions by uncovered Go statements", Long: "List functions with missed statements, largest gap first. Stale rows are labeled and follow current rows; regenerate profiles after source changes.", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		if format != "text" && format != "json" {
 			return fmt.Errorf("coverage targets: --format must be text or json")
@@ -128,14 +130,11 @@ func newCoverageTargetsCmd() *cobra.Command {
 		if !indexer.IsInitialized(projectPath) {
 			return fmt.Errorf("no codegraph index found at %s", projectPath)
 		}
-		idx, err := indexer.Open(projectPath, indexer.Options{})
+		idx, err := openIndexForRead(projectPath, refresh)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = idx.Close() }()
-		if _, err := idx.RefreshForRead(indexer.Options{}); err != nil {
-			return err
-		}
 		targets, err := coverageTargets(idx.Stores())
 		if err != nil {
 			return err
@@ -171,5 +170,6 @@ func newCoverageTargetsCmd() *cobra.Command {
 	}}
 	cmd.Flags().StringVar(&root, "root", "", "Repository root (default: current project)")
 	addJSONOutputFlags(cmd, &format, &jsonOut)
+	addRefreshFlag(cmd, &refresh)
 	return cmd
 }

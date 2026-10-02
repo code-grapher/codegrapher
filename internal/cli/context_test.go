@@ -426,7 +426,7 @@ func TestContextCoverageStructuredPartialAndStale(t *testing.T) {
 	if err := os.WriteFile(path, append(data, []byte("\n// production edit\n")...), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	stale := runContext(t, root, "Rename", "--coverage")
+	stale := runContext(t, root, "Rename", "--coverage", "--refresh")
 	if stale.Sources[0].Coverage == nil || stale.Sources[0].Coverage.Freshness != "stale" || len(stale.Sources[0].Coverage.Lines) != 0 {
 		t.Fatalf("stale coverage %+v", stale.Sources[0].Coverage)
 	}
