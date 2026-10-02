@@ -126,18 +126,32 @@ Input bytes and mapped-frame count are bounded. A runtime function name that
 contradicts the symbol containing its `file:line` is reported as `mismatch`,
 and a shifted line with a matching name in the same file is reported as
 `stale`; neither silently returns source.
+
+After refreshing, each command takes the index's short cross-process read lock
+while it resolves relationships and verifies source. If indexing is active it
+returns a busy/retry error rather than combining an old graph with new code.
+
 ### Read-only reads, `--refresh`, and index upgrades
 
 Read commands (`status`, `query`, `node`, `callers`, `callees`, `impact`, `path`,
-`files`, `affected`, `context`, `stacktrace`, `trace`, `coverage targets`, and
-`serve`'s own handle) open the index **read-only**: they never migrate, convert,
-re-index, or create `-wal`/`-shm` files, and they do not scan the tree for
-changes. The index uses SQLite's default rollback journal (no WAL), so an idle
-reader holds no lock and a concurrent `sync` is never blocked by one.
+`files`, `affected`, `context`, `stacktrace`, `trace`, `coverage targets`)
+open the index **read-only**: they never migrate, convert, re-index, or create
+`-wal`/`-shm` files, and they do not scan the tree for changes. The index uses
+SQLite's default rollback journal (no WAL), so an idle reader holds no lock and
+a concurrent `sync` is never blocked by one. `serve` is read-only only without
+watch (`serve --mcp` and/or `--api`): the default capability set and `--watch`
+make it the read-write owner that keeps the index current, and `--refresh` is
+rejected there. Write commands (`init`, `sync`, `index`, `watch`, `daemon`,
+`import`, `coverage`, `export`) use a faster write mode (no fsync, in-memory
+journal): the index is derived data, so after a crash mid-write the recovery is
+a rebuild (`codegrapher uninit`, then `codegrapher init`), which corrupt-index
+errors say.
 
 - `--refresh` (on every read command) runs a read-write sync first, then answers.
-  Without it a command answers from the index as it is; `node --source` withholds
-  source whose file changed since indexing and labels it `stale`.
+  Without it a command answers from the index as it is; `node`, `path` and
+  `stacktrace` withhold source whose file changed since indexing and report
+  `freshness.stale` with a `--refresh` hint (exit 0). `trace --refresh` also
+  builds a missing trace projection.
 - An index with an old schema, or one still in WAL mode from an earlier release,
   fails read commands with an "index needs upgrade" error (exit code 3) that
   names `codegrapher sync` and `--refresh`; either performs the upgrade.
@@ -147,10 +161,6 @@ reader holds no lock and a concurrent `sync` is never blocked by one.
   (exit code 3), and warns when `.codegraph/` is not Git-ignored or is tracked.
   `init` and `sync` repair the ignore entries (`.codegraph/.gitignore`,
   `.git/info/exclude`; a tracked `.gitignore` is never edited).
-
-After refreshing, each command takes the index's short cross-process read lock
-while it resolves relationships and verifies source. If indexing is active it
-returns a busy/retry error rather than combining an old graph with new code.
 
 ## Snapshot / viewer
 

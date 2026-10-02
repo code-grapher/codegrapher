@@ -30,7 +30,9 @@ Read commands (`status`, `query`, `node`, `callers`, `callees`, `impact`,
 `path`, `files`, `affected`, `context`, `stacktrace`, `trace`,
 `coverage targets`) open the index read-only and never modify it or scan for
 changes; they answer from the index as it is. Add `--refresh` to run `sync`
-first. `codegrapher status` reports pending changes (use `--no-pending` for a
+first. (`serve` is read-only only as `serve --mcp` / `--api` without watch; the
+default `serve`, which includes watch, owns a read-write handle and rejects
+`--refresh`.) `codegrapher status` reports pending changes (use `--no-pending` for a
 cheap stats-only call; `pendingChanges` is then `null`). An index from an older
 release fails with an "index needs upgrade" error (exit code 3); run
 `codegrapher sync` or add `--refresh`.
@@ -84,7 +86,9 @@ from `query --brief`. Do not fall back to grep or a surrounding-file read.
 requested it verifies the current file bytes against the indexed hash: if the
 file changed since indexing it withholds the source, marks the result
 `"stale": true`, and tells you to rerun with `--refresh`, which syncs the index
-first and then returns current source. It never slices a stale range.
+first and then returns current source. It never slices a stale range. `path
+--source` and `stacktrace --source` behave the same way (source withheld,
+`freshness.stale`, exit 0); `context` still fails and names `--refresh`.
 
 In a Git worktree, `node` refuses an index owned by another checkout. Run
 `codegrapher init` from the current worktree to create the local index; explicit
