@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/specscore/codegrapher/store"
 )
 
 // isTTY returns true when os.Stdout is a terminal.
@@ -46,6 +48,9 @@ func printWarn(msg string) {
 
 // printError prints a styled error to stderr.
 func printError(msg string) {
+	if store.LooksCorrupt(msg) && !strings.Contains(msg, store.RebuildAdvice) {
+		msg += "; " + store.RebuildAdvice
+	}
 	if isTTY() {
 		fmt.Fprintln(os.Stderr, "\x1b[31m✗\x1b[0m "+msg)
 	} else {

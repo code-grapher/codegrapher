@@ -295,6 +295,15 @@ func addPathSources(idx *indexer.Indexer, scopes []string, result PathResult, wa
 			return result, fmt.Errorf("path symbol %s changed during source retrieval", result.Steps[i].Symbol.ID)
 		}
 		source, err := readVerifiedIndexedNodeSource(idx.Root(), matches[0])
+		if errors.Is(err, errStaleSource) {
+			// Never mix the old path with new bytes: drop all source, say why.
+			for j := range result.Steps {
+				result.Steps[j].Source = ""
+			}
+			result.Freshness.Stale = true
+			result.Hint = staleSourceHint
+			return result, nil
+		}
 		if err != nil {
 			return result, err
 		}
@@ -318,6 +327,11 @@ func printPathMarkdown(w io.Writer, result PathResult, inline bool) error {
 	}
 	if _, err := fmt.Fprintf(w, "## Static call path: `%s` → `%s`\n", result.Start, result.Target); err != nil {
 		return err
+	}
+	if result.Freshness.Stale {
+		if _, err := fmt.Fprintf(w, "- Freshness: stale — %s\n", result.Hint); err != nil {
+			return err
+		}
 	}
 	for i, step := range result.Steps {
 		if i > 0 {

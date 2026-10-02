@@ -105,9 +105,15 @@ func TestOpenReadOnly_Missing(t *testing.T) {
 }
 
 func TestOpenReadOnly_UnreadablePath(t *testing.T) {
-	// A directory stats fine but cannot be read as a file header.
-	if _, err := OpenReadOnly(t.TempDir()); err == nil {
-		t.Error("expected error for a directory")
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores file permissions")
+	}
+	path := filepath.Join(t.TempDir(), DatabaseFilename)
+	if err := os.WriteFile(path, make([]byte, 512), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := OpenReadOnly(path); err == nil || errors.Is(err, ErrCorrupt) {
+		t.Errorf("err = %v, want a plain read error", err)
 	}
 }
 
@@ -289,8 +295,12 @@ func TestWithFastWrites_TunesWriteHandleOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := w.JournalMode(); got != "memory" {
-		t.Errorf("write journal mode = %q, want memory", got)
+	var live string
+	if err := w.db.QueryRow("PRAGMA journal_mode").Scan(&live); err != nil || live != "memory" {
+		t.Errorf("live connection journal mode = %q, %v; want memory", live, err)
+	}
+	if got := w.JournalMode(); got != "delete" {
+		t.Errorf("reported (file-level) journal mode = %q, want delete", got)
 	}
 	if got := pragmaInt(t, w, "synchronous"); got != 0 {
 		t.Errorf("synchronous = %d, want 0 (OFF)", got)
@@ -348,8 +358,9 @@ func TestWithFastWrites_OpenConvertsLegacyWALThenTunes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := s.JournalMode(); got != "memory" {
-		t.Errorf("journal mode = %q", got)
+	var live string
+	if err := s.db.QueryRow("PRAGMA journal_mode").Scan(&live); err != nil || live != "memory" {
+		t.Errorf("live journal mode = %q, %v", live, err)
 	}
 	_ = s.Close()
 	if wal, _ := fileIsWAL(path); wal {
@@ -459,5 +470,66 @@ func TestRequireJournalMode(t *testing.T) {
 	err := requireJournalMode("x.db", "memory", "wal")
 	if err == nil || !strings.Contains(err.Error(), `reports "wal"`) {
 		t.Errorf("mismatch err = %v", err)
+	}
+}
+
+func TestZeroByteAndHeaderlessIndexIsCorrupt(t *testing.T) {
+	for name, content := range map[string][]byte{"zero-byte": nil, "headerless": []byte("SQLite format 3\x00")} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), DatabaseFilename)
+			if err := os.WriteFile(path, content, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			for opener, open := range map[string]func() (*Store, error){
+				"Open":         func() (*Store, error) { return Open(path) },
+				"OpenReadOnly": func() (*Store, error) { return OpenReadOnly(path) },
+			} {
+				_, err := open()
+				if !errors.Is(err, ErrCorrupt) || errors.Is(err, ErrNeedsUpgrade) {
+					t.Errorf("%s: err = %v, want ErrCorrupt only", opener, err)
+				}
+				if err != nil && !strings.Contains(err.Error(), "codegrapher uninit") {
+					t.Errorf("%s: message lacks rebuild advice: %q", opener, err.Error())
+				}
+			}
+		})
+	}
+}
+
+func TestAsCorruptAndLooksCorrupt(t *testing.T) {
+	if AsCorrupt(nil) != nil {
+		t.Error("nil stays nil")
+	}
+	plain := errors.New("disk full")
+	if AsCorrupt(plain) != plain {
+		t.Error("plain errors pass through")
+	}
+	err := AsCorrupt(errors.New("query: database disk image is malformed (11)"))
+	if !errors.Is(err, ErrCorrupt) || !strings.Contains(err.Error(), RebuildAdvice) || strings.Contains(err.Error(), "()") {
+		t.Errorf("err = %v", err)
+	}
+	if again := AsCorrupt(err); again != err {
+		t.Error("already-corrupt errors are not double wrapped")
+	}
+	withPath := &CorruptError{Path: "x.db", Err: errors.New("bad")}
+	if !strings.Contains(withPath.Error(), "x.db") {
+		t.Errorf("message = %q", withPath.Error())
+	}
+	if !LooksCorrupt("file is not a database") || LooksCorrupt("no such table") {
+		t.Error("LooksCorrupt misclassifies")
+	}
+}
+
+func TestJournalModeReportsFileLevelModeForTunedHandle(t *testing.T) {
+	path := makeWALDB(t)
+	// Opened without the legacy conversion, a tuned handle still reports "wal"
+	// when the file header says so.
+	s, err := openDB(path, []Option{WithFastWrites()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.db.Close() }()
+	if got := s.JournalMode(); got != "wal" {
+		t.Errorf("JournalMode = %q, want wal", got)
 	}
 }

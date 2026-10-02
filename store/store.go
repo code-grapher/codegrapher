@@ -119,7 +119,10 @@ type CorruptError struct {
 }
 
 func (e *CorruptError) Error() string {
-	return fmt.Sprintf("index is corrupt: %s (%v); it is derived data: run `codegrapher uninit` then `codegrapher init` to rebuild it", e.Path, e.Err)
+	if e.Path == "" {
+		return fmt.Sprintf("index is corrupt (%v); %s", e.Err, RebuildAdvice)
+	}
+	return fmt.Sprintf("index is corrupt: %s (%v); %s", e.Path, e.Err, RebuildAdvice)
 }
 
 func (e *CorruptError) Unwrap() error { return e.Err }
@@ -127,16 +130,33 @@ func (e *CorruptError) Unwrap() error { return e.Err }
 // Is makes errors.Is(err, ErrCorrupt) true.
 func (e *CorruptError) Is(target error) bool { return target == ErrCorrupt }
 
+// RebuildAdvice tells the user how to recover from a corrupt index.
+const RebuildAdvice = "the index is derived data: run `codegrapher uninit` then `codegrapher init` to rebuild it"
+
+// LooksCorrupt reports whether an error message is SQLite's "malformed" or
+// "not a database" failure (result codes 11 and 26). Corruption can surface
+// from any query long after open, so the CLI error reporters use this to attach
+// RebuildAdvice centrally.
+func LooksCorrupt(msg string) bool {
+	return strings.Contains(msg, "malformed") || strings.Contains(msg, "not a database") ||
+		strings.Contains(msg, "SQLITE_CORRUPT") || strings.Contains(msg, "SQLITE_NOTADB")
+}
+
 // classify turns SQLite "malformed"/"not a database" failures into CorruptError.
 func classify(path string, err error) error {
-	if err == nil {
-		return nil
-	}
-	msg := err.Error()
-	if strings.Contains(msg, "malformed") || strings.Contains(msg, "not a database") || strings.Contains(msg, "SQLITE_CORRUPT") || strings.Contains(msg, "SQLITE_NOTADB") {
+	if err != nil && LooksCorrupt(err.Error()) {
 		return &CorruptError{Path: path, Err: err}
 	}
 	return err
+}
+
+// AsCorrupt wraps a corruption error whose database path is unknown (it
+// surfaced from a query) as a *CorruptError; other errors pass through.
+func AsCorrupt(err error) error {
+	if err == nil || errors.Is(err, ErrCorrupt) {
+		return err
+	}
+	return classify("", err)
 }
 
 // dsn builds the modernc.org/sqlite DSN with the same connection-level
@@ -221,6 +241,24 @@ func (s *Store) convertJournal() error {
 	return nil
 }
 
+// sqliteHeaderSize is the size of the SQLite database header; a file shorter
+// than this cannot be a database that was ever written.
+const sqliteHeaderSize = 100
+
+// checkHeaderLength reports a zero-byte or header-less index file (an
+// interrupted create, a truncated copy) as corrupt rather than as an index that
+// merely needs an upgrade.
+func checkHeaderLength(path string) error {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("store: database not found: %s", path)
+	}
+	if fi.Size() < sqliteHeaderSize {
+		return &CorruptError{Path: path, Err: fmt.Errorf("file is %d bytes, shorter than a database header", fi.Size())}
+	}
+	return nil
+}
+
 // fileIsWAL reports whether the SQLite header at path declares WAL mode
 // (file-format version bytes 18 and 19 equal 2). Reading the header directly
 // avoids opening the database, which for a WAL file would create -shm.
@@ -244,8 +282,8 @@ func fileIsWAL(path string) (bool, error) {
 // yields a *NeedsUpgradeError (WAL is never opened; with WithAllowStale a
 // stale schema is opened anyway and reported through UpgradeReason).
 func OpenReadOnly(path string, opts ...Option) (*Store, error) {
-	if _, err := os.Stat(path); err != nil {
-		return nil, fmt.Errorf("store: database not found: %s", path)
+	if err := checkHeaderLength(path); err != nil {
+		return nil, err
 	}
 	wal, err := fileIsWAL(path)
 	if err != nil {
@@ -376,8 +414,8 @@ func (s *Store) bootstrapSchemaOnce() (fresh bool, err error) {
 
 // Open opens an existing database and applies any pending migrations.
 func Open(path string, opts ...Option) (*Store, error) {
-	if _, err := os.Stat(path); err != nil {
-		return nil, fmt.Errorf("store: database not found: %s", path)
+	if err := checkHeaderLength(path); err != nil {
+		return nil, err
 	}
 	s, err := openDB(path, opts)
 	if err != nil {
@@ -422,7 +460,16 @@ func (s *Store) Size() (int64, error) {
 
 // JournalMode reports the journal mode actually in effect: "delete" for a
 // current index, "wal" for a legacy one not yet upgraded. Surfaced in status.
+//
+// It reports the file-level mode, not the per-connection tuning applied by
+// WithFastWrites (whose in-memory journal would otherwise show up as "memory").
 func (s *Store) JournalMode() string {
+	if s.fastWrites {
+		if wal, err := fileIsWAL(s.path); err == nil && wal {
+			return "wal"
+		}
+		return "delete"
+	}
 	var mode string
 	if err := s.db.QueryRow("PRAGMA journal_mode").Scan(&mode); err != nil {
 		return ""

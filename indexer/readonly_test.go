@@ -298,8 +298,8 @@ func TestWriteRegistriesAreTunedAndReadOnlyOnesAreNot(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, s := range rw.Stores() {
-		if got := s.JournalMode(); got != "memory" {
-			t.Errorf("write store journal mode = %q, want memory", got)
+		if got := s.JournalMode(); got != "delete" {
+			t.Errorf("write store reported journal mode = %q, want file-level delete", got)
 		}
 	}
 	_ = rw.Close()

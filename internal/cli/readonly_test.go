@@ -684,3 +684,175 @@ func TestTraceCommandReadsProjectionWithoutWriting(t *testing.T) {
 		t.Errorf("trace on WAL index: %v", err)
 	}
 }
+
+// ── review fixes ─────────────────────────────────────────────────────────────
+
+func TestTraceRefreshBuildsMissingProjection(t *testing.T) {
+	root := indexedFixture(t)
+	dir := indexer.GetCodeGraphDir(root)
+	traceDBs, _ := filepath.Glob(filepath.Join(dir, "codegraph-trace-*.db"))
+	if len(traceDBs) != 1 {
+		t.Fatalf("trace dbs = %v", traceDBs)
+	}
+	if err := os.Remove(traceDBs[0]); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := runCmd(t, newTraceCmd(), "x", "--root", root, "--json")
+	if err == nil || !strings.Contains(err.Error(), "--refresh") {
+		t.Fatalf("without --refresh: %v", err)
+	}
+	if _, statErr := os.Stat(traceDBs[0]); statErr == nil {
+		t.Fatal("a read-only trace must not create the projection")
+	}
+
+	// Nothing changed on disk, yet --refresh must still build the projection.
+	_, err = runCmd(t, newTraceCmd(), "x", "--root", root, "--json", "--refresh")
+	if err != nil && strings.Contains(err.Error(), "not built") {
+		t.Fatalf("--refresh left the projection unbuilt: %v", err)
+	}
+	if _, statErr := os.Stat(traceDBs[0]); statErr != nil {
+		t.Fatalf("--refresh did not create the trace db: %v", statErr)
+	}
+	// Idempotent: a second refresh with a complete projection is a no-op.
+	if _, err := refreshIndex(root); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEnsureTraceProjectionFailsWhenIndexLocked(t *testing.T) {
+	root := indexedFixture(t)
+	dir := indexer.GetCodeGraphDir(root)
+	traceDBs, _ := filepath.Glob(filepath.Join(dir, "codegraph-trace-*.db"))
+	_ = os.Remove(traceDBs[0])
+	if err := os.WriteFile(filepath.Join(dir, "codegraph.lock"), []byte(strconv.Itoa(os.Getppid())), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	idx, err := indexer.Open(root, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	if _, err := idx.RefreshForRead(indexer.Options{}); err == nil || !strings.Contains(err.Error(), "trace projection") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestStaleSourceIsWithheldNotFatalInEveryMode(t *testing.T) {
+	root := indexedFixture(t)
+	cache := filepath.Join(root, "internal", "store", "cache.go")
+	data, err := os.ReadFile(cache)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cache, append(data, []byte("\n// edited\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before := snapshotDBs(t, root)
+
+	// node: default footer, explicit inline and JSON all exit 0 and name --refresh.
+	for _, args := range [][]string{{"--source"}, {"--source=footer"}, {"--source=inline"}, {"--source=inline", "--format", "json"}} {
+		out, err := runCmd(t, newNodeCmd(), append([]string{"Warm"}, append(args, "--path", root)...)...)
+		if err != nil {
+			t.Fatalf("node %v: %v\n%s", args, err, out)
+		}
+		if !strings.Contains(out, "--refresh") || !strings.Contains(out, "stale") {
+			t.Errorf("node %v output lacks stale/--refresh: %s", args, out)
+		}
+		if strings.Contains(out, "func (c *Cache) Warm") {
+			t.Errorf("node %v leaked stale source", args)
+		}
+	}
+
+	// path: source withheld, exit 0, stale reported in text and JSON.
+	for _, args := range [][]string{{"--source"}, {"--source=inline"}, {"--source=inline", "--format", "json"}} {
+		out, err := runCmd(t, newPathCmd(), append([]string{"Warm", "Set"}, append(args, "--path", root)...)...)
+		if err != nil {
+			t.Fatalf("path %v: %v\n%s", args, err, out)
+		}
+		if !strings.Contains(out, "stale") || !strings.Contains(out, "--refresh") {
+			t.Errorf("path %v output: %s", args, out)
+		}
+	}
+
+	// stacktrace: frames kept, source withheld, result marked stale.
+	idx, err := indexer.OpenReadOnly(root, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	frame := "example.com/go-small/internal/store.(*Cache).Warm(...)\n\t" + filepath.Join(root, "internal/store/cache.go") + ":24 +0x1"
+	res, err := mapStacktrace(idx, nil, frame, true, NodeFreshness{})
+	if err != nil || !res.Freshness.Stale || len(res.Frames) != 1 || res.Frames[0].Source != "" || !strings.Contains(res.Frames[0].Hint, "--refresh") {
+		t.Fatalf("stacktrace result = %+v, %v", res, err)
+	}
+	var out bytes.Buffer
+	if err := printStacktraceMarkdown(&out, res, true); err != nil || !strings.Contains(out.String(), "stale") {
+		t.Errorf("stacktrace text: %v %s", err, out.String())
+	}
+	assertDBsUnchanged(t, root, before)
+
+	// The shared reader names the flag for the callers that still fail (context).
+	matches, err := findNodeMatches(idx.StoresFiltered(nil), "Warm")
+	if err != nil || len(matches) == 0 {
+		t.Fatal(err)
+	}
+	if _, err := readVerifiedIndexedNodeSource(root, matches[0]); !errors.Is(err, errStaleSource) || !strings.Contains(err.Error(), "--refresh") {
+		t.Errorf("readVerified err = %v", err)
+	}
+	// An empty indexed range is also reported as stale with the flag.
+	empty := matches[0]
+	empty.node.StartLine, empty.node.EndLine = 100000, 100001
+	empty.node.FilePath = "internal/store/store.go"
+	if _, err := readVerifiedIndexedNodeSource(root, empty); err == nil || !strings.Contains(err.Error(), "--refresh") {
+		t.Errorf("empty-range err = %v", err)
+	}
+}
+
+func TestEmptyIndexFileIsCorruptNotUpgrade(t *testing.T) {
+	root := indexedFixture(t)
+	for _, db := range scopeDBs(t, root) {
+		if err := os.Truncate(db, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := openIndexForRead(root, false)
+	if !errors.Is(err, store.ErrCorrupt) || errors.Is(err, store.ErrNeedsUpgrade) {
+		t.Fatalf("read-only open err = %v", err)
+	}
+	// The read-write path (what sync and --refresh use) says the same, not "no such table".
+	_, err = refreshIndex(root)
+	if !errors.Is(err, store.ErrCorrupt) || !strings.Contains(err.Error(), "codegrapher init") {
+		t.Errorf("refresh err = %v", err)
+	}
+}
+
+func TestCorruptionAfterOpenGetsRebuildAdvice(t *testing.T) {
+	_, stderr := captureOutput(t, func() { printError("Search failed: database disk image is malformed (11)") })
+	if !strings.Contains(stderr, "codegrapher uninit") {
+		t.Errorf("printError lacks advice: %q", stderr)
+	}
+	_, stderr = captureOutput(t, func() { printError("Search failed: " + store.RebuildAdvice + " malformed") })
+	if strings.Count(stderr, "codegrapher uninit") != 1 {
+		t.Errorf("advice duplicated: %q", stderr)
+	}
+	_, stderr = captureOutput(t, func() { printError("plain failure") })
+	if strings.Contains(stderr, "uninit") {
+		t.Errorf("unrelated error got advice: %q", stderr)
+	}
+	var buf bytes.Buffer
+	code := ReportAndExitCode(errors.New("callers: file is not a database (26)"), &buf)
+	if code != 1 || !strings.Contains(buf.String(), "codegrapher init") {
+		t.Errorf("ReportAndExitCode: %d %q", code, buf.String())
+	}
+}
+
+func TestServeRefreshWithWatchIsAnError(t *testing.T) {
+	root := indexedFixture(t)
+	for _, args := range [][]string{{"--refresh", "--path", root}, {"--watch", "--refresh", "--path", root}} {
+		_, err := runCmd(t, newServeCmd(), args...)
+		if err == nil || !strings.Contains(err.Error(), "--refresh has no effect") {
+			t.Errorf("serve %v: err = %v", args, err)
+		}
+	}
+}

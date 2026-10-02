@@ -188,7 +188,7 @@ func resolveNode(idx *indexer.Indexer, scopes []string, symbol, fileHint string,
 			// The index is never modified here. The file changed since it was
 			// indexed (or during a --refresh): withhold the stale source.
 			result.Freshness.Stale = true
-			result.Hint = "Source changed since indexing; rerun with --refresh to index and show current source."
+			result.Hint = staleSourceHint
 			return withRelations(result, match, wantRelations, limit)
 		}
 		result.Source = string(content.node)
@@ -229,6 +229,13 @@ func readIndexedNodeSource(root string, match matchedNode) (nodeSource, *model.F
 	return nodeSource{all: data, node: lineBoundedSource(data, match.node.StartLine, match.node.EndLine)}, rec, nil
 }
 
+// errStaleSource marks source that no longer matches the index. node, path and
+// stacktrace withhold such source and report it as stale instead of failing.
+var errStaleSource = errors.New("stale source")
+
+// staleSourceHint is the user-facing explanation for withheld stale source.
+const staleSourceHint = "Source changed since indexing; rerun with --refresh to index and show current source."
+
 // readVerifiedIndexedNodeSource never mutates the index. Callers refresh once
 // before resolving graph identities, then use this to ensure the returned body
 // still belongs to that same indexed revision. A mismatch must be retried from
@@ -239,10 +246,10 @@ func readVerifiedIndexedNodeSource(root string, match matchedNode) (string, erro
 		return "", err
 	}
 	if indexer.HashContent(content.all) != rec.ContentHash {
-		return "", fmt.Errorf("source %s changed during retrieval; rerun after refresh", match.node.FilePath)
+		return "", fmt.Errorf("%w: %s changed since indexing; rerun with --refresh", errStaleSource, match.node.FilePath)
 	}
 	if len(content.node) == 0 {
-		return "", fmt.Errorf("indexed source range %s:%d-%d is no longer readable; rerun after refresh", match.node.FilePath, match.node.StartLine, match.node.EndLine)
+		return "", fmt.Errorf("%w: indexed source range %s:%d-%d is no longer readable; rerun with --refresh", errStaleSource, match.node.FilePath, match.node.StartLine, match.node.EndLine)
 	}
 	return string(content.node), nil
 }

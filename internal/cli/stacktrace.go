@@ -272,6 +272,12 @@ func mapStacktraceWithLimit(idx *indexer.Indexer, scopes []string, input string,
 				frame.Source = source
 			} else {
 				source, err := readVerifiedIndexedNodeSource(idx.Root(), *selection.match)
+				if errors.Is(err, errStaleSource) {
+					result.Freshness.Stale = true
+					frame.Hint = staleSourceHint
+					result.Frames = append(result.Frames, frame)
+					continue
+				}
 				if err != nil {
 					return result, err
 				}
@@ -543,6 +549,11 @@ func printStacktraceMarkdown(w io.Writer, result StackTraceResult, inline bool) 
 	}
 	if result.Revision != "" {
 		if _, err := fmt.Fprintf(w, "- Indexed revision: `%s`\n", result.Revision); err != nil {
+			return err
+		}
+	}
+	if result.Freshness.Stale {
+		if _, err := fmt.Fprintf(w, "- Freshness: stale — %s\n", staleSourceHint); err != nil {
 			return err
 		}
 	}

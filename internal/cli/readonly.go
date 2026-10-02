@@ -103,6 +103,7 @@ func ReportAndExitCode(err error, stderr io.Writer) int {
 	if errors.As(err, &ee) {
 		return ee.Code
 	}
+	err = store.AsCorrupt(err)
 	_, _ = fmt.Fprintln(stderr, err)
 	return ExitCodeFor(err)
 }

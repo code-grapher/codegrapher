@@ -40,7 +40,14 @@ func newServeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve [path]",
 		Short: "Serve CodeGrapher capabilities in the foreground",
-		Args:  cobra.MaximumNArgs(1),
+		Long: `Serve CodeGrapher capabilities in the foreground.
+
+With watch (part of the default capability set, or --watch) serve owns a
+read-write handle and keeps the index current. With only --mcp and/or --api
+(no --watch) it keeps a single read-only handle, which never modifies the index
+and holds no lock while idle; --refresh then runs a sync once before serving.
+--refresh is rejected together with watch.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if envTruthy(os.Getenv("CODEGRAPH_DAEMON_INTERNAL")) {
 				return errors.New("CODEGRAPH_DAEMON_INTERNAL is obsolete; use 'codegrapher daemon start' for background service")
@@ -50,6 +57,9 @@ func newServeCmd() *cobra.Command {
 			mcpEnabled, watchEnabled, apiEnabled := selected.mcp, selected.watch, selected.api
 			if !mcpEnabled && !watchEnabled && !apiEnabled {
 				return errors.New("no serve capability selected")
+			}
+			if refresh && watchEnabled {
+				return errors.New("--refresh has no effect when serving with watch (the default capability set includes it): the watcher owns a read-write handle and keeps the index current; use --mcp and/or --api without --watch for a read-only server, or drop --refresh")
 			}
 
 			projectArgs := args

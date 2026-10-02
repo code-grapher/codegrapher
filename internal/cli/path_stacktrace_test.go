@@ -314,9 +314,14 @@ func TestPathSourceNeverMixesChangedFileWithOldPath(t *testing.T) {
 	if err := os.WriteFile(file, append(data, []byte("\n// changed\n")...), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err = findCallPath(idx, nil, "Warm", "Set", 2, true, NodeFreshness{})
-	if err == nil || !strings.Contains(err.Error(), "changed during retrieval") {
-		t.Fatalf("stale path source error = %v", err)
+	res, err := findCallPath(idx, nil, "Warm", "Set", 2, true, NodeFreshness{})
+	if err != nil || !res.Freshness.Stale || !strings.Contains(res.Hint, "--refresh") {
+		t.Fatalf("stale path result = %+v, %v", res, err)
+	}
+	for _, step := range res.Steps {
+		if step.Source != "" {
+			t.Fatalf("stale path leaked source: %+v", step)
+		}
 	}
 }
 
