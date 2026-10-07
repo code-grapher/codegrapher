@@ -246,9 +246,10 @@ func blockEnd(path string, start int) int {
 				continue
 			}
 			if quoted {
-				if ch == '\\' {
+				switch ch {
+				case '\\':
 					escaped = true
-				} else if ch == '"' {
+				case '"':
 					quoted = false
 				}
 				continue

@@ -80,7 +80,11 @@ func TestSemanticIncrementalRefreshAndMove(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer idx.Close()
+	defer func() {
+		if err := idx.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 	if !result.Success {
 		t.Fatalf("init: %+v", result.Errors)
 	}
@@ -145,7 +149,11 @@ func TestVersion14IndexRebuildsSemanticProjection(t *testing.T) {
 	if err != nil || !result.Success {
 		t.Fatalf("init: %v %+v", err, result)
 	}
-	defer idx.Close()
+	defer func() {
+		if err := idx.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 	for _, st := range idx.Stores() {
 		if err := st.SetMetadata("indexed_with_extraction_version", "14"); err != nil {
 			t.Fatal(err)
@@ -182,7 +190,11 @@ func TestSemanticOnlyFailedRebuildRetainsStaleVersionForRetry(t *testing.T) {
 	if err != nil || !result.Success {
 		t.Fatalf("init: %v %+v", err, result)
 	}
-	defer idx.Close()
+	defer func() {
+		if err := idx.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 	semanticStore, err := idx.reg.Store(scope.Scope{Language: model.Language("semantic"), Version: "1"})
 	if err != nil {
 		t.Fatal(err)

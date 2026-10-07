@@ -37,7 +37,11 @@ func TestSemanticMetadataRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer d.Close()
+	defer func() {
+		if err := d.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 	got, err := d.GetNodeByID(a.ID)
 	if err != nil {
 		t.Fatal(err)

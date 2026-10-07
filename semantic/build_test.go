@@ -58,7 +58,11 @@ func TestBuildBindingAndExplicitMapping(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer st.Close()
+	defer func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 	code := model.Node{ID: model.GenerateNodeID("invoice.go", model.KindFunction, "Total", 3), Kind: model.KindFunction, Name: "Total", QualifiedName: "Total", FilePath: "invoice.go", Language: model.LangGo, StartLine: 3, EndLine: 3}
 	if err := st.InsertNode(code); err != nil {
 		t.Fatal(err)

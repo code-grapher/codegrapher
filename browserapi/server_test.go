@@ -132,7 +132,11 @@ func TestBrowserAPISemanticMetadataAndEvidence(t *testing.T) {
 	if err != nil || !result.Success {
 		t.Fatalf("init: %v %+v", err, result)
 	}
-	defer idx.Close()
+	defer func() {
+		if err := idx.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 	api, err := New(idx, Config{Token: testToken})
 	if err != nil {
 		t.Fatal(err)
