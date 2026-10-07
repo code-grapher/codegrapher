@@ -453,7 +453,7 @@ func buildContext(idx *indexer.Indexer, targets []contextTarget, opts contextOpt
 		}
 		processed[m.node.ID] = true
 
-		src, err := readVerifiedIndexedNodeSource(root, m)
+		src, err := readVerifiedIndexedNodeSource(root, m, idx.Stores()...)
 		if err != nil {
 			return nil, err
 		}

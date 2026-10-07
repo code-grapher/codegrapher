@@ -271,7 +271,7 @@ func mapStacktraceWithLimit(idx *indexer.Indexer, scopes []string, input string,
 			if source, ok := sources[brief.ID]; ok {
 				frame.Source = source
 			} else {
-				source, err := readVerifiedIndexedNodeSource(idx.Root(), *selection.match)
+				source, err := readVerifiedIndexedNodeSource(idx.Root(), *selection.match, idx.Stores()...)
 				if errors.Is(err, errStaleSource) {
 					result.Freshness.Stale = true
 					frame.Hint = staleSourceHint

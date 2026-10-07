@@ -33,8 +33,8 @@
   "worktreeMismatch": null,
   "index": {
     "builtWithVersion": "0.9.9",
-    "builtWithExtractionVersion": 15,
-    "currentExtractionVersion": 15,
+    "builtWithExtractionVersion": 16,
+    "currentExtractionVersion": 16,
     "reindexRecommended": false
   }
 }

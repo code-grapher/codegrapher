@@ -223,7 +223,7 @@ func TestSemanticOnlyFailedRebuildRetainsStaleVersionForRetry(t *testing.T) {
 	if !retry.FullReindex || len(retry.Errors) > 0 {
 		t.Fatalf("retry = %+v", retry)
 	}
-	if version, err := semanticStore.GetMetadata("indexed_with_extraction_version"); err != nil || version != "15" {
+	if version, err := semanticStore.GetMetadata("indexed_with_extraction_version"); err != nil || version != "16" {
 		t.Fatalf("retry version %q, %v", version, err)
 	}
 }

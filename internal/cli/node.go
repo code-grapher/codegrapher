@@ -205,11 +205,11 @@ func resolveNode(idx *indexer.Indexer, scopes []string, symbol, fileHint string,
 	symbolBrief := briefNode(match.node)
 	result := NodeResult{Requested: symbol, Status: "ok", Symbol: &symbolBrief, Freshness: freshness}
 	if wantSource {
-		content, rec, err := readIndexedNodeSource(idx.Root(), match)
+		content, rec, err := readIndexedNodeSource(idx.Root(), match, idx.Stores()...)
 		if err != nil {
 			return NodeResult{}, err
 		}
-		if indexer.HashContent(content.all) != rec.ContentHash {
+		if !indexedNodeSourceMatches(content.all, rec, match.node) {
 			// The index is never modified here. The file changed since it was
 			// indexed (or during a --refresh): withhold the stale source.
 			result.Freshness.Stale = true
@@ -237,7 +237,7 @@ func withRelations(result NodeResult, match matchedNode, stores []*store.Store, 
 
 type nodeSource struct{ all, node []byte }
 
-func readIndexedNodeSource(root string, match matchedNode) (nodeSource, *model.FileRecord, error) {
+func readIndexedNodeSource(root string, match matchedNode, stores ...*store.Store) (nodeSource, *model.FileRecord, error) {
 	abs := filepath.Join(root, filepath.FromSlash(match.node.FilePath))
 	cleanRoot := filepath.Clean(root)
 	if abs != cleanRoot && !strings.HasPrefix(filepath.Clean(abs), cleanRoot+string(filepath.Separator)) {
@@ -247,11 +247,47 @@ func readIndexedNodeSource(root string, match matchedNode) (nodeSource, *model.F
 	if err != nil {
 		return nodeSource{}, nil, fmt.Errorf("read %s: %w", match.node.FilePath, err)
 	}
-	rec, err := match.store.GetFileByPath(match.node.FilePath)
-	if err != nil || rec == nil {
+	// Derived semantic nodes live in a projection store while their source
+	// files are indexed in language stores. Check every available record: a
+	// conflicting hash must fail closed instead of picking a stale scope.
+	if len(stores) == 0 {
+		stores = []*store.Store{match.store}
+	}
+	var rec *model.FileRecord
+	seen := make(map[*store.Store]bool, len(stores))
+	for _, s := range stores {
+		if seen[s] {
+			continue
+		}
+		seen[s] = true
+		candidate, err := s.GetFileByPath(match.node.FilePath)
+		if err != nil {
+			return nodeSource{}, nil, fmt.Errorf("read indexed file record for %s: %w", match.node.FilePath, err)
+		}
+		if candidate == nil {
+			continue
+		}
+		if rec != nil && rec.ContentHash != candidate.ContentHash {
+			return nodeSource{}, nil, fmt.Errorf("conflicting indexed file records for %s", match.node.FilePath)
+		}
+		rec = candidate
+	}
+	if rec == nil {
 		return nodeSource{}, nil, fmt.Errorf("no indexed file record for %s", match.node.FilePath)
 	}
 	return nodeSource{all: data, node: lineBoundedSource(data, match.node.StartLine, match.node.EndLine)}, rec, nil
+}
+
+func indexedNodeSourceMatches(content []byte, rec *model.FileRecord, node model.Node) bool {
+	hash := indexer.HashContent(content)
+	if hash != rec.ContentHash {
+		return false
+	}
+	if _, derived := node.Metadata["indexedSourceHash"]; derived || node.Kind == model.KindMeaningGraph || node.Kind == model.KindMeaningConcept || node.Kind == model.KindModelModule || node.Kind == model.KindModelEntity || node.Kind == model.KindModelComponent || node.Kind == model.KindModelEnum || node.Kind == model.KindModelCollection || node.Kind == model.KindModelRecordset || node.Kind == model.KindModelMember || node.Kind == model.KindSemanticCode {
+		projectionHash, _ := node.Metadata["indexedSourceHash"].(string)
+		return projectionHash != "" && hash == projectionHash
+	}
+	return true
 }
 
 // errStaleSource marks source that no longer matches the index. node, path and
@@ -265,12 +301,12 @@ const staleSourceHint = "Source changed since indexing; rerun with --refresh to 
 // before resolving graph identities, then use this to ensure the returned body
 // still belongs to that same indexed revision. A mismatch must be retried from
 // a fresh command rather than mixing old graph positions with new source.
-func readVerifiedIndexedNodeSource(root string, match matchedNode) (string, error) {
-	content, rec, err := readIndexedNodeSource(root, match)
+func readVerifiedIndexedNodeSource(root string, match matchedNode, stores ...*store.Store) (string, error) {
+	content, rec, err := readIndexedNodeSource(root, match, stores...)
 	if err != nil {
 		return "", err
 	}
-	if indexer.HashContent(content.all) != rec.ContentHash {
+	if !indexedNodeSourceMatches(content.all, rec, match.node) {
 		return "", fmt.Errorf("%w: %s changed since indexing; rerun with --refresh", errStaleSource, match.node.FilePath)
 	}
 	if len(content.node) == 0 {
