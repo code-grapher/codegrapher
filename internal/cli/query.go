@@ -116,6 +116,7 @@ type BriefSymbol struct {
 	StartColumn   int            `json:"startColumn"`
 	EndColumn     int            `json:"endColumn"`
 	Signature     string         `json:"signature,omitempty"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
 }
 
 func briefSearchResults(results []model.SearchResult) []BriefSymbol {
@@ -128,7 +129,7 @@ func briefSearchResults(results []model.SearchResult) []BriefSymbol {
 		out = append(out, BriefSymbol{
 			ID: n.ID, Kind: n.Kind, Name: n.Name, QualifiedName: n.QualifiedName,
 			FilePath: n.FilePath, Language: n.Language, StartLine: n.StartLine, EndLine: n.EndLine,
-			StartColumn: n.StartColumn, EndColumn: n.EndColumn, Signature: n.Signature,
+			StartColumn: n.StartColumn, EndColumn: n.EndColumn, Signature: n.Signature, Metadata: n.Metadata,
 		})
 	}
 	return out
