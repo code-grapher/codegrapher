@@ -14,6 +14,7 @@ import (
 	"github.com/specscore/codegrapher/model"
 	"github.com/specscore/codegrapher/resolve"
 	"github.com/specscore/codegrapher/scope"
+	"github.com/specscore/codegrapher/semantic"
 	"github.com/specscore/codegrapher/store"
 	"github.com/specscore/codegrapher/trace"
 )
@@ -163,15 +164,21 @@ func (idx *Indexer) indexAllLocked(opts Options) IndexResult {
 		result.Success = !hasSevereError(result.Errors)
 	}
 	if result.Success && result.FilesIndexed == 0 {
-		for _, s := range idx.Stores() {
-			if err := s.SetMetadata("indexed_with_version", PackageVersion); err != nil {
-				result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "metadata_error"})
-			}
-			if err := s.SetMetadata("indexed_with_extraction_version", strconv.Itoa(ExtractionVersion)); err != nil {
-				result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "metadata_error"})
-			}
+		if err := idx.indexSemantic(); err != nil {
+			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "semantic_index_error"})
 		}
 		result.Success = !hasSevereError(result.Errors)
+		if result.Success {
+			for _, s := range idx.Stores() {
+				if err := s.SetMetadata("indexed_with_version", PackageVersion); err != nil {
+					result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "metadata_error"})
+				}
+				if err := s.SetMetadata("indexed_with_extraction_version", strconv.Itoa(ExtractionVersion)); err != nil {
+					result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "metadata_error"})
+				}
+			}
+			result.Success = !hasSevereError(result.Errors)
+		}
 	}
 
 	// Phase 4: maintenance, trace projection, then metadata. A revision stamp
@@ -184,6 +191,9 @@ func (idx *Indexer) indexAllLocked(opts Options) IndexResult {
 			result.Errors = append(result.Errors, model.ExtractionError{
 				Message: err.Error(), Severity: "error", Code: "trace_index_error",
 			})
+		}
+		if err := idx.indexSemantic(); err != nil {
+			result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "semantic_index_error"})
 		}
 		result.Success = !hasSevereError(result.Errors)
 		if result.Success {
@@ -220,6 +230,25 @@ func (idx *Indexer) indexTrace() error {
 	_ = projection.SetMetadata("indexed_with_version", PackageVersion)
 	_ = projection.SetMetadata("indexed_with_extraction_version", strconv.Itoa(ExtractionVersion))
 	return nil
+}
+
+func (idx *Indexer) indexSemantic() error {
+	projection, err := idx.reg.Store(scope.Scope{Language: model.Language("semantic"), Version: "1"})
+	if err != nil {
+		return fmt.Errorf("semantic: open projection: %w", err)
+	}
+	files := ScanDirectory(idx.root)
+	graph, err := semantic.Build(idx.root, files, idx.Stores())
+	if err != nil {
+		return fmt.Errorf("semantic: build: %w", err)
+	}
+	if err := projection.ReplaceSemantic(graph.Nodes, graph.Edges); err != nil {
+		return err
+	}
+	if err := projection.SetMetadata("indexed_with_version", PackageVersion); err != nil {
+		return err
+	}
+	return projection.SetMetadata("indexed_with_extraction_version", strconv.Itoa(ExtractionVersion))
 }
 
 // resolveAll runs the full resolution pass with progress reporting.

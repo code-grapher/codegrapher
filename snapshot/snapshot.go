@@ -130,6 +130,7 @@ var nodeCols = []ingr.ColDef{
 	{Name: "is_exported", Type: "bool"}, {Name: "is_async", Type: "bool"},
 	{Name: "is_static", Type: "bool"}, {Name: "is_abstract", Type: "bool"},
 	{Name: "decorators"}, {Name: "type_parameters"}, {Name: "return_type"},
+	{Name: "metadata"},
 }
 
 func exportNodes(s *store.Store, outDir string) error {
@@ -143,6 +144,11 @@ func exportNodes(s *store.Store, outDir string) error {
 
 	rows := make([]recordRow, 0, len(nodes))
 	for _, n := range nodes {
+		var metadata any
+		if len(n.Metadata) > 0 {
+			raw, _ := json.Marshal(n.Metadata)
+			metadata = string(raw)
+		}
 		row := recordRow{
 			id: n.ID,
 			data: map[string]any{
@@ -165,6 +171,7 @@ func exportNodes(s *store.Store, outDir string) error {
 				"decorators":      n.Decorators,
 				"type_parameters": n.TypeParameters,
 				"return_type":     n.ReturnType,
+				"metadata":        metadata,
 			},
 		}
 		rows = append(rows, row)
@@ -192,8 +199,8 @@ func importNodes(s *store.Store, path string) error {
 				 start_line, end_line, start_column, end_column,
 				 docstring, signature, visibility,
 				 is_exported, is_async, is_static, is_abstract,
-				 decorators, type_parameters, return_type, updated_at)
-				VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`,
+				 decorators, type_parameters, return_type, metadata, updated_at)
+				VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`,
 				strVal(row["$ID"]), strVal(row["kind"]), strVal(row["name"]),
 				strVal(row["qualified_name"]), strVal(row["file_path"]), strVal(row["language"]),
 				intVal(row["start_line"]), intVal(row["end_line"]),
@@ -203,7 +210,7 @@ func importNodes(s *store.Store, path string) error {
 				boolToInt(row["is_exported"]), boolToInt(row["is_async"]),
 				boolToInt(row["is_static"]), boolToInt(row["is_abstract"]),
 				jsonArrStr(row["decorators"]), jsonArrStr(row["type_parameters"]),
-				nullStr(strVal(row["return_type"])),
+				nullStr(strVal(row["return_type"])), nullStr(strVal(row["metadata"])),
 			)
 			if err != nil {
 				return err

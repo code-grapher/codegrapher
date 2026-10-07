@@ -87,17 +87,18 @@ type SourceRange struct {
 }
 
 type Symbol struct {
-	ID            string      `json:"id"`
-	Kind          string      `json:"kind"`
-	Name          string      `json:"name"`
-	QualifiedName string      `json:"qualifiedName"`
-	FilePath      string      `json:"filePath"`
-	Language      string      `json:"language"`
-	Range         SourceRange `json:"range"`
-	Signature     string      `json:"signature,omitempty"`
-	Docstring     string      `json:"docstring,omitempty"`
-	Visibility    *string     `json:"visibility,omitempty"`
-	Exported      bool        `json:"exported"`
+	ID            string         `json:"id"`
+	Kind          string         `json:"kind"`
+	Name          string         `json:"name"`
+	QualifiedName string         `json:"qualifiedName"`
+	FilePath      string         `json:"filePath"`
+	Language      string         `json:"language"`
+	Range         SourceRange    `json:"range"`
+	Signature     string         `json:"signature,omitempty"`
+	Docstring     string         `json:"docstring,omitempty"`
+	Visibility    *string        `json:"visibility,omitempty"`
+	Exported      bool           `json:"exported"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
 }
 
 type SymbolResponse struct {
@@ -123,11 +124,13 @@ type SearchResponse struct {
 }
 
 type GraphEdge struct {
-	SourceID string `json:"sourceId"`
-	TargetID string `json:"targetId"`
-	Kind     string `json:"kind"`
-	Line     int    `json:"line,omitempty"`
-	Column   int    `json:"column,omitempty"`
+	SourceID   string         `json:"sourceId"`
+	TargetID   string         `json:"targetId"`
+	Kind       string         `json:"kind"`
+	Line       int            `json:"line,omitempty"`
+	Column     int            `json:"column,omitempty"`
+	Metadata   map[string]any `json:"metadata,omitempty"`
+	Provenance string         `json:"provenance,omitempty"`
 }
 
 type GraphResponse struct {

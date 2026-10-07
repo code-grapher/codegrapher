@@ -264,7 +264,7 @@ export function jsonSymbolToTransportTransform(input_) {
         return input_;
     }
     return {
-        id: input_.id, kind: input_.kind, name: input_.name, qualifiedName: input_.qualifiedName, filePath: input_.filePath, language: input_.language, range: jsonSourceRangeToTransportTransform(input_.range), signature: input_.signature, docstring: input_.docstring, visibility: input_.visibility, exported: input_.exported
+        id: input_.id, kind: input_.kind, name: input_.name, qualifiedName: input_.qualifiedName, filePath: input_.filePath, language: input_.language, range: jsonSourceRangeToTransportTransform(input_.range), signature: input_.signature, docstring: input_.docstring, visibility: input_.visibility, exported: input_.exported, metadata: jsonRecordUnknownToTransportTransform(input_.metadata)
     };
 }
 export function jsonSymbolToApplicationTransform(input_) {
@@ -272,7 +272,7 @@ export function jsonSymbolToApplicationTransform(input_) {
         return input_;
     }
     return {
-        id: input_.id, kind: input_.kind, name: input_.name, qualifiedName: input_.qualifiedName, filePath: input_.filePath, language: input_.language, range: jsonSourceRangeToApplicationTransform(input_.range), signature: input_.signature, docstring: input_.docstring, visibility: input_.visibility, exported: input_.exported
+        id: input_.id, kind: input_.kind, name: input_.name, qualifiedName: input_.qualifiedName, filePath: input_.filePath, language: input_.language, range: jsonSourceRangeToApplicationTransform(input_.range), signature: input_.signature, docstring: input_.docstring, visibility: input_.visibility, exported: input_.exported, metadata: jsonRecordUnknownToApplicationTransform(input_.metadata)
     };
 }
 export function jsonSourceRangeToTransportTransform(input_) {
@@ -290,6 +290,28 @@ export function jsonSourceRangeToApplicationTransform(input_) {
     return {
         startLine: input_.startLine, endLine: input_.endLine, startColumn: input_.startColumn, endColumn: input_.endColumn
     };
+}
+export function jsonRecordUnknownToTransportTransform(items_) {
+    if (!items_) {
+        return items_;
+    }
+    const _transformedRecord = {};
+    for (const [key, value] of Object.entries(items_ ?? {})) {
+        const transformedItem = value;
+        _transformedRecord[key] = transformedItem;
+    }
+    return _transformedRecord;
+}
+export function jsonRecordUnknownToApplicationTransform(items_) {
+    if (!items_) {
+        return items_;
+    }
+    const _transformedRecord = {};
+    for (const [key, value] of Object.entries(items_ ?? {})) {
+        const transformedItem = value;
+        _transformedRecord[key] = transformedItem;
+    }
+    return _transformedRecord;
 }
 export function jsonSearchResponseToTransportTransform(input_) {
     if (!input_) {
@@ -410,7 +432,7 @@ export function jsonGraphEdgeToTransportTransform(input_) {
         return input_;
     }
     return {
-        sourceId: input_.sourceId, targetId: input_.targetId, kind: input_.kind, line: input_.line, column: input_.column
+        sourceId: input_.sourceId, targetId: input_.targetId, kind: input_.kind, line: input_.line, column: input_.column, metadata: jsonRecordUnknownToTransportTransform(input_.metadata), provenance: input_.provenance
     };
 }
 export function jsonGraphEdgeToApplicationTransform(input_) {
@@ -418,7 +440,7 @@ export function jsonGraphEdgeToApplicationTransform(input_) {
         return input_;
     }
     return {
-        sourceId: input_.sourceId, targetId: input_.targetId, kind: input_.kind, line: input_.line, column: input_.column
+        sourceId: input_.sourceId, targetId: input_.targetId, kind: input_.kind, line: input_.line, column: input_.column, metadata: jsonRecordUnknownToApplicationTransform(input_.metadata), provenance: input_.provenance
     };
 }
 //# sourceMappingURL=serializers.js.map

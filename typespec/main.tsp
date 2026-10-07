@@ -125,6 +125,7 @@ model Symbol {
   docstring?: string;
   visibility?: string;
   exported: boolean;
+  metadata?: Record<unknown>;
 }
 
 model SymbolResponse {
@@ -155,6 +156,8 @@ model GraphEdge {
   kind: string;
   line?: int32;
   column?: int32;
+  metadata?: Record<unknown>;
+  provenance?: string;
 }
 
 model GraphResponse {

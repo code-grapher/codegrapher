@@ -1,6 +1,7 @@
 package browserapi
 
 import (
+	"encoding/json"
 	"net/http"
 	"sort"
 
@@ -72,7 +73,15 @@ func (s *Server) graph(w http.ResponseWriter, r *http.Request) {
 					edges = append(edges, incoming...)
 				}
 				for _, edge := range edges {
-					key := string(edge.Kind) + "\x00" + edge.Source + "\x00" + edge.Target
+					// A source can declare several relationships to one target with
+					// distinct roles or evidence. Deduplicate only an identical row
+					// fetched again while walking the opposite direction.
+					identity, marshalErr := json.Marshal(edge)
+					if marshalErr != nil {
+						s.internalError(w)
+						return
+					}
+					key := string(identity)
 					if _, exists := edgeMap[key]; exists {
 						continue
 					}
@@ -122,19 +131,16 @@ func (s *Server) graph(w http.ResponseWriter, r *http.Request) {
 		publicNodes = append(publicNodes, publicSymbol(node))
 	}
 	sort.Slice(publicNodes, func(i, j int) bool { return publicNodes[i].ID < publicNodes[j].ID })
-	publicEdges := make([]GraphEdge, 0, len(edgeMap))
-	for _, edge := range edgeMap {
-		publicEdges = append(publicEdges, GraphEdge{SourceID: edge.Source, TargetID: edge.Target, Kind: string(edge.Kind), Line: edge.Line, Column: edge.Column})
+	keys := make([]string, 0, len(edgeMap))
+	for key := range edgeMap {
+		keys = append(keys, key)
 	}
-	sort.Slice(publicEdges, func(i, j int) bool {
-		if publicEdges[i].Kind != publicEdges[j].Kind {
-			return publicEdges[i].Kind < publicEdges[j].Kind
-		}
-		if publicEdges[i].SourceID != publicEdges[j].SourceID {
-			return publicEdges[i].SourceID < publicEdges[j].SourceID
-		}
-		return publicEdges[i].TargetID < publicEdges[j].TargetID
-	})
+	sort.Strings(keys)
+	publicEdges := make([]GraphEdge, 0, len(keys))
+	for _, key := range keys {
+		edge := edgeMap[key]
+		publicEdges = append(publicEdges, GraphEdge{SourceID: edge.Source, TargetID: edge.Target, Kind: string(edge.Kind), Line: edge.Line, Column: edge.Column, Metadata: edge.Metadata, Provenance: edge.Provenance})
+	}
 	if !s.ensureCurrentRevision(w, snapshot.revision) {
 		return
 	}

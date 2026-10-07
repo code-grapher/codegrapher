@@ -1,6 +1,7 @@
 package indexer
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -116,8 +117,8 @@ func TestInitIndexesProject(t *testing.T) {
 		t.Errorf("indexed_with_version = %q (%v), want %q", v, err, PackageVersion)
 	}
 	ev, err := idx.Store().GetMetadata("indexed_with_extraction_version")
-	if err != nil || ev != "14" {
-		t.Errorf("indexed_with_extraction_version = %q (%v), want \"14\"", ev, err)
+	if err != nil || ev != fmt.Sprint(ExtractionVersion) {
+		t.Errorf("indexed_with_extraction_version = %q (%v), want %d", ev, err, ExtractionVersion)
 	}
 }
 

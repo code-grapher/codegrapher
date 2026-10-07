@@ -50,6 +50,16 @@ const (
 	KindRequirement         NodeKind = "requirement"
 	KindAcceptanceCriterion NodeKind = "acceptance_criterion"
 	KindTask                NodeKind = "task"
+	KindMeaningGraph        NodeKind = "meaning_graph"
+	KindMeaningConcept      NodeKind = "meaning_concept"
+	KindModelModule         NodeKind = "model_module"
+	KindModelEntity         NodeKind = "model_entity"
+	KindModelComponent      NodeKind = "model_component"
+	KindModelEnum           NodeKind = "model_enum"
+	KindModelCollection     NodeKind = "model_collection"
+	KindModelRecordset      NodeKind = "model_recordset"
+	KindModelMember         NodeKind = "model_member"
+	KindSemanticCode        NodeKind = "semantic_code"
 )
 
 // NodeKinds lists every valid NodeKind (runtime-iterable, like NODE_KINDS).
@@ -61,6 +71,9 @@ var NodeKinds = []NodeKind{
 	KindComponent, KindIndex, KindTrigger, KindConstraint,
 	KindFeature, KindIdea, KindPlan, KindRequirement,
 	KindAcceptanceCriterion, KindTask,
+	KindMeaningGraph, KindMeaningConcept, KindModelModule, KindModelEntity,
+	KindModelComponent, KindModelEnum, KindModelCollection, KindModelRecordset,
+	KindModelMember, KindSemanticCode,
 }
 
 // EdgeKind is the type of a relationship between two nodes.
@@ -85,9 +98,15 @@ const (
 	EdgeExcludes     EdgeKind = "excludes"
 
 	// SpecScore-native edge kinds, emitted by SpecScore artifact extraction.
-	EdgePromotesTo EdgeKind = "promotes_to"
-	EdgeSupersedes EdgeKind = "supersedes"
-	EdgeDependsOn  EdgeKind = "depends_on"
+	EdgePromotesTo       EdgeKind = "promotes_to"
+	EdgeSupersedes       EdgeKind = "supersedes"
+	EdgeDependsOn        EdgeKind = "depends_on"
+	EdgeBindsTo          EdgeKind = "binds_to"
+	EdgeValuesOf         EdgeKind = "values_of"
+	EdgeUnitsOf          EdgeKind = "units_of"
+	EdgeMeasureInput     EdgeKind = "measure_input"
+	EdgeMeasureDimension EdgeKind = "measure_dimension"
+	EdgeMapsToCode       EdgeKind = "maps_to_code"
 )
 
 // Language identifies the programming language of a file or symbol.
@@ -96,42 +115,44 @@ const (
 type Language string
 
 const (
-	LangTypeScript  Language = "typescript"
-	LangJavaScript  Language = "javascript"
-	LangTSX         Language = "tsx"
-	LangJSX         Language = "jsx"
-	LangGo          Language = "go"
-	LangPython      Language = "python"
-	LangCSharp      Language = "csharp"
-	LangJava        Language = "java"
-	LangKotlin      Language = "kotlin"
-	LangRuby        Language = "ruby"
-	LangRust        Language = "rust"
-	LangPHP         Language = "php"
-	LangC           Language = "c"
-	LangCPP         Language = "cpp"
-	LangScala       Language = "scala"
-	LangSwift       Language = "swift"
-	LangDart        Language = "dart"
-	LangLua         Language = "lua"
-	LangElixir      Language = "elixir"
-	LangHaskell     Language = "haskell"
-	LangObjC        Language = "objc"
-	LangPerl        Language = "perl"
-	LangErlang      Language = "erlang"
-	LangJulia       Language = "julia"
-	LangFSharp      Language = "fsharp"
-	LangR           Language = "r"
-	LangBash        Language = "bash"
-	LangPowerShell  Language = "powershell"
-	LangSql         Language = "sql"
-	LangSQLite      Language = "sqlite"
-	LangSpecScore   Language = "specscore"
-	LangGoMod       Language = "go.mod"
-	LangPackageJSON Language = "package.json"
-	LangNode        Language = "node"
-	LangYAML        Language = "yaml"
-	LangUnknown     Language = "unknown"
+	LangTypeScript   Language = "typescript"
+	LangJavaScript   Language = "javascript"
+	LangTSX          Language = "tsx"
+	LangJSX          Language = "jsx"
+	LangGo           Language = "go"
+	LangPython       Language = "python"
+	LangCSharp       Language = "csharp"
+	LangJava         Language = "java"
+	LangKotlin       Language = "kotlin"
+	LangRuby         Language = "ruby"
+	LangRust         Language = "rust"
+	LangPHP          Language = "php"
+	LangC            Language = "c"
+	LangCPP          Language = "cpp"
+	LangScala        Language = "scala"
+	LangSwift        Language = "swift"
+	LangDart         Language = "dart"
+	LangLua          Language = "lua"
+	LangElixir       Language = "elixir"
+	LangHaskell      Language = "haskell"
+	LangObjC         Language = "objc"
+	LangPerl         Language = "perl"
+	LangErlang       Language = "erlang"
+	LangJulia        Language = "julia"
+	LangFSharp       Language = "fsharp"
+	LangR            Language = "r"
+	LangBash         Language = "bash"
+	LangPowerShell   Language = "powershell"
+	LangSql          Language = "sql"
+	LangSQLite       Language = "sqlite"
+	LangSpecScore    Language = "specscore"
+	LangGoMod        Language = "go.mod"
+	LangPackageJSON  Language = "package.json"
+	LangNode         Language = "node"
+	LangYAML         Language = "yaml"
+	LangUnknown      Language = "unknown"
+	LangMeaningGraph Language = "meaninggraph"
+	LangModelSpec    Language = "modelspec"
 )
 
 // Node is a code symbol in the knowledge graph.

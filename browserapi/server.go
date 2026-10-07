@@ -458,7 +458,7 @@ func publicSymbol(node model.Node) Symbol {
 	if _, err := normalizeRelativePath(filePath, false); err != nil {
 		filePath = ""
 	}
-	return Symbol{ID: node.ID, Kind: string(node.Kind), Name: node.Name, QualifiedName: node.QualifiedName, FilePath: filePath, Language: string(node.Language), Range: SourceRange{StartLine: node.StartLine, EndLine: node.EndLine, StartColumn: node.StartColumn, EndColumn: node.EndColumn}, Signature: node.Signature, Docstring: node.Docstring, Visibility: node.Visibility, Exported: node.IsExported}
+	return Symbol{ID: node.ID, Kind: string(node.Kind), Name: node.Name, QualifiedName: node.QualifiedName, FilePath: filePath, Language: string(node.Language), Range: SourceRange{StartLine: node.StartLine, EndLine: node.EndLine, StartColumn: node.StartColumn, EndColumn: node.EndColumn}, Signature: node.Signature, Docstring: node.Docstring, Visibility: node.Visibility, Exported: node.IsExported, Metadata: node.Metadata}
 }
 
 func dedupeSearch(values []SearchResult) []SearchResult {

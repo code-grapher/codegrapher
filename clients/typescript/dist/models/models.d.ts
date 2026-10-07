@@ -120,6 +120,7 @@ export interface Symbol {
     docstring?: string;
     visibility?: string;
     exported: boolean;
+    metadata?: Record<string, unknown>;
 }
 export interface SourceRange {
     startLine: number;
@@ -172,5 +173,7 @@ export interface GraphEdge {
     kind: string;
     line?: number;
     column?: number;
+    metadata?: Record<string, unknown>;
+    provenance?: string;
 }
 //# sourceMappingURL=models.d.ts.map
