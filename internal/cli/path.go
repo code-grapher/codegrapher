@@ -294,7 +294,7 @@ func addPathSources(idx *indexer.Indexer, scopes []string, result PathResult, wa
 		if len(matches) != 1 {
 			return result, fmt.Errorf("path symbol %s changed during source retrieval", result.Steps[i].Symbol.ID)
 		}
-		source, err := readVerifiedIndexedNodeSource(idx.Root(), matches[0])
+		source, err := readVerifiedIndexedNodeSource(idx.Root(), matches[0], idx.Stores()...)
 		if errors.Is(err, errStaleSource) {
 			// Never mix the old path with new bytes: drop all source, say why.
 			for j := range result.Steps {

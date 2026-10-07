@@ -19,8 +19,8 @@ import (
 const PackageVersion = "0.1.0"
 
 // ExtractionVersion is the index schema and projection freshness version.
-// Version 15 adds the MeaningGraph and ModelSpec semantic projection.
-const ExtractionVersion = 15
+// Version 16 pins semantic source ranges to their indexed file revisions.
+const ExtractionVersion = 16
 
 // Phase identifies a stage of an indexing operation.
 type Phase string

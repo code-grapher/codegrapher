@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/url"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -21,8 +20,9 @@ import (
 )
 
 type Graph struct {
-	Nodes []model.Node
-	Edges []model.Edge
+	Nodes        []model.Node
+	Edges        []model.Edge
+	SourceHashes map[string]string
 }
 
 type builder struct {
@@ -34,6 +34,7 @@ type builder struct {
 	modelPaths  map[string]string
 	moduleNames map[string]string
 	concepts    map[string][]string
+	snapshot    *sourceSnapshot
 }
 
 func stableID(kind model.NodeKind, scope, name string) string {
@@ -104,7 +105,7 @@ func parseRepoAddress(raw string) string {
 }
 
 func Build(root string, files []string, sources []*store.Store) (Graph, error) {
-	b := &builder{root: root, address: repoAddress(root), nodes: map[string]model.Node{}, models: map[string][]string{}, modelPaths: map[string]string{}, moduleNames: map[string]string{}, concepts: map[string][]string{}}
+	b := &builder{root: root, address: repoAddress(root), nodes: map[string]model.Node{}, models: map[string][]string{}, modelPaths: map[string]string{}, moduleNames: map[string]string{}, concepts: map[string][]string{}, snapshot: newSourceSnapshot(root)}
 	if err := b.modelSpec(files); err != nil {
 		return Graph{}, err
 	}
@@ -114,7 +115,10 @@ func Build(root string, files []string, sources []*store.Store) (Graph, error) {
 	if err := b.annotations(files, sources); err != nil {
 		return Graph{}, err
 	}
-	out := Graph{Edges: b.edges}
+	if b.snapshot.err != nil {
+		return Graph{}, b.snapshot.err
+	}
+	out := Graph{Edges: b.edges, SourceHashes: b.snapshot.hashes()}
 	for _, n := range b.nodes {
 		out.Nodes = append(out.Nodes, n)
 	}
@@ -200,9 +204,9 @@ func attrs(a []modelspec.Attr) map[string]any {
 	}
 	return out
 }
-func lineCount(path string) int {
-	data, err := os.ReadFile(path)
-	if err != nil {
+func (b *builder) lineCount(path string) int {
+	data := b.snapshot.readRange(path)
+	if data == nil {
 		return 1
 	}
 	return strings.Count(string(data), "\n") + 1
@@ -212,9 +216,9 @@ func lineCount(path string) int {
 // It scans from the parser's declaration line, ignoring braces in quoted
 // strings, comments and HCL heredocs. A missing close stays at the declaration line;
 // the parser diagnostic remains authoritative for malformed input.
-func blockEnd(path string, start int) int {
-	data, err := os.ReadFile(path)
-	if err != nil {
+func (b *builder) blockEnd(path string, start int) int {
+	data := b.snapshot.readRange(path)
+	if data == nil {
 		return start
 	}
 	lines := strings.Split(string(data), "\n")
@@ -295,9 +299,9 @@ func blockEnd(path string, start int) int {
 	}
 	return start
 }
-func yamlBlockEnd(path string, start int) int {
-	data, err := os.ReadFile(path)
-	if err != nil {
+func (b *builder) yamlBlockEnd(path string, start int) int {
+	data := b.snapshot.readRange(path)
+	if data == nil {
 		return start
 	}
 	lines := strings.Split(string(data), "\n")
@@ -332,7 +336,7 @@ func (b *builder) modelSpec(files []string) error {
 	if len(paths) == 0 {
 		return nil
 	}
-	parsed, findings, err := modelspec.Load(modelspec.OSFS{}, paths, nil)
+	parsed, findings, err := modelspec.Load(snapshotModelFS{snapshot: b.snapshot}, paths, nil)
 	if err != nil {
 		return err
 	}
@@ -387,11 +391,11 @@ func (b *builder) modelSpec(files []string) error {
 				meta["moduleId"] = m.Module.ID
 				meta["moduleVersion"] = m.Module.Version
 			}
-			b.put(model.Node{ID: id, Kind: model.KindModelModule, Name: m.Name, QualifiedName: scope, FilePath: path, Language: model.LangModelSpec, StartLine: max(1, m.ModuleLine), EndLine: lineCount(m.File), Metadata: meta})
+			b.put(model.Node{ID: id, Kind: model.KindModelModule, Name: m.Name, QualifiedName: scope, FilePath: path, Language: model.LangModelSpec, StartLine: max(1, m.ModuleLine), EndLine: b.lineCount(m.File), Metadata: meta})
 		}
 		mn := b.nodes[id]
 		reps := mn.Metadata["representations"].([]map[string]any)
-		reps = append(reps, repr(path, string(m.Form), 1, lineCount(m.File)))
+		reps = append(reps, repr(path, string(m.Form), 1, b.lineCount(m.File)))
 		mn.Metadata["representations"] = reps
 		if !m.Twin || len(reps) == 1 {
 			mn.FilePath = path
@@ -403,7 +407,7 @@ func (b *builder) modelSpec(files []string) error {
 				cid := stableID(kind, scope, c.Name)
 				if n, ok := b.nodes[cid]; ok {
 					reps := n.Metadata["representations"].([]map[string]any)
-					reps = append(reps, repr(path, string(m.Form), c.Line, blockEnd(m.File, c.Line)))
+					reps = append(reps, repr(path, string(m.Form), c.Line, b.blockEnd(m.File, c.Line)))
 					n.Metadata["representations"] = reps
 					b.put(n)
 				}
@@ -411,7 +415,7 @@ func (b *builder) modelSpec(files []string) error {
 					mid := stableID(model.KindModelMember, scope, c.Name+"."+mem.Name)
 					if n, ok := b.nodes[mid]; ok {
 						reps := n.Metadata["representations"].([]map[string]any)
-						reps = append(reps, repr(path, string(m.Form), mem.Line, blockEnd(m.File, mem.Line)))
+						reps = append(reps, repr(path, string(m.Form), mem.Line, b.blockEnd(m.File, mem.Line)))
 						n.Metadata["representations"] = reps
 						b.put(n)
 					}
@@ -425,7 +429,7 @@ func (b *builder) modelSpec(files []string) error {
 		for _, c := range m.Concepts {
 			kind := model.NodeKind("model_" + string(c.Kind))
 			cid := stableID(kind, scope, c.Name)
-			end := blockEnd(m.File, c.Line)
+			end := b.blockEnd(m.File, c.Line)
 			meta := attrs(c.Attrs)
 			meta["semanticScope"] = scope
 			meta["semanticId"] = c.Name
@@ -441,7 +445,7 @@ func (b *builder) modelSpec(files []string) error {
 			b.models[m.Name+"."+c.Name] = append(b.models[m.Name+"."+c.Name], cid)
 			for _, mem := range c.Members {
 				mid := stableID(model.KindModelMember, scope, c.Name+"."+mem.Name)
-				mend := blockEnd(m.File, mem.Line)
+				mend := b.blockEnd(m.File, mem.Line)
 				mmeta := attrs(mem.Attrs)
 				mmeta["semanticScope"] = scope
 				mmeta["semanticId"] = c.Name + "." + mem.Name
@@ -553,7 +557,7 @@ func (b *builder) meaning(files []string) error {
 	for _, dir := range dirs {
 		paths := groups[dir]
 		slices.Sort(paths)
-		g, err := meaning.LoadFiles(meaning.OSFS{}, paths)
+		g, err := meaning.LoadFiles(snapshotMeaningFS{snapshot: b.snapshot}, paths)
 		if err != nil {
 			return err
 		}
@@ -567,7 +571,7 @@ func (b *builder) meaning(files []string) error {
 		g.Address = b.address
 		first := rel(b.root, paths[0])
 		gid := stableID(model.KindMeaningGraph, scope, "graph")
-		b.put(model.Node{ID: gid, Kind: model.KindMeaningGraph, Name: filepath.Base(dir), QualifiedName: scope, FilePath: first, Language: model.LangMeaningGraph, StartLine: 1, EndLine: lineCount(paths[0]), Metadata: map[string]any{"semanticScope": scope, "semanticId": "graph", "address": b.address, "representations": []map[string]any{repr(first, "yaml", 1, lineCount(paths[0]))}}})
+		b.put(model.Node{ID: gid, Kind: model.KindMeaningGraph, Name: filepath.Base(dir), QualifiedName: scope, FilePath: first, Language: model.LangMeaningGraph, StartLine: 1, EndLine: b.lineCount(paths[0]), Metadata: map[string]any{"semanticScope": scope, "semanticId": "graph", "address": b.address, "representations": []map[string]any{repr(first, "yaml", 1, b.lineCount(paths[0]))}}})
 		for _, f := range g.Files {
 			path := rel(b.root, f.Path)
 			if f.ParseErr != nil {
@@ -580,7 +584,7 @@ func (b *builder) meaning(files []string) error {
 					continue
 				}
 				id := stableID(model.KindMeaningConcept, scope, c.ID)
-				end := yamlBlockEnd(f.Path, c.Line)
+				end := b.yamlBlockEnd(f.Path, c.Line)
 				meta := map[string]any{"semanticScope": scope, "semanticId": c.ID, "conceptKind": c.Kind, "labels": c.Labels, "synonyms": c.Synonyms, "values": c.Values, "unit": c.Unit, "source": c.Source, "representations": []map[string]any{repr(path, "yaml", c.Line, end)}}
 				if c.Measure != nil {
 					meta["formula"] = c.Measure.Formula
@@ -737,7 +741,7 @@ func (b *builder) annotations(files []string, sources []*store.Store) error {
 		if len(ns) == 0 {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(b.root, filepath.FromSlash(path)))
+		data, err := b.snapshot.read(filepath.Join(b.root, filepath.FromSlash(path)))
 		if err != nil {
 			return err
 		}

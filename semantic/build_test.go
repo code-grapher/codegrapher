@@ -184,7 +184,8 @@ func TestBlockEndIgnoresCommentAndHeredocBraces(t *testing.T) {
 
 entity "Other" {}
 `)
-	if got := blockEnd(filepath.Join(root, "fixture.modelspec.hcl"), 1); got != 7 {
+	b := builder{snapshot: newSourceSnapshot(root)}
+	if got := b.blockEnd(filepath.Join(root, "fixture.modelspec.hcl"), 1); got != 7 {
 		t.Fatalf("block end=%d, want 7", got)
 	}
 }

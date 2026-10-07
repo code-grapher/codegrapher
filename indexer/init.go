@@ -242,6 +242,39 @@ func (idx *Indexer) indexSemantic() error {
 	if err != nil {
 		return fmt.Errorf("semantic: build: %w", err)
 	}
+	// The projection and language file records are separate stores. Pin each
+	// semantic node to the source revision used for this projection so a later
+	// partial file update cannot make old line ranges appear verified.
+	hashes := make(map[string]string)
+	for i := range graph.Nodes {
+		n := &graph.Nodes[i]
+		hash, ok := hashes[n.FilePath]
+		if !ok {
+			hash = graph.SourceHashes[n.FilePath]
+			if hash == "" {
+				return fmt.Errorf("semantic: source snapshot missing for %s", n.FilePath)
+			}
+			rec, err := idx.fileRecord(n.FilePath)
+			if err != nil {
+				return fmt.Errorf("semantic: source record %s: %w", n.FilePath, err)
+			}
+			if rec == nil {
+				return fmt.Errorf("semantic: no indexed source record for %s", n.FilePath)
+			}
+			content, err := os.ReadFile(filepath.Join(idx.root, filepath.FromSlash(n.FilePath)))
+			if err != nil {
+				return fmt.Errorf("semantic: read source %s: %w", n.FilePath, err)
+			}
+			if HashContent(content) != hash || rec.ContentHash != hash {
+				return fmt.Errorf("semantic: source %s changed during indexing", n.FilePath)
+			}
+			hashes[n.FilePath] = hash
+		}
+		if n.Metadata == nil {
+			n.Metadata = make(map[string]any)
+		}
+		n.Metadata["indexedSourceHash"] = hash
+	}
 	if err := projection.ReplaceSemantic(graph.Nodes, graph.Edges); err != nil {
 		return err
 	}
