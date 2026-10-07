@@ -162,6 +162,33 @@ errors say.
   `init` and `sync` repair the ignore entries (`.codegraph/.gitignore`,
   `.git/info/exclude`; a tracked `.gitignore` is never edited).
 
+## MeaningGraph and ModelSpec
+
+`init`, `index` and `sync` also index MeaningGraph `.meaning.yaml` files and
+ModelSpec HCL/JSON declarations. Concepts, modules, entities, components, enums,
+collections, recordsets and members retain their declared relationships, source
+locations and metadata. HCL/JSON twins share one semantic identity with both
+source representations. Concept labels and synonyms are searchable with `query`.
+
+The viewer provides Code, Models and Meaning filters, declaration details,
+bidirectional model bindings and source links. Binding roles and mapping evidence
+remain visible; parser and unresolved-reference diagnostics are retained.
+
+Link code to a declaration with an explicit comment immediately before (within
+three lines) or inside its symbol:
+
+```go
+// modelspec: implements shop.Invoice.total
+// meaninggraph: references revenue
+func Total() {}
+```
+
+The ModelSpec target uses `<module>.<entity>[.<property>]`; the MeaningGraph target
+uses the concept ID. Ambiguous or missing targets produce diagnostics rather than
+an accepted mapping. External pinned concepts remain unresolved without a
+verified exact dependency source; indexing does not fetch dependencies implicitly.
+Run `sync` after edits, moves or deletions to refresh the semantic relationships.
+
 ## Snapshot / viewer
 
 `codegrapher export` writes the index as [INGR](https://ingr.io) snapshot files
