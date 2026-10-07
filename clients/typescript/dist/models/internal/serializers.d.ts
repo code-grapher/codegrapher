@@ -35,6 +35,8 @@ export declare function jsonSymbolToTransportTransform(input_?: Symbol | null): 
 export declare function jsonSymbolToApplicationTransform(input_?: any): Symbol;
 export declare function jsonSourceRangeToTransportTransform(input_?: SourceRange | null): any;
 export declare function jsonSourceRangeToApplicationTransform(input_?: any): SourceRange;
+export declare function jsonRecordUnknownToTransportTransform(items_?: Record<string, any> | null): any;
+export declare function jsonRecordUnknownToApplicationTransform(items_?: any): Record<string, any>;
 export declare function jsonSearchResponseToTransportTransform(input_?: SearchResponse | null): any;
 export declare function jsonSearchResponseToApplicationTransform(input_?: any): SearchResponse;
 export declare function jsonArraySearchResultToTransportTransform(items_?: Array<SearchResult> | null): any;

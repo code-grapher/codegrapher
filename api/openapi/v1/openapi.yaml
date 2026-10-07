@@ -840,6 +840,11 @@ components:
         column:
           type: integer
           format: int32
+        metadata:
+          type: object
+          additionalProperties: {}
+        provenance:
+          type: string
     GraphResponse:
       type: object
       required:
@@ -1020,6 +1025,9 @@ components:
           type: string
         exported:
           type: boolean
+        metadata:
+          type: object
+          additionalProperties: {}
     SymbolResponse:
       type: object
       required:

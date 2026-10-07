@@ -112,6 +112,10 @@ columns:
     type: any
     titles:
       en: Return Type
+  metadata:
+    type: any
+    titles:
+      en: Metadata
 columns_order:
   - kind
   - name
@@ -132,6 +136,7 @@ columns_order:
   - decorators
   - type_parameters
   - return_type
+  - metadata
 `
 
 // edgeCollectionDef is the .collection/definition.yaml for the edges collection.

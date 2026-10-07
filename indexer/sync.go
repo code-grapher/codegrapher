@@ -167,6 +167,9 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 	if err := idx.indexTrace(); err != nil {
 		result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "trace_error"})
 	}
+	if err := idx.indexSemantic(); err != nil {
+		result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "semantic_error"})
+	}
 
 	if result.FilesAdded > 0 || result.FilesModified > 0 || result.FilesRemoved > 0 {
 		idx.runMaintenanceAll()
@@ -290,6 +293,9 @@ func (idx *Indexer) SyncFiles(changed []string, opts Options) SyncResult {
 	idx.syncChangedFiles(filesToIndex, opts, &result)
 	if err := idx.indexTrace(); err != nil {
 		result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "trace_error"})
+	}
+	if err := idx.indexSemantic(); err != nil {
+		result.Errors = append(result.Errors, model.ExtractionError{Message: err.Error(), Severity: "error", Code: "semantic_error"})
 	}
 
 	if result.FilesAdded > 0 || result.FilesModified > 0 || result.FilesRemoved > 0 {

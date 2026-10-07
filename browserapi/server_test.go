@@ -116,6 +116,93 @@ func TestBrowserAPIAuthenticatedJourneyAndPathSafety(t *testing.T) {
 	assertError(t, stale, http.StatusConflict, "index_stale")
 }
 
+func TestBrowserAPISemanticMetadataAndEvidence(t *testing.T) {
+	root := t.TempDir()
+	files := map[string]string{
+		"chinook.modelspec.hcl": "entity \"Invoice\" {\n  key = [\"id\"]\n  property \"id\" { type = \"uuid\" }\n  property \"total\" { type = \"decimal\" }\n}\n",
+		"demo.meaning.yaml":     "format: meaning/draft-1\nid: demo\nname: Demo\ndescription: Demo concepts.\nmodels:\n  chinook: chinook.modelspec.hcl\nconcepts:\n  - id: invoice-total\n    kind: attribute\n    labels: {en: Invoice total}\n    synonyms: {en: [revenue]}\n    description: The total of an invoice.\n    bindings:\n      - model: modelspec:///chinook.Invoice\n        property: total\n        role: value\n",
+		"invoice.go":            "package demo\n// modelspec: implements chinook.Invoice.total\nfunc Total() int { return 1 }\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	idx, result, err := indexer.Init(root, indexer.Options{})
+	if err != nil || !result.Success {
+		t.Fatalf("init: %v %+v", err, result)
+	}
+	defer idx.Close()
+	api, err := New(idx, Config{Token: testToken})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var repositories struct {
+		Repositories []Repository `json:"repositories"`
+	}
+	decodeResponse(t, request(t, api, http.MethodGet, BasePath+"/repositories", testToken, ""), &repositories)
+	repo := repositories.Repositories[0]
+	base := BasePath + "/repositories/" + repo.ID + "/revisions/" + repo.Revision
+	var search SearchResponse
+	decodeResponse(t, request(t, api, http.MethodGet, base+"/search?query=invoice-total", testToken, ""), &search)
+	var concept *Symbol
+	for i := range search.Results {
+		if search.Results[i].Symbol.Kind == string(model.KindMeaningConcept) {
+			concept = &search.Results[i].Symbol
+		}
+	}
+	if concept == nil || concept.Metadata["labels"] == nil || concept.Metadata["synonyms"] == nil {
+		t.Fatalf("semantic search metadata: %+v", search.Results)
+	}
+	var duplicateEvidenceInserted bool
+	for _, st := range idx.Stores() {
+		edges, err := st.AllEdges()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, edge := range edges {
+			if edge.Kind != model.EdgeBindsTo || edge.Source != concept.ID {
+				continue
+			}
+			edge.Line++
+			edge.Metadata = map[string]any{"role": "dimension", "note": "second declaration"}
+			if err := st.InsertEdge(edge); err != nil {
+				t.Fatal(err)
+			}
+			duplicateEvidenceInserted = true
+			break
+		}
+	}
+	if !duplicateEvidenceInserted {
+		t.Fatal("binding fixture missing")
+	}
+	decodeResponse(t, request(t, api, http.MethodGet, BasePath+"/repositories", testToken, ""), &repositories)
+	repo = repositories.Repositories[0]
+	base = BasePath + "/repositories/" + repo.ID + "/revisions/" + repo.Revision
+	var graph GraphResponse
+	decodeResponse(t, request(t, api, http.MethodGet, base+"/symbols/"+concept.ID+"/graph?depth=3", testToken, ""), &graph)
+	var binding, secondBinding, mapping, bridge bool
+	for _, edge := range graph.Edges {
+		if edge.Kind == string(model.EdgeBindsTo) && edge.Metadata["role"] == "value" {
+			binding = true
+		}
+		if edge.Kind == string(model.EdgeBindsTo) && edge.Metadata["role"] == "dimension" && edge.Metadata["note"] == "second declaration" {
+			secondBinding = true
+		}
+		if edge.Kind == string(model.EdgeMapsToCode) && edge.Provenance == "explicit_annotation" {
+			mapping = true
+		}
+	}
+	for _, node := range graph.Nodes {
+		if node.Kind == string(model.KindSemanticCode) && node.Metadata["canonicalCodeId"] != nil {
+			bridge = true
+		}
+	}
+	if !binding || !secondBinding || !mapping || !bridge {
+		t.Fatalf("semantic graph transport binding=%v secondBinding=%v mapping=%v bridge=%v: %+v", binding, secondBinding, mapping, bridge, graph)
+	}
+}
+
 func TestRepositoryIdentitySurvivesMoveAndFreshnessErrorIsScrubbed(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "before")

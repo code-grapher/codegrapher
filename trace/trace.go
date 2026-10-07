@@ -272,7 +272,11 @@ func durableSymbol(n model.Node) bool {
 	}
 	switch n.Kind {
 	case model.KindFeature, model.KindIdea, model.KindPlan, model.KindRequirement,
-		model.KindAcceptanceCriterion, model.KindTask:
+		model.KindAcceptanceCriterion, model.KindTask,
+		model.KindMeaningGraph, model.KindMeaningConcept, model.KindModelModule,
+		model.KindModelEntity, model.KindModelComponent, model.KindModelEnum,
+		model.KindModelCollection, model.KindModelRecordset, model.KindModelMember,
+		model.KindSemanticCode:
 		return false
 	default:
 		return true

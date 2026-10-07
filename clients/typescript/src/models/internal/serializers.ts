@@ -312,14 +312,14 @@ export function decodeBase64(value: string): Uint8Array | undefined {
     return input_ as any;
   }
     return {
-    id: input_.id,kind: input_.kind,name: input_.name,qualifiedName: input_.qualifiedName,filePath: input_.filePath,language: input_.language,range: jsonSourceRangeToTransportTransform(input_.range),signature: input_.signature,docstring: input_.docstring,visibility: input_.visibility,exported: input_.exported
+    id: input_.id,kind: input_.kind,name: input_.name,qualifiedName: input_.qualifiedName,filePath: input_.filePath,language: input_.language,range: jsonSourceRangeToTransportTransform(input_.range),signature: input_.signature,docstring: input_.docstring,visibility: input_.visibility,exported: input_.exported,metadata: jsonRecordUnknownToTransportTransform(input_.metadata)
   }!;
 }export function jsonSymbolToApplicationTransform(input_?: any): Symbol {
   if(!input_) {
     return input_ as any;
   }
     return {
-    id: input_.id,kind: input_.kind,name: input_.name,qualifiedName: input_.qualifiedName,filePath: input_.filePath,language: input_.language,range: jsonSourceRangeToApplicationTransform(input_.range),signature: input_.signature,docstring: input_.docstring,visibility: input_.visibility,exported: input_.exported
+    id: input_.id,kind: input_.kind,name: input_.name,qualifiedName: input_.qualifiedName,filePath: input_.filePath,language: input_.language,range: jsonSourceRangeToApplicationTransform(input_.range),signature: input_.signature,docstring: input_.docstring,visibility: input_.visibility,exported: input_.exported,metadata: jsonRecordUnknownToApplicationTransform(input_.metadata)
   }!;
 }export function jsonSourceRangeToTransportTransform(
   input_?: SourceRange | null,
@@ -339,6 +339,36 @@ export function decodeBase64(value: string): Uint8Array | undefined {
     return {
     startLine: input_.startLine,endLine: input_.endLine,startColumn: input_.startColumn,endColumn: input_.endColumn
   }!;
+}export function jsonRecordUnknownToTransportTransform(
+  items_?: Record<string, any> | null,
+): any {
+  if(!items_) {
+    return items_ as any;
+  }
+
+  const _transformedRecord: any = {};
+
+  for (const [key, value] of Object.entries(items_ ?? {})) {
+    const transformedItem = value as any;
+    _transformedRecord[key] = transformedItem;
+  }
+
+  return _transformedRecord;
+}export function jsonRecordUnknownToApplicationTransform(
+  items_?: any,
+): Record<string, any> {
+  if(!items_) {
+    return items_ as any;
+  }
+
+  const _transformedRecord: any = {};
+
+  for (const [key, value] of Object.entries(items_ ?? {})) {
+    const transformedItem = value as any;
+    _transformedRecord[key] = transformedItem;
+  }
+
+  return _transformedRecord;
 }export function jsonSearchResponseToTransportTransform(
   input_?: SearchResponse | null,
 ): any {
@@ -484,13 +514,13 @@ export function decodeBase64(value: string): Uint8Array | undefined {
     return input_ as any;
   }
     return {
-    sourceId: input_.sourceId,targetId: input_.targetId,kind: input_.kind,line: input_.line,column: input_.column
+    sourceId: input_.sourceId,targetId: input_.targetId,kind: input_.kind,line: input_.line,column: input_.column,metadata: jsonRecordUnknownToTransportTransform(input_.metadata),provenance: input_.provenance
   }!;
 }export function jsonGraphEdgeToApplicationTransform(input_?: any): GraphEdge {
   if(!input_) {
     return input_ as any;
   }
     return {
-    sourceId: input_.sourceId,targetId: input_.targetId,kind: input_.kind,line: input_.line,column: input_.column
+    sourceId: input_.sourceId,targetId: input_.targetId,kind: input_.kind,line: input_.line,column: input_.column,metadata: jsonRecordUnknownToApplicationTransform(input_.metadata),provenance: input_.provenance
   }!;
 }

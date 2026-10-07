@@ -18,9 +18,9 @@ import (
 // (indexed_with_version metadata, mirroring CodeGraphPackageVersion).
 const PackageVersion = "0.1.0"
 
-// ExtractionVersion mirrors EXTRACTION_VERSION in
-// src/extraction/extraction-version.ts at the time of the port.
-const ExtractionVersion = 14
+// ExtractionVersion is the index schema and projection freshness version.
+// Version 15 adds the MeaningGraph and ModelSpec semantic projection.
+const ExtractionVersion = 15
 
 // Phase identifies a stage of an indexing operation.
 type Phase string
@@ -267,7 +267,7 @@ func (idx *Indexer) Store() *store.Store {
 	for _, sc := range scopes {
 		// The trace projection is a cross-scope side store and must not become
 		// the primary code store used by legacy single-store callers.
-		if sc.Language == model.Language("trace") {
+		if sc.Language == model.Language("trace") || sc.Language == model.Language("semantic") {
 			continue
 		}
 		return stores[sc]
