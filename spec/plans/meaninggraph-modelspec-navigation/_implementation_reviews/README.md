@@ -166,3 +166,58 @@ VERDICT: blockers=0 majors=0 minors=0 land=yes
 
 
 Root verification: full Go suite passed with loopback test access (`/private/tmp/codegrapher-site-links-root-cli-test.log`); `go vet` and static CLI build passed. Standalone CLI search returned one canonical function without its internal bridge duplicate, and concept/code node output preserved labels, roles, annotation evidence and both mapping directions. Production provider/viewer/website verification remains pending.
+
+
+## Released provider dependency cutover
+
+# Independent provider consumer-cutover review
+
+Reviewed read-only in `/Users/alex/projects/.worktrees/codegrapher-site-links/github.com/code-grapher/server`, branch `codegrapher-site-links`, against `origin/main` and worktree HEAD `51f317f18450bb5860dacb20725f013676f8ba28`. This is the final uncommitted provider diff; the landing owner will assemble the PR. The earlier implementation review and resolved r1–r4 findings are recorded in `/private/tmp/codegrapher-site-links-provider-review.md`. I authored none of the provider changes.
+
+## Exact dependency identity
+
+- `go.mod` declares Go `1.27.0` and `github.com/specscore/codegrapher v0.15.1`. It has no local CodeGrapher `replace`; its only replace is the published gotreesitter fork `github.com/trakhimenok/gotreesitter v0.20.3-0.20260611095614-14527fe8bf96`.
+- GitHub tag `v0.15.1` directly points to backend merge commit `86704bdfa62e912b5fafc69be083f4bf48335e34` (PR #59). Its release was published at `2026-10-07T06:26:49Z`, with draft and prerelease both false. `go list -m -json` independently resolved this module with `GoVersion: 1.27.0` and module sum `h1:liKpDB2QfSayQScchEkeAzUk+9sLsOn2lhyAdTA2uGg=`.
+- Final consumer file hashes: `go.mod` SHA-256 `cc2e85343e98b815f49589ea776b2b9a86589c07e65e4009a9307aae25bd49b7`; `go.sum` SHA-256 `f2d59115105089c663d01b3b041c062151eb829c8f29268c01a24c47db75b4ce`.
+
+## Cutover findings
+
+The CI diff removes the sibling `codegrapher` checkout and uses `server/go.mod`/`server/go.sum` with the `server` working directory for vet, CGO-disabled build, and tests. The deployment script removes its `../codegrapher` guard and still cross-builds a self-contained Linux/amd64 binary. Neither path depends on the former local module replacement.
+
+README route and response copy matches the current handlers: full 40-character commit pins, default and pin-specific status, scoped graph manifests and recordsets, `409` for manifest-ref mismatch, `410` for absent graph data, and `406` when a recordset request accepts neither zstd nor gzip. During this review I found that the response table omitted the `202` index acknowledgement and `406` encoding response; the provider author corrected both and I rechecked the resulting diff. No finding remains.
+
+Independent checks at the final module hashes passed: `go mod tidy -diff` produced no diff, `go mod verify` reported all modules verified, `git diff --check` and `bash -n scripts/deploy-server.sh` passed, and `CGO_ENABLED=0 go test -count=1 ./internal/handler ./internal/graphmanifest ./internal/manifest` passed. The provider author reports exit status zero for full vet, CGO-disabled build/test, Linux/amd64 build, and module checks on `v0.15.1`; I inspected the corresponding `/private/tmp/codegrapher-site-links-provider-v0151-{test,vet,build,modverify,linux-build,tidydiff,diffcheck}.log` outputs but did not duplicate those broader gates. The build logs contain a stat-cache write warning, which the author reports did not fail the builds. Merge, remote CI, and deployment remain the landing owner's subsequent verification steps.
+
+VERDICT: blockers=0 majors=0 minors=0 land=yes
+
+
+## Reciprocal website support
+
+# Independent reciprocal-support review
+
+Reviewer: `/root/websites` (read-only; another author owns these edits)
+
+## Backend idea and plan delta
+
+- Worktree: `/Users/alex/projects/.worktrees/codegrapher-site-links/github.com/code-grapher/codegrapher`
+- HEAD: `2ec63a29918249fef31b273a6841c25a784c751a`
+- Paths: `spec/ideas/meaninggraph-modelspec-navigation.md`, `spec/plans/meaninggraph-modelspec-navigation/README.md`
+- Exact path-limited `git diff` SHA-256: `bbc06154f58b1485d5dc6b9a26df71c926229de91aabcb668b54d718df1a2136`
+
+The addition records the user's expanded CodeGrapher homepage request in the idea context, scope, summary, user journey, acceptance criteria, and Task 4. It retains the requirement for typed semantics, explicit code mapping, correct pinned viewer routes on the two registries, and no fabricated links for illustrative items. The new homepage acceptance criterion names both external project sites. No plan inconsistency or unsupported automatic code-mapping promise found in these two paths.
+
+## Viewer homepage delta
+
+- Worktree: `/Users/alex/projects/.worktrees/codegrapher-site-links/github.com/code-grapher/codegrapher-dev`
+- HEAD: `6799edbeebe0030a08a08ec0e2be4e7e1c7c29d3`
+- Paths: `apps/codegrapher/src/app/landing-page.component.html`, `apps/codegrapher/src/styles.css`
+- Exact path-limited `git diff` SHA-256: `e22e9a0f21d766a9eb6f105b61bac986026b3d4ed82c2326f659742576ee9e91`
+
+The new section says CodeGrapher indexes MeaningGraph and ModelSpec declarations and lets visitors inspect typed Meaning/Models/Code views, accepted bindings, source locations, model relationships, and code symbols connected by explicit annotations. Those claims align with the reviewed semantic implementation and avoid claiming inferred code mappings or resolved external dependencies. The two links use the correct project homepages, have descriptive link text and safe new-tab attributes, and the section has a unique heading target for the added header/footer navigation. Existing global focus styles apply. The two-column card rule collapses to one column through the later `@media (max-width: 540px)` `.cards` rule; at intermediate widths it follows the site's existing two-column layout. The section adds no interactive state or fabricated source links. The author's lint/build and diff-check results were reported green; this review inspected the source and CSS without starting a preview server.
+
+No findings in the reviewed reciprocal-support delta. The root landing owner must still verify the final browser journey before production deployment.
+
+VERDICT: blockers=0 majors=0 minors=0 land=yes
+
+
+Root receipts: CodeGrapher v0.15.1 is published at merge `86704bdfa62e912b5fafc69be083f4bf48335e34`; exact main Go CI and Release workflows succeeded. The provider Linux binary links released v0.15.1 and all consumer packages pass. The real Chinook registry revision `26e852cca00101f53a84ef8ee1f1ae389067f5cf` indexes 88 files, 900 nodes and 5,756 edges; invoice-total binds to the ModelSpec Total member with role value. Core external pins remain unresolved without verified exact revisions. Provider PR #8 and viewer PR #18 await the pending decision on WB’s --allow-unfenced landing. GitHub’s branch-rules endpoint returned HTTP 403 with “Upgrade to GitHub Pro or make this repository public to enable this feature.” Automatic approval review rejected use of this flag without specific user authorization. Website publication, production journeys and worktree cleanup remain pending.

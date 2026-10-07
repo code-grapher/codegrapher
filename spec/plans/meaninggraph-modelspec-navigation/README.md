@@ -13,7 +13,7 @@ status: Executing
 
 ## Summary
 
-Deliver typed MeaningGraph and ModelSpec indexing, semantic search, bidirectional binding and source navigation, explicit code mappings, and support sections with pinned viewer links on meaninggraph.io and modelspec.org. The user authorized implementation on 2026-10-07.
+Deliver typed MeaningGraph and ModelSpec indexing, semantic search, bidirectional binding and source navigation, explicit code mappings, and support sections with pinned viewer links on meaninggraph.io and modelspec.org, plus a CodeGrapher homepage support section linking both projects. The user authorized implementation on 2026-10-07.
 
 ## Approach
 
@@ -28,6 +28,8 @@ Use released parser libraries and the existing derived index, sync engine, API a
 5. They edit, move or remove a declaration. Observable result after sync: dependent relationships refresh and stale nodes/edges disappear; incremental and full indexes agree.
 6. They open a graph/model metadata card on either public website and click CodeGrapher. Observable result: the viewer opens the matching repository and pinned revision, and source links select the relevant file/line. Browser refresh retains the location. The provider publishes and resolves immutable commit snapshots independently of the default branch; a missing or mismatched snapshot is shown explicitly instead of falling back. Viewer routes use /github.com/<org>/<repo>/<file>?branch=<commit>#line=<line>, with segment encoding and existing line selection retained.
 
+7. They visit CodeGrapher’s homepage and discover MeaningGraph and ModelSpec support. Observable result: the support section explains concept, binding, model/member and explicit code navigation, and links to both project websites.
+
 ## Acceptance Criteria
 
 - Typed extraction covers meaningful declarations and members in both ModelSpec serializations and MeaningGraph YAML, including labels/synonyms, values, units and measures.
@@ -36,7 +38,8 @@ Use released parser libraries and the existing derived index, sync engine, API a
 - Invalid declarations and missing dependencies remain visible as diagnostics; externally pinned references retain identity and requested revision without silently using the local default branch. No implicit network fetch is added to local indexing.
 - CLI/API/export/import and viewer preserve semantic kinds and metadata. Search supports labels and synonyms. Node/source navigation remains bounded and truthful about freshness.
 - Incremental refresh handles changed targets, unchanged referrers, deletion and file moves.
-- Both websites have a CodeGrapher support section and viewer actions on registered metadata cards/pages, with escaped segment-encoded URLs and matching pinned revisions. Illustrative catalogue items have no fabricated source mappings.
+- CodeGrapher’s homepage states MeaningGraph and ModelSpec support and links to meaninggraph.io and modelspec.org.
+- Both registry websites have a CodeGrapher support section and viewer actions on registered metadata cards/pages, with escaped segment-encoded URLs and matching pinned revisions. Illustrative catalogue items have no fabricated source mappings.
 - One real fixture exercises search, binding navigation, source/code mapping, edit/sync and website-to-viewer navigation. MeaningGraph cross-repository model binding restrictions remain enforced.
 
 ## Tasks
@@ -62,12 +65,12 @@ Expose Code, Models and Meaning views/search filters and object details with mod
 
 Extend code-grapher/server immutable-commit indexing and status/manifest lookup to retain and serve the requested snapshot; default-branch jobs must not overwrite a pinned graph. Viewer passes commit identity and checks returned snapshot commit. Verify coexistence of default and two pinned revisions, concurrent jobs, status mismatch/missing states, and real website pins. Update the server CodeGrapher dependency to the released implementation without local replacements.
 
-### Task 4: Add both websites and pinned viewer actions
+### Task 4: Add reciprocal website support and pinned viewer actions
 
 **Verifies:** idea:meaninggraph-modelspec-navigation
 **Status:** in_progress
 
-Update MeaningGraph and ModelSpec homepages and registered graph/model/concept/source metadata surfaces. Use the existing CodeGrapher route grammar, encode each path segment, retain pinned commits and lines where known, preserve accessibility and do not invent links for illustrative items. Verify generated pages and destination behavior.
+Update MeaningGraph and ModelSpec homepages and registered graph/model/concept/source metadata surfaces. Add a CodeGrapher homepage support section describing the semantic navigation and linking both project websites. Use the existing CodeGrapher route grammar, encode each path segment, retain pinned commits and lines where known, preserve accessibility and do not invent links for illustrative items. Verify generated pages and destination behavior.
 
 ### Task 5: Review, land and verify production journey
 
