@@ -143,3 +143,26 @@ VERDICT: blockers=0 majors=0 minors=0 land=yes
 ## Open Questions
 
 None at this time.
+
+
+## Forward CLI correction
+
+# Independent forward CLI review
+
+Reviewed read-only in `/Users/alex/projects/.worktrees/codegrapher-site-links/github.com/code-grapher/codegrapher` at HEAD `6594dd9ccd8e965635fe9bd9ac899a6c24191f78`. Scope is the uncommitted diff in `internal/cli/node.go`, `internal/cli/query.go`, `internal/cli/store_querier.go` plus new `internal/cli/semantic_navigation_test.go`; unrelated plan changes excluded. At review time, tracked CLI diff SHA-256 was `4233960d757218d71bdbe2fae10fa7bfb4b49d229b4fe0d280a0f7292753220f`, and test file SHA-256 was `3a0ec976c6ecb87e9aaa1da7bafc123ae909da5a38cdff26586308c77aa27e6d`.
+
+## Findings
+
+No remaining blocker, major, or minor finding. During review I identified that the first draft added `BriefSymbol.Metadata` but did not populate it for `query --brief`; the author fixed it before the ready signal (`internal/cli/query.go:119,122-135`). I also requested readable metadata and binding evidence in default text `node` output; the final diff includes both (`internal/cli/node.go:514-521,542-559`).
+
+## Evidence
+
+- Bridge lookup follows `canonicalCodeId` only into the selected stores and returns the owning code node (`internal/cli/node.go:57-77`); name and ID node matches are deduplicated by canonical ID (`internal/cli/node.go:310-356`). Ordinary multi-scope query aliases bridge rows to canonical code and keeps the strongest score; explicit bridge-kind queries retain the bridge (`internal/cli/store_querier.go:63-104`).
+- `NodeRelation` now carries edge metadata and bridge evidence, and relation collection resolves bridge targets to canonical code (`internal/cli/node.go:39-50,383-459`). The reverse code journey reads incoming mapping edges from the semantic bridge, bounded by the requested per-direction limit (`internal/cli/node.go:435-459`). Semantic node metadata is present in JSON and readable text (`internal/cli/node.go:462-463,514-521`).
+- The CLI regression exercises duplicate-free Total search, explicit bridge inspection, node aliasing, concept labels/synonyms, binding role/match/note, forward and reverse explicit code mapping, readable text, `query revenue --brief`, and an actual HCL edit plus `sync` removing stale binding/mapping (`internal/cli/semantic_navigation_test.go:14-178`). ExtractionVersion remains 15.
+- Independent focused command passed: `GOCACHE=/private/tmp/codegrapher-cli-review-gocache go test ./internal/cli -run 'TestSemanticCLIContractAndHCLSync|TestBriefSearchResultsOmitVerboseNodeFields' -count=1`. `git diff --check` passed. An independent whole-package run could not pass in this sandbox because unrelated transport/upgrade tests bind local ports; the focused regression does not use ports. The author reports full Go suite and lint green, and root separately reran the actual standalone CLI fixture.
+
+VERDICT: blockers=0 majors=0 minors=0 land=yes
+
+
+Root verification: full Go suite passed with loopback test access (`/private/tmp/codegrapher-site-links-root-cli-test.log`); `go vet` and static CLI build passed. Standalone CLI search returned one canonical function without its internal bridge duplicate, and concept/code node output preserved labels, roles, annotation evidence and both mapping directions. Production provider/viewer/website verification remains pending.
