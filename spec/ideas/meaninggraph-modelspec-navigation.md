@@ -18,7 +18,7 @@ How might we let developers and agents navigate from domain meaning through mode
 
 ## Context
 
-Approved by the user on 2026-10-07: full CodeGrapher support plus MeaningGraph and ModelSpec website sections and metadata viewer links.
+Approved by the user on 2026-10-07: full CodeGrapher support plus MeaningGraph and ModelSpec website sections and metadata viewer links. The user additionally requested a CodeGrapher website support section linking both projects.
 
 ## Recommended Direction
 
@@ -32,7 +32,7 @@ Reuse the MeaningGraph and ModelSpec Go libraries, project typed semantic nodes 
 
 ## MVP Scope
 
-End-to-end typed declaration indexing, semantic search, bidirectional bindings, model relationships, source navigation, explicit code mappings, diagnostics and incremental refresh, plus both websites.
+End-to-end typed declaration indexing, semantic search, bidirectional bindings, model relationships, source navigation, explicit code mappings, diagnostics and incremental refresh, plus reciprocal support sections on all three websites and metadata viewer links on both registries.
 
 ## Not Doing (and Why)
 
