@@ -12,7 +12,7 @@ Canonical index of all plans in this repository. Each plan is a single Markdown 
 |---|---|---|---|---|
 | [authenticated-browser-api](authenticated-browser-api.md) | Implemented | live-daemon-api | 2026-09-12 | alex |
 | [automatic-index-freshness](automatic-index-freshness.md) | Implemented | automatic-index-freshness | 2026-09-12 | alex |
-| [meaninggraph-modelspec-navigation](meaninggraph-modelspec-navigation/README.md) | Executing | idea:meaninggraph-modelspec-navigation | 2026-10-07 | alex |
+| [meaninggraph-modelspec-navigation](meaninggraph-modelspec-navigation/README.md) | Implemented | idea:meaninggraph-modelspec-navigation | 2026-10-07 | alex |
 | [post-release-hardening](post-release-hardening.md) | Approved | automatic-index-freshness | 2026-09-13 | alex |
 | [robust-watcher-local-daemon](robust-watcher-local-daemon.md) | Implemented | automatic-index-freshness | 2026-09-12 | alex |
 | [secure-remote-browser-api](secure-remote-browser-api.md) | Approved | secure-remote-browser-api | 2026-09-13 | alex |

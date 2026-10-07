@@ -220,4 +220,100 @@ No findings in the reviewed reciprocal-support delta. The root landing owner mus
 VERDICT: blockers=0 majors=0 minors=0 land=yes
 
 
-Root receipts: CodeGrapher v0.15.1 is published at merge `86704bdfa62e912b5fafc69be083f4bf48335e34`; exact main Go CI and Release workflows succeeded. The provider Linux binary links released v0.15.1 and all consumer packages pass. The real Chinook registry revision `26e852cca00101f53a84ef8ee1f1ae389067f5cf` indexes 88 files, 900 nodes and 5,756 edges; invoice-total binds to the ModelSpec Total member with role value. Core external pins remain unresolved without verified exact revisions. Provider PR #8 and viewer PR #18 await the pending decision on WB’s --allow-unfenced landing. GitHub’s branch-rules endpoint returned HTTP 403 with “Upgrade to GitHub Pro or make this repository public to enable this feature.” Automatic approval review rejected use of this flag without specific user authorization. Website publication, production journeys and worktree cleanup remain pending.
+Root receipts: CodeGrapher v0.15.1 is published at merge `86704bdfa62e912b5fafc69be083f4bf48335e34`; exact main Go CI and Release workflows succeeded. The provider Linux binary links released v0.15.1 and all consumer packages pass. The real Chinook registry revision `26e852cca00101f53a84ef8ee1f1ae389067f5cf` indexes 88 files, 900 nodes and 5,756 edges; invoice-total binds to the ModelSpec Total member with role value. Core external pins remain unresolved without verified exact revisions. The user explicitly authorized WB’s observed-check landing mode. Provider PR #8 merged at `50ae6124418775c26b09e3c02fc0d81e983fadb5`; viewer PR #18 merged at `8cfbdd9448d9d28e5ce2477eccdf9c51a55c2835`. WB verified exact candidate checks, target containment, remote branch deletion and canonical fast-forward; the five task worktrees were retained for delivery verification. The provider deployed from clean merged main; the remote binary SHA-256 matches the local binary (`40ae37735e6603822b72a6790e586297e6663a44680e23752d188e96cef62c10`). Its public status serves separate Chinook snapshots at pins `26e852cca00101f53a84ef8ee1f1ae389067f5cf` and `f11b1192ed9f48cdd4f788d1d4ffde0e972ee04b`, alongside default main `411cb7aead96a0b4314f3068c0a0455f869dfdee`. Both pins contain 100 semantic nodes and 167 edges; default contains 109 and 174. All advertise ExtractionVersion 15 and matching indexed commits. A missing all-zero pin stays unindexed and its graph manifest returns HTTP 410.
+
+The viewer deployed as Cloudflare version `a473e80d-56ba-4836-bee2-d81fa8cd64c5`. Root verified the actual static homepage support section, real concept-label search and Invoice.Total binding details. The production browser journey exposed a source-navigation bug: a representation changed the pinned URL while Meaning search still covered raw source. The independently reviewed forward correction merged in PR #19 at `845cece9e6dea65f500a001e6ce3e57b27e93d37` and deployed as Cloudflare version `f763c57b-9a3d-47ea-9a79-2385db4db746`. Exact merged lint/build-test/e2e checks passed. Root repeated the real pinned Meaning → invoice-total → Invoice.Total → HCL journey: source renders immediately at line 378, the Structure panel lists semantic declarations, a Structure click retains the pin, and refresh retains source/path/line. The JSON twin renders and its canonical Total declaration opens line 312. MeaningGraph PR #18 merged at `e3bcf42b65161fb8583c5c47fb8fd81f97bffb73`; ModelSpec PR #14 merged at `a4ab94112536fd03813e21fa22e45244d2a4d69f`. Both exact merged Deploy workflows completed successfully, with Deploy and live smoke-check steps executed. Live build markers advertise those exact commits, production=true and fixture=false. Root verified both supported-by sections, card viewer links, MeaningGraph concept YAML source at line 343, and ModelSpec HCL source actions at registry pin `26e852cca00101f53a84ef8ee1f1ae389067f5cf`. The merged viewer’s lint/build-test/e2e checks passed, while its separate automatic Workers Builds check failed without exposing an error log. Manual deployment succeeded; The same automatic Workers Builds failure was verified on prior main `3cac2866610a992a529a2afc0fb8111cc9665fdd`, before this feature. Automatic-build diagnosis requires an authenticated Cloudflare dashboard session and is separate from the successful manual feature deployment. WB cleaned all five original implementation worktrees and local task branches after verifying exact fresh origin/main containment. The remote task branches had already been deleted during each WB landing. The cleanup receipt reports applied=true, worktree_gone=true and branch_deleted=true for every repository; remote_deleted=false records that there was no remaining remote branch to delete.
+
+
+## Pinned source-navigation correction
+
+# Independent viewer source-navigation review
+
+Reviewer: `/root/websites` (read-only review of another author's change)
+Worktree: `/Users/alex/projects/.worktrees/codegrapher-site-links/github.com/code-grapher/codegrapher-dev`
+Base HEAD: `8cfbdd9448d9d28e5ce2477eccdf9c51a55c2835`
+Candidate paths, in the order used for the digest below:
+
+1. `apps/codegrapher-e2e/src/pinned-semantic-route.spec.ts`
+2. `apps/codegrapher-e2e/src/semantic-source-navigation.spec.ts` (untracked new file)
+3. `libs/codegrapher/ui/src/lib/ui/ui.ts`
+4. `libs/codegrapher/ui/src/lib/viewer/file-structure.spec.ts`
+5. `libs/codegrapher/ui/src/lib/viewer/file-structure.ts`
+
+Exact SHA-256 of each listed path's UTF-8 name followed by NUL and its raw file bytes, concatenated in this order: `3c4bada727df773ffd380ff9711fe9ce0fe49a4fcdebde354c036bd042acd73d`. This identifies both tracked edits and the untracked regression file. `git diff --check` passed.
+
+The reported bug is reproduced by the old render priority: Meaning/Models view synthesizes search results even after a source link changes the route to a file, and main content renders results before the file panel. The fix clears the query and category only for explicit file, directory, or symbol navigation. A semantic relationship click uses the details component's `selectNode` output, so it keeps the semantic details view. A representation/evidence link uses `navigate`, clearing the search view and revealing the file panel. The file content path still uses the existing request ID check to discard stale load responses and calls `scrollToHash` after loading.
+
+The representation URL is segment encoded and includes the requested line. `onSymbolNavigate` strips its query but `navigateToPath` carries the current branch for paths under the same repository; it does not substitute the default branch or carry a branch across repositories. The new Chromium regression asserts the pinned URL and line after the representation click, visible HCL source, absence of the search-results panel, a Structure declaration click that retains the same pin, and the same rendered line after reload. Its relationship click first verifies that the target semantic details remain open. The preexisting pinned-route test now fails immediately on an unexpected unpinned status request.
+
+File Structure now includes semantic declarations in the canonical file and secondary HCL/JSON representations. A secondary representation uses its own file and line in the link while retaining the canonical node ID. Unit cases cover canonical JSON to secondary HCL with a segment-encoded space, and canonical HCL to secondary JSON. `repoBase` is an unpinned `/<forge>/<org>/<repo>` path in the file panel; Structure emits a path/hash and the UI controller adds the current same-repo branch on click, as the Chromium regression verifies.
+
+Receipts read: `/private/tmp/codegrapher-semantic-source-ui-test.log` (260/260 UI tests), `-ui-lint.log`, `-e2e-lint.log`, and `-e2e.log` (two pinned Chromium journeys). All report success. No separate preview server was started for this review.
+
+VERDICT: blockers=0 majors=0 minors=0 land=yes
+
+
+## Registry integration reviews
+
+# MeaningGraph PR #18 integration review
+
+Reviewer: `/root/websites` (read-only review; root owns landing)
+Reviewed-Head: `23413be72b953a91751fd9a8e8192c0479a78515`
+Current origin/main integrated: `6eda3e1f2360b21ea477921c815b8bc59b6a3805`
+Previous reviewed feature commit: `7081d025ef365f4951aad436c2defc451d405eed`
+
+The updated branch is a merge of main into the feature branch. Its six-file feature diff against current main remains the CodeGrapher support section, pinned registered graph/model/concept viewer links, styles, and tests. Compared directly with the previous reviewed feature commit, `scripts/lib/enhance.mjs`, `scripts/lib/render.mjs`, `site/registry.css`, `test/e2e/registry.spec.mjs`, and `test/unit/build.test.mjs` are byte-identical. The only change among those six files is a one-line expected output addition in `test/unit/site.test.mjs` for `registry-search.json`, which current main now generates. The new registry-search UI is mounted separately and does not select or rewrite the feature's graph cards or `data-codegrapher-link` actions. The feature still derives viewer routes only from registered repository/file/line identities with the pinned full commit; illustrative homepage entities have no invented mappings.
+
+The worktree is clean. `git diff --check origin/main...HEAD` passed. `npm test` passed all 185 unit tests on this exact reviewed head, including the support-section patch and encoded pinned-link checks. The root landing owner is waiting for PR CI and will perform the final landing and production journey checks.
+
+VERDICT: blockers=0 majors=0 minors=0 land=yes
+
+
+# ModelSpec PR #14 integration review
+
+Reviewer: `/root/websites` (read-only review; root owns landing)
+Reviewed-Head: `f1f42788f33f86ccaba32e249c6713f77eb03f37`
+Current origin/main integrated: `034c58e459a5ac75f28617b882cbfc2909f1ace3`
+Previous reviewed feature commit: `cd90c442d71b7c1c253351ed496dea397f42d21f`
+
+The updated branch merges main into the feature branch. Its three-file feature diff against current main remains the CodeGrapher homepage support section, registered model/card/file viewer links with a pinned commit and segment-encoded source path, and URL tests. Compared directly with the previous reviewed feature commit, `public/index.html` and `test/render.test.mjs` are byte-identical. The changes to `src/render.mjs` between those commits come from current main's native Collections section and its jump link; the feature's `codeGrapherUrl` and registered card/detail/model-file link hunks remain intact. Current main's gated registry-search UI is mounted separately and does not select or rewrite those CodeGrapher links. Non-GitHub repository links continue to be omitted.
+
+The worktree is clean. `git diff --check origin/main...HEAD` passed. `npm test` passed all 192 unit tests on this exact reviewed head, including pinned and encoded viewer URL checks. The root landing owner will perform the approved observed-check landing and production journey checks.
+
+VERDICT: blockers=0 majors=0 minors=0 land=yes
+
+
+## Qualified semantic search correction
+
+# Independent qualified semantic search review
+
+Reviewer: `/root/websites` (read-only review of root-authored change)
+Base HEAD: `845cece9e6dea65f500a001e6ce3e57b27e93d37`
+Candidate paths, in digest order: `libs/codegrapher/ui/src/lib/viewer/search.spec.ts`, `libs/codegrapher/ui/src/lib/viewer/search.ts`
+Exact SHA-256 of each path's UTF-8 name followed by NUL and raw file bytes, concatenated in that order: `3a3c1a0635e9f22bcf92e0e37ebcefffd502427d0b2035821a75f8fafd800e5d`
+
+The search change adds `qualifiedName` as a matched term only for `model_` and `meaning_` nodes. Existing name matching still takes display precedence; labels, synonyms and docstrings remain fallbacks, so a qualified hit shows its full identity as `matchedText` without changing the symbol's display name. The existing `inView` gate runs before matching, preserving Code/Models/Meaning category separation and excluding `semantic_code`. File and directory matching is untouched. Search remains case-insensitive substring/glob matching, so `Invoice.Total` can find a qualified member such as `chinook.Invoice.Total` without making names exact-match identifiers.
+
+The regression uses two distinct `Total` members and checks that `Invoice.Total` selects only the Invoice member, `sales.*.Total` selects the Order member, bare `Total` still finds both, a qualified Meaning concept is searchable in Meaning view, and an Invoice member does not appear in Meaning view. The preexisting search tests cover labels, synonyms, docstrings and Code filtering. `git diff --check` passed, and `/private/tmp/codegrapher-site-links-qualified-search-checks.log` reports successful UI test and lint targets with the cache skipped.
+
+VERDICT: blockers=0 majors=0 minors=0 land=yes
+
+
+Root follow-up receipt: qualified semantic search PR #20 merged at `c9c7c6038b23dbc37b88280bf7857b05471d3c61` after lint/build-test/e2e CI passed, then deployed from clean merged main as Cloudflare version `e84f1783-c085-4f25-8292-6b5b62cbee39`. Production Models search for `Invoice.Total` returns one typed Total member with matching identity `chinook.Invoice.Total`; details retain declared reverse MeaningGraph bindings and both HCL/JSON source representations. Root saved visual proof of the typed details, pinned source and all three support sections.
+
+
+## Production delivery and cleanup
+
+| Surface | Verified implementation commit | Production receipt |
+| --- | --- | --- |
+| CodeGrapher CLI/library | `86704bdfa62e912b5fafc69be083f4bf48335e34` | Published CodeGrapher v0.15.1; exact Go CI and release passed |
+| Public provider | `50ae6124418775c26b09e3c02fc0d81e983fadb5` | Clean deployed binary links v0.15.1; remote/local SHA-256 match; default plus two immutable pins coexist |
+| Viewer and homepage | `c9c7c6038b23dbc37b88280bf7857b05471d3c61` | Cloudflare version `e84f1783-c085-4f25-8292-6b5b62cbee39`; exact merged lint/build-test/e2e passed; real pinned navigation and qualified search passed |
+| MeaningGraph website | `e3bcf42b65161fb8583c5c47fb8fd81f97bffb73` | [Deploy and smoke check succeeded](https://github.com/sneat-co/meaninggraph/actions/runs/37588257022); live production build marker matches |
+| ModelSpec website | `a4ab94112536fd03813e21fa22e45244d2a4d69f` | [Deploy and smoke check succeeded](https://github.com/specscore/modelspec/actions/runs/37588486889); live production build marker matches |
+
+All three live homepages describe support and link to their counterparts. Root clicked both registry card links and source-page actions. MeaningGraph’s invoice-total source action opens the pinned YAML at line 343; ModelSpec’s HCL action opens the pinned model. In the viewer, label search, qualified member search, binding details, source actions, HCL/JSON Structure declarations and refresh retain the registry commit. Explicit code annotations and actual edit/sync removal were verified with the standalone CLI fixture and regression; the Chinook source does not fabricate implementation mappings. Externally pinned core references remain unresolved without a verified exact dependency.
+
+Local operational receipts: `/private/tmp/codegrapher-site-links-{server,viewer,viewer-source,qualified-search,meaninggraph,modelspec}-land.json`, `-cleanup.json`, both `-live-build.json` files, `-live-{pin-a,pin-b,default}-status.json`, and the missing-pin 410 response. Screenshots are saved in the calling task’s visualization directory. WB cleanup removed the five original worktrees and local branches and released the original task’s remote claim. No owned preview or browser-test listeners remain on ports 4211, 4207, 8764, 8765, 4178, 4179 or 8791–8793. Root also removed its temporary Chinook source clone, synthetic CLI fixture and standalone verification binary while retaining all receipts (`/private/tmp/codegrapher-site-links-temp-cleanup.json`). Temporary verification tabs were closed; the homepage, typed details and user-requested Cloudflare sign-in tab remain available.
+
+The existing automatic Workers Builds failure is separate from the verified manual viewer deployment. It was present before these changes; dashboard log diagnosis awaits the user’s sign-in. Automatic approval review rejected direct reuse of a credential from Wrangler configuration, and that route was stopped. This is recorded as a remaining hosting-maintenance limitation, not a failure of the delivered semantic support.

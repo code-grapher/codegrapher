@@ -1,11 +1,12 @@
 ---
 format: https://specscore.md/plan-specification
-status: Executing
+status: Implemented
 ---
 
 # Plan: Deliver MeaningGraph and ModelSpec navigation and website links
 
-**Status:** Executing
+**Status:** Implemented
+**Reconciled:** 2026-10-07
 **Source:** idea:meaninggraph-modelspec-navigation
 **Date:** 2026-10-07
 **Owner:** alex
@@ -61,21 +62,21 @@ Expose Code, Models and Meaning views/search filters and object details with mod
 ### Task 3: Make public provider indexing revision-aware
 
 **Verifies:** idea:meaninggraph-modelspec-navigation
-**Status:** in_progress
+**Status:** complete
 
 Extend code-grapher/server immutable-commit indexing and status/manifest lookup to retain and serve the requested snapshot; default-branch jobs must not overwrite a pinned graph. Viewer passes commit identity and checks returned snapshot commit. Verify coexistence of default and two pinned revisions, concurrent jobs, status mismatch/missing states, and real website pins. Update the server CodeGrapher dependency to the released implementation without local replacements.
 
 ### Task 4: Add reciprocal website support and pinned viewer actions
 
 **Verifies:** idea:meaninggraph-modelspec-navigation
-**Status:** in_progress
+**Status:** complete
 
 Update MeaningGraph and ModelSpec homepages and registered graph/model/concept/source metadata surfaces. Add a CodeGrapher homepage support section describing the semantic navigation and linking both project websites. Use the existing CodeGrapher route grammar, encode each path segment, retain pinned commits and lines where known, preserve accessibility and do not invent links for illustrative items. Verify generated pages and destination behavior.
 
 ### Task 5: Review, land and verify production journey
 
 **Verifies:** idea:meaninggraph-modelspec-navigation
-**Status:** in_progress
+**Status:** complete
 
 Run independent adversarial review, resolve every finding, run appropriate repository checks, land through WB, verify exact remote target and cleanup, verify release/provider/viewer deployment and both website deployments, index real public example repositories, and exercise the end-to-end browser journey. Record any externally blocked step without claiming production support.
 
@@ -84,6 +85,14 @@ Run independent adversarial review, resolve every finding, run appropriate repos
 None at this time.
 
 ---
+
+## Resolution
+
+**Reconciled Executing → Implemented outside the tracked `change-status` flow** (3 task(s) marked complete; this did not walk the legal-transition matrix).
+
+Semantic indexing, provider, viewer and all three websites were delivered and verified; all five original implementation worktrees and task branches were cleaned through WB. This records the completed implementation after production verification.
+
+Evidence: https://github.com/code-grapher/codegrapher/pull/59, https://github.com/code-grapher/server/pull/8, https://github.com/code-grapher/codegrapher-dev/pull/20, https://github.com/sneat-co/meaninggraph/pull/18, https://github.com/specscore/modelspec/pull/14, /private/tmp/codegrapher-site-links-cleanup.json
 *This document follows the https://specscore.md/plan-specification*
 
 ## Independent Review
