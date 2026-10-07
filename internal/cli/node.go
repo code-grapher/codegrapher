@@ -39,17 +39,41 @@ type NodeFreshness struct {
 }
 
 type NodeRelation struct {
-	Direction  string         `json:"direction"`
-	Kind       model.EdgeKind `json:"kind"`
-	Symbol     BriefSymbol    `json:"symbol"`
-	Provenance string         `json:"provenance,omitempty"`
-	Line       int            `json:"line,omitempty"`
-	Column     int            `json:"column,omitempty"`
+	Direction         string         `json:"direction"`
+	Kind              model.EdgeKind `json:"kind"`
+	Symbol            BriefSymbol    `json:"symbol"`
+	Provenance        string         `json:"provenance,omitempty"`
+	Line              int            `json:"line,omitempty"`
+	Column            int            `json:"column,omitempty"`
+	Metadata          map[string]any `json:"metadata,omitempty"`
+	ViaSemanticCodeID string         `json:"viaSemanticCodeId,omitempty"`
 }
 
 type matchedNode struct {
 	node  model.Node
 	store *store.Store
+}
+
+// canonicalCodeMatch resolves a semantic bridge only through the stores in
+// the caller's selected scope. The code scope remains authoritative.
+func canonicalCodeMatch(stores []*store.Store, bridge model.Node) (matchedNode, bool, error) {
+	if bridge.Kind != model.KindSemanticCode {
+		return matchedNode{}, false, nil
+	}
+	id, _ := bridge.Metadata["canonicalCodeId"].(string)
+	if id == "" {
+		return matchedNode{}, false, nil
+	}
+	for _, st := range stores {
+		node, err := st.GetNodeByID(id)
+		if err != nil {
+			return matchedNode{}, false, err
+		}
+		if node != nil && node.Kind != model.KindSemanticCode {
+			return matchedNode{node: *node, store: st}, true, nil
+		}
+	}
+	return matchedNode{}, false, nil
 }
 
 func newNodeCmd() *cobra.Command {
@@ -164,7 +188,8 @@ func nodeFreshnessFor(refresh bool, res indexer.SyncResult) NodeFreshness {
 }
 
 func resolveNode(idx *indexer.Indexer, scopes []string, symbol, fileHint string, line int, wantSource, wantRelations bool, limit int, freshness NodeFreshness) (NodeResult, error) {
-	matches, err := findNodeMatches(idx.StoresFiltered(scopes), symbol)
+	stores := idx.StoresFiltered(scopes)
+	matches, err := findNodeMatches(stores, symbol)
 	if err != nil {
 		return NodeResult{}, err
 	}
@@ -189,19 +214,19 @@ func resolveNode(idx *indexer.Indexer, scopes []string, symbol, fileHint string,
 			// indexed (or during a --refresh): withhold the stale source.
 			result.Freshness.Stale = true
 			result.Hint = staleSourceHint
-			return withRelations(result, match, wantRelations, limit)
+			return withRelations(result, match, stores, wantRelations, limit)
 		}
 		result.Source = string(content.node)
 		result.SourceRange = "line-bounded"
 		result.Freshness = freshness
 		result.Freshness.Verified = true
 	}
-	return withRelations(result, match, wantRelations, limit)
+	return withRelations(result, match, stores, wantRelations, limit)
 }
 
-func withRelations(result NodeResult, match matchedNode, wantRelations bool, limit int) (NodeResult, error) {
+func withRelations(result NodeResult, match matchedNode, stores []*store.Store, wantRelations bool, limit int) (NodeResult, error) {
 	if wantRelations {
-		rels, err := nodeRelations(match, limit)
+		rels, err := nodeRelations(match, stores, limit)
 		if err != nil {
 			return NodeResult{}, err
 		}
@@ -285,7 +310,7 @@ func findNodeMatches(stores []*store.Store, symbol string) ([]matchedNode, error
 		}
 	}
 	if len(out) > 0 {
-		return out, nil
+		return canonicalNodeMatches(stores, out)
 	}
 	qualified := strings.Contains(symbol, ".") || strings.Contains(symbol, "::")
 	for _, s := range stores {
@@ -310,6 +335,24 @@ func findNodeMatches(stores []*store.Store, symbol string) ([]matchedNode, error
 	sort.SliceStable(out, func(i, j int) bool {
 		return out[i].node.FilePath < out[j].node.FilePath || (out[i].node.FilePath == out[j].node.FilePath && out[i].node.StartLine < out[j].node.StartLine)
 	})
+	return canonicalNodeMatches(stores, out)
+}
+
+func canonicalNodeMatches(stores []*store.Store, matches []matchedNode) ([]matchedNode, error) {
+	seen := make(map[string]bool, len(matches))
+	out := make([]matchedNode, 0, len(matches))
+	for _, match := range matches {
+		if canonical, ok, err := canonicalCodeMatch(stores, match.node); err != nil {
+			return nil, err
+		} else if ok {
+			match = canonical
+		}
+		if seen[match.node.ID] {
+			continue
+		}
+		seen[match.node.ID] = true
+		out = append(out, match)
+	}
 	return out, nil
 }
 
@@ -337,11 +380,11 @@ func narrowNodeMatches(matches []matchedNode, fileHint string, line int) []match
 	return matches
 }
 
-func nodeRelations(match matchedNode, limit int) ([]NodeRelation, error) {
+func nodeRelations(match matchedNode, stores []*store.Store, limit int) ([]NodeRelation, error) {
 	if limit < 1 {
 		return []NodeRelation{}, nil
 	}
-	collect := func(edges []model.Edge, direction string) ([]NodeRelation, error) {
+	collect := func(edgeStore *store.Store, edges []model.Edge, direction, viaBridge string) ([]NodeRelation, error) {
 		ids := make([]string, 0, len(edges))
 		for _, e := range edges {
 			if direction == "outgoing" {
@@ -350,7 +393,7 @@ func nodeRelations(match matchedNode, limit int) ([]NodeRelation, error) {
 				ids = append(ids, e.Source)
 			}
 		}
-		nodes, err := match.store.GetNodesByIDs(ids)
+		nodes, err := edgeStore.GetNodesByIDs(ids)
 		if err != nil {
 			return nil, err
 		}
@@ -361,7 +404,14 @@ func nodeRelations(match matchedNode, limit int) ([]NodeRelation, error) {
 				id = e.Source
 			}
 			if n, ok := nodes[id]; ok {
-				out = append(out, NodeRelation{Direction: direction, Kind: e.Kind, Symbol: briefNode(n), Provenance: e.Provenance, Line: e.Line, Column: e.Column})
+				bridgeRef := viaBridge
+				if canonical, found, err := canonicalCodeMatch(stores, n); err != nil {
+					return nil, err
+				} else if found {
+					bridgeRef = n.ID
+					n = canonical.node
+				}
+				out = append(out, NodeRelation{Direction: direction, Kind: e.Kind, Symbol: briefNode(n), Provenance: e.Provenance, Line: e.Line, Column: e.Column, Metadata: e.Metadata, ViaSemanticCodeID: bridgeRef})
 			}
 		}
 		return out, nil
@@ -374,19 +424,43 @@ func nodeRelations(match matchedNode, limit int) ([]NodeRelation, error) {
 	if err != nil {
 		return nil, err
 	}
-	out, err := collect(outgoing, "outgoing")
+	out, err := collect(match.store, outgoing, "outgoing", "")
 	if err != nil {
 		return nil, err
 	}
-	in, err := collect(incoming, "incoming")
+	in, err := collect(match.store, incoming, "incoming", "")
 	if err != nil {
 		return nil, err
+	}
+	if match.node.Kind != model.KindSemanticCode {
+		for _, st := range stores {
+			bridgeID := "semantic_code:" + match.node.ID
+			bridge, lookupErr := st.GetNodeByID(bridgeID)
+			if lookupErr != nil {
+				return nil, lookupErr
+			}
+			if bridge == nil || bridge.Kind != model.KindSemanticCode || bridge.Metadata["canonicalCodeId"] != match.node.ID {
+				continue
+			}
+			bridgeEdges, edgeErr := st.GetIncomingEdgesLimited(bridgeID, limit)
+			if edgeErr != nil {
+				return nil, edgeErr
+			}
+			mapped, collectErr := collect(st, bridgeEdges, "incoming", bridgeID)
+			if collectErr != nil {
+				return nil, collectErr
+			}
+			in = append(mapped, in...)
+			if len(in) > limit {
+				in = in[:limit]
+			}
+		}
 	}
 	return append(out, in...), nil
 }
 
 func briefNode(n model.Node) BriefSymbol {
-	return BriefSymbol{ID: n.ID, Kind: n.Kind, Name: n.Name, QualifiedName: n.QualifiedName, FilePath: n.FilePath, Language: n.Language, StartLine: n.StartLine, EndLine: n.EndLine, StartColumn: n.StartColumn, EndColumn: n.EndColumn, Signature: n.Signature}
+	return BriefSymbol{ID: n.ID, Kind: n.Kind, Name: n.Name, QualifiedName: n.QualifiedName, FilePath: n.FilePath, Language: n.Language, StartLine: n.StartLine, EndLine: n.EndLine, StartColumn: n.StartColumn, EndColumn: n.EndColumn, Signature: n.Signature, Metadata: n.Metadata}
 }
 
 func briefMatches(matches []matchedNode) []BriefSymbol {
@@ -437,6 +511,15 @@ func printNodeMarkdown(w io.Writer, result NodeResult, requestedSource bool) err
 			return err
 		}
 	}
+	if len(s.Metadata) > 0 && (strings.HasPrefix(string(s.Kind), "meaning_") || strings.HasPrefix(string(s.Kind), "model_") || s.Kind == model.KindSemanticCode) {
+		metadata, err := json.MarshalIndent(s.Metadata, "", "  ")
+		if err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "\n### Semantic metadata\n\n```json\n%s\n```\n", metadata); err != nil {
+			return err
+		}
+	}
 	if result.Freshness.Stale {
 		if _, err := fmt.Fprintln(w, "- Freshness: stale (source changed since indexing; rerun with --refresh)"); err != nil {
 			return err
@@ -461,7 +544,18 @@ func printNodeMarkdown(w io.Writer, result NodeResult, requestedSource bool) err
 			if r.Provenance != "" {
 				prov = " [" + r.Provenance + "]"
 			}
-			if _, err := fmt.Fprintf(w, "- %s `%s` → `%s` (%s)%s\n", r.Direction, r.Kind, r.Symbol.QualifiedName, r.Symbol.FilePath, prov); err != nil {
+			evidence := ""
+			if len(r.Metadata) > 0 {
+				encoded, err := json.Marshal(r.Metadata)
+				if err != nil {
+					return err
+				}
+				evidence = " evidence " + string(encoded)
+			}
+			if r.ViaSemanticCodeID != "" {
+				evidence += " via `" + r.ViaSemanticCodeID + "`"
+			}
+			if _, err := fmt.Fprintf(w, "- %s `%s` → `%s` (%s)%s%s\n", r.Direction, r.Kind, r.Symbol.QualifiedName, r.Symbol.FilePath, prov, evidence); err != nil {
 				return err
 			}
 		}

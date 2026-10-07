@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"slices"
 	"sort"
 
 	"github.com/specscore/codegrapher/model"
@@ -59,16 +60,31 @@ func (q *StoreQuerier) SearchNodes(rawQuery string, opts SearchOptions) ([]model
 		}
 		all = append(all, res...)
 	}
+	// Semantic bridge rows connect cross-scope mapping edges to code. A normal
+	// search presents the owning code symbol once, even if both scopes match.
+	// An explicit bridge-kind query still exposes the bridge for inspection.
+	bridgeKindRequested := slices.Contains(opts.Kinds, model.KindSemanticCode) || slices.Contains(query.ParseQuery(rawQuery).Kinds, model.KindSemanticCode)
+	if !bridgeKindRequested {
+		for i := range all {
+			if canonical, ok, err := canonicalCodeMatch(q.stores, all[i].Node); err != nil {
+				return nil, err
+			} else if ok {
+				all[i].Node = canonical.node
+			}
+		}
+	}
 
-	// Dedup by node ID (first wins), then stable-sort by score descending to
-	// mirror query/MCP ranking.
-	seen := make(map[string]struct{}, len(all))
+	// Dedup by canonical node ID, preserving the strongest search score.
+	seen := make(map[string]int, len(all))
 	deduped := all[:0:0]
 	for _, r := range all {
-		if _, dup := seen[r.Node.ID]; dup {
+		if at, dup := seen[r.Node.ID]; dup {
+			if r.Score > deduped[at].Score {
+				deduped[at].Score = r.Score
+			}
 			continue
 		}
-		seen[r.Node.ID] = struct{}{}
+		seen[r.Node.ID] = len(deduped)
 		deduped = append(deduped, r)
 	}
 	sort.SliceStable(deduped, func(i, j int) bool {
