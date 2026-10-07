@@ -4,9 +4,12 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	meaning "github.com/meaninggraph/cli/pkg/meaning"
 	modelspec "github.com/modelspec-org/cli/pkg/modelspec"
@@ -32,6 +35,30 @@ func TestSemanticSnapshotHonorsReadLimitBeforeCaching(t *testing.T) {
 	}
 	if _, err := snapshot.read(path); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCurrentSemanticSourceHashRejectsFIFOWithoutBlocking(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("FIFO test requires Unix")
+	}
+	root := t.TempDir()
+	path := filepath.Join(root, "changed-to-fifo.meaning.yaml")
+	if err := exec.Command("mkfifo", path).Run(); err != nil {
+		t.Skipf("mkfifo unavailable: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := CurrentSourceHash(root, path)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("FIFO accepted as semantic source")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("semantic source hash blocked on FIFO")
 	}
 }
 

@@ -38,6 +38,21 @@ func newSourceSnapshot(root string) *sourceSnapshot {
 	return &sourceSnapshot{root: root, files: make(map[string][]byte)}
 }
 
+// CurrentSourceHash reads one regular file with the same nonblocking bound as
+// projection parsing. The indexer uses it after Build to reject intervening
+// edits before replacing the semantic projection.
+func CurrentSourceHash(root, path string) (string, error) {
+	snapshot := newSourceSnapshot(root)
+	if _, err := snapshot.read(path); err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return "", err
+	}
+	return snapshot.hashes()[filepath.ToSlash(rel)], nil
+}
+
 func (s *sourceSnapshot) read(path string) ([]byte, error) {
 	return s.readMax(path, maxSemanticSnapshotBytes)
 }

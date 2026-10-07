@@ -261,11 +261,11 @@ func (idx *Indexer) indexSemantic() error {
 			if rec == nil {
 				return fmt.Errorf("semantic: no indexed source record for %s", n.FilePath)
 			}
-			content, err := os.ReadFile(filepath.Join(idx.root, filepath.FromSlash(n.FilePath)))
+			currentHash, err := semantic.CurrentSourceHash(idx.root, filepath.Join(idx.root, filepath.FromSlash(n.FilePath)))
 			if err != nil {
 				return fmt.Errorf("semantic: read source %s: %w", n.FilePath, err)
 			}
-			if HashContent(content) != hash || rec.ContentHash != hash {
+			if currentHash != hash || rec.ContentHash != hash {
 				return fmt.Errorf("semantic: source %s changed during indexing", n.FilePath)
 			}
 			hashes[n.FilePath] = hash
