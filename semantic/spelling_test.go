@@ -18,6 +18,10 @@ const (
   field "value" { type = "decimal" }
 }
 
+enum "Status" {
+  values = ["open", "paid"]
+}
+
 entity "Customer" {
   key = ["id"]
   property "id" { type = "uuid" }
@@ -29,10 +33,18 @@ entity "Invoice" {
   property "id" { type = "uuid" }
   property "customer" { entity = "Customer" }
   property "total" { component = "Amount" }
+  property "status" {
+    type = "string"
+    enum = "Status"
+  }
 }
 `
 	shopNewHCL = `component "Amount" {
   field "value" { type = "decimal" }
+}
+
+enum "Status" {
+  values = ["open", "paid"]
 }
 
 record "Customer" {
@@ -46,11 +58,19 @@ record "Invoice" {
   field "id" { type = "uuid" }
   field "customer" { record = "Customer" }
   field "total" { component = "Amount" }
+  field "status" {
+    type = "string"
+    enum = "Status"
+  }
 }
 `
 	// Old and new words in one file: allowed in HCL, still one deprecation notice.
 	shopMixedHCL = `component "Amount" {
   field "value" { type = "decimal" }
+}
+
+enum "Status" {
+  values = ["open", "paid"]
 }
 
 record "Customer" {
@@ -64,18 +84,24 @@ entity "Invoice" {
   field "id" { type = "uuid" }
   property "customer" { entity = "Customer" }
   field "total" { component = "Amount" }
+  field "status" {
+    type = "string"
+    enum = "Status"
+  }
 }
 `
 	shopOldJSON = `{
   "modelspec": "1.0-draft",
   "module": {"id": "example/shop", "name": "shop", "version": "1.0.0"},
   "components": {"Amount": {"fields": {"value": {"type": "decimal"}}}},
+  "enums": {"Status": {"values": ["open", "paid"]}},
   "entities": {
     "Customer": {"key": ["id"], "properties": {"id": {"type": "uuid"}}},
     "Invoice": {"key": ["id"], "use": ["Amount"], "properties": {
       "id": {"type": "uuid"},
       "customer": {"entity": "Customer"},
-      "total": {"component": "Amount"}
+      "total": {"component": "Amount"},
+      "status": {"type": "string", "enum": "Status"}
     }}
   }
 }`
@@ -83,12 +109,14 @@ entity "Invoice" {
   "modelspec": "1.0-draft-2",
   "module": {"id": "example/shop", "name": "shop", "version": "1.0.0"},
   "components": {"Amount": {"fields": {"value": {"type": "decimal"}}}},
+  "enums": {"Status": {"values": ["open", "paid"]}},
   "records": {
     "Customer": {"key": ["id"], "fields": {"id": {"type": "uuid"}}},
     "Invoice": {"key": ["id"], "use": ["Amount"], "fields": {
       "id": {"type": "uuid"},
       "customer": {"record": "Customer"},
-      "total": {"component": "Amount"}
+      "total": {"component": "Amount"},
+      "status": {"type": "string", "enum": "Status"}
     }}
   }
 }`
@@ -160,15 +188,17 @@ func TestSpellingsExtractToTheSameNodesAndEdges(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			g := buildFiles(t, map[string]string{tc.file: tc.body})
-			if got := len(findKind(g, model.KindModelEntity)); got != 2 {
-				t.Fatalf("entities = %d", got)
+			for kind, want := range map[model.NodeKind]int{model.KindModelEntity: 2, model.KindModelComponent: 1, model.KindModelEnum: 1} {
+				if got := len(findKind(g, kind)); got != want {
+					t.Fatalf("%s nodes = %d, want %d", kind, got, want)
+				}
 			}
 			for _, kind := range []model.NodeKind{"model_record", model.KindModelCollection, model.KindModelRecordset} {
 				if got := len(findKind(g, kind)); got != 0 {
 					t.Fatalf("%s nodes = %d", kind, got)
 				}
 			}
-			var ref, used int
+			var ref, used, enumRef int
 			for _, n := range findKind(g, model.KindModelMember) {
 				if n.Name == "customer" {
 					if n.Metadata["entity"] != "Customer" || n.Metadata["record"] != nil {
@@ -190,10 +220,12 @@ func TestSpellingsExtractToTheSameNodesAndEdges(t *testing.T) {
 					t.Fatalf("edge attribute record: %+v", e)
 				case "use":
 					used++
+				case "enum":
+					enumRef++
 				}
 			}
-			if ref != 1 || used != 1 {
-				t.Fatalf("entity edges = %d, use edges = %d", ref, used)
+			if ref != 1 || used != 1 || enumRef != 1 {
+				t.Fatalf("entity edges = %d, use edges = %d, enum edges = %d", ref, used, enumRef)
 			}
 		})
 	}
@@ -228,13 +260,17 @@ func TestTwinInDifferentSpellingsIsOneModel(t *testing.T) {
 		"shop.modelspec.hcl":  shopNewHCL,
 		"shop.modelspec.json": shopOldJSON,
 	})
-	entities := findKind(g, model.KindModelEntity)
-	if len(entities) != 2 {
-		t.Fatalf("entities = %d", len(entities))
-	}
-	for _, n := range entities {
-		if reps, _ := n.Metadata["representations"].([]map[string]any); len(reps) != 2 {
-			t.Fatalf("representations = %+v", n.Metadata["representations"])
+	// The twin branch finds each concept by its written kind: a wrong kind there
+	// leaves the concept with a single representation.
+	for kind, want := range map[model.NodeKind]int{model.KindModelEntity: 2, model.KindModelComponent: 1, model.KindModelEnum: 1} {
+		nodes := findKind(g, kind)
+		if len(nodes) != want {
+			t.Fatalf("%s nodes = %d, want %d", kind, len(nodes), want)
+		}
+		for _, n := range nodes {
+			if reps, _ := n.Metadata["representations"].([]map[string]any); len(reps) != 2 {
+				t.Fatalf("%s %s representations = %+v", kind, n.Name, n.Metadata["representations"])
+			}
 		}
 	}
 }
@@ -251,9 +287,13 @@ func TestEarlierSpellingIsReportedOncePerFileAndNeverFails(t *testing.T) {
 	if got := diagnosticCodes(mod); !reflect.DeepEqual(got, []string{modelspec.RuleDeprecated}) {
 		t.Fatalf("diagnostics = %v", got)
 	}
-	msg := mod.Metadata["diagnostics"].([]map[string]any)[0]["message"].(string)
+	notice := mod.Metadata["diagnostics"].([]map[string]any)[0]
+	msg := notice["message"].(string)
 	if !strings.Contains(msg, `modelspec rewrite --write "shop.modelspec.hcl"`) || strings.Contains(msg, root) {
 		t.Fatalf("notice = %q", msg)
+	}
+	if want := strings.Count(shopOldHCL[:strings.Index(shopOldHCL, "entity \"Customer\"")], "\n") + 1; notice["line"] != want {
+		t.Fatalf("notice line = %v, want %d", notice["line"], want)
 	}
 	if len(findKind(g, model.KindModelEntity)) != 2 {
 		t.Fatal("a warning must not stop extraction")
@@ -295,8 +335,13 @@ func TestEarlierSpellingIsReportedOncePerFileAndNeverFails(t *testing.T) {
 
 func TestEarlierJSONSpellingIsReportedOnTheModule(t *testing.T) {
 	g := buildFiles(t, map[string]string{"shop.modelspec.json": shopOldJSON})
-	if got := diagnosticCodes(moduleNode(t, g)); !reflect.DeepEqual(got, []string{modelspec.RuleDeprecated}) {
+	mod := moduleNode(t, g)
+	if got := diagnosticCodes(mod); !reflect.DeepEqual(got, []string{modelspec.RuleDeprecated}) {
 		t.Fatalf("diagnostics = %v", got)
+	}
+	// The JSON notice sits on the line of the format identifier.
+	if line := mod.Metadata["diagnostics"].([]map[string]any)[0]["line"]; line != 2 {
+		t.Fatalf("notice line = %v", line)
 	}
 }
 
@@ -421,5 +466,192 @@ func TestMemberAttrsWriteTheReferenceUnderItsEstablishedName(t *testing.T) {
 	}
 	if got := memberAttrs(nil); len(got) != 0 {
 		t.Fatalf("memberAttrs(nil) = %v", got)
+	}
+}
+
+// The notice is worded from the repository-relative path, so a path longer than
+// the library's own cut still holds no checkout path.
+func TestNoticeKeepsALongRelativePathWhole(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(strings.Repeat("a", 100), strings.Repeat("b", 100), strings.Repeat("c", 100))
+	if err := os.MkdirAll(filepath.Join(root, dir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.ToSlash(filepath.Join(dir, "shop.modelspec.hcl"))
+	if len(file) <= 255 {
+		t.Fatalf("path too short for the test: %d", len(file))
+	}
+	write(t, root, filepath.FromSlash(file), shopOldHCL)
+	g, err := Build(root, []string{file}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg := moduleNode(t, g).Metadata["diagnostics"].([]map[string]any)[0]["message"].(string)
+	if !strings.Contains(msg, `--write "`+file+`" rewrites`) || strings.Contains(msg, root) {
+		t.Fatalf("notice = %q", msg)
+	}
+}
+
+// A finding is kept on the module whichever file of the module it is about: a
+// removed construct in one file of a two-file module, or in the JSON twin.
+func TestFindingsOfAnyFileOfAModuleAreKept(t *testing.T) {
+	has := func(t *testing.T, g Graph, rule, word string) {
+		t.Helper()
+		for _, d := range moduleNode(t, g).Metadata["diagnostics"].([]map[string]any) {
+			if d["code"] == rule && strings.Contains(d["message"].(string), word) {
+				return
+			}
+		}
+		t.Fatalf("no %s diagnostic naming %q: %+v", rule, word, moduleNode(t, g).Metadata)
+	}
+	t.Run("two-file module", func(t *testing.T) {
+		dir := "modules/sales/models"
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, filepath.FromSlash(dir)), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		write(t, root, filepath.FromSlash(dir+"/a.modelspec.hcl"), "record \"A\" {\n key = [\"id\"]\n field \"id\" { type = \"uuid\" }\n}\ncollection \"Rows\" {\n}\n")
+		write(t, root, filepath.FromSlash(dir+"/b.modelspec.hcl"), "record \"B\" {\n key = [\"id\"]\n field \"id\" { type = \"uuid\" }\n}\n")
+		// b.modelspec.hcl is the last file, so it is the one the module node names.
+		g, err := Build(root, []string{dir + "/a.modelspec.hcl", dir + "/b.modelspec.hcl"}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		has(t, g, modelspec.RuleRemoved, "collection")
+		if got := len(findKind(g, model.KindModelEntity)); got != 2 {
+			t.Fatalf("entities = %d", got)
+		}
+	})
+	t.Run("json twin", func(t *testing.T) {
+		g := buildFiles(t, map[string]string{
+			"shop.modelspec.hcl":  shopNewHCL,
+			"shop.modelspec.json": strings.Replace(shopNewJSON, `"records"`, `"collections": {"Rows": {}}, "records"`, 1),
+		})
+		has(t, g, modelspec.RuleRemoved, "collections")
+	})
+}
+
+// A concept kind the table does not know is written as model_<kind>, as before
+// the table, with a diagnostic, never as an empty kind.
+func TestUnmappedConceptKindFallsBackWithADiagnostic(t *testing.T) {
+	saved := writtenModelKind[modelspec.KindEnum]
+	delete(writtenModelKind, modelspec.KindEnum)
+	defer func() { writtenModelKind[modelspec.KindEnum] = saved }()
+	g := buildFiles(t, map[string]string{"shop.modelspec.hcl": shopNewHCL})
+	enums := findKind(g, "model_enum")
+	if len(enums) != 1 || enums[0].ID == "" || !strings.HasPrefix(enums[0].ID, "model_enum:") {
+		t.Fatalf("enum nodes = %+v", enums)
+	}
+	if got := diagnosticCodes(enums[0]); !reflect.DeepEqual(got, []string{"unmapped-kind"}) {
+		t.Fatalf("diagnostics = %v", got)
+	}
+	for _, n := range g.Nodes {
+		if n.Kind == "" {
+			t.Fatalf("node with an empty kind: %+v", n)
+		}
+	}
+	if memberKindOf("other") != "field" || memberKindOf(modelspec.KindRecord) != "property" {
+		t.Fatal("memberKindOf")
+	}
+}
+
+// bind belonged to the removed collection and recordset; the library rejects it
+// on a member, and no relation is made from it.
+func TestBindAttributeOfAMemberMakesNoRelation(t *testing.T) {
+	g := buildFiles(t, map[string]string{"m.modelspec.hcl": `record "A" {
+  key = ["id"]
+  field "id" {
+    type = "uuid"
+    bind = "A.id"
+  }
+}
+`})
+	for _, e := range g.Edges {
+		if e.Metadata["attribute"] == "bind" {
+			t.Fatalf("bind edge: %+v", e)
+		}
+	}
+	var found bool
+	for _, d := range moduleNode(t, g).Metadata["diagnostics"].([]map[string]any) {
+		if d["code"] == modelspec.RuleAttribute && strings.Contains(d["message"].(string), "bind") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("diagnostics = %+v", moduleNode(t, g).Metadata)
+	}
+}
+
+// A MeaningGraph binding to a model resolves the same in either spelling.
+func TestMeaningBindingSurvivesTheCurrentSpelling(t *testing.T) {
+	const newModel = `record "Invoice" {
+  key = ["id"]
+  field "id" { type = "uuid" }
+  field "total" { type = "decimal" }
+}
+`
+	edges := func(g Graph) (binds []model.Edge, invalid int) {
+		for _, e := range g.Edges {
+			if e.Kind == model.EdgeBindsTo {
+				binds = append(binds, e)
+			}
+		}
+		for _, c := range findKind(g, model.KindMeaningConcept) {
+			for _, code := range diagnosticCodes(c) {
+				if code == "invalid-binding" {
+					invalid++
+				}
+			}
+		}
+		return binds, invalid
+	}
+	files := []string{"chinook.modelspec.hcl", "demo.meaning.yaml"}
+	oldG := buildFiles(t, map[string]string{files[0]: testModel, files[1]: testMeaning})
+	newG := buildFiles(t, map[string]string{files[0]: newModel, files[1]: testMeaning})
+	oldBinds, oldInvalid := edges(oldG)
+	newBinds, newInvalid := edges(newG)
+	if len(oldBinds) != 1 || oldInvalid != 0 || newInvalid != 0 {
+		t.Fatalf("earlier: binds=%d invalid=%d; current: invalid=%d", len(oldBinds), oldInvalid, newInvalid)
+	}
+	if !reflect.DeepEqual(oldBinds, newBinds) {
+		t.Fatalf("binds_to differ:\nearlier=%+v\ncurrent=%+v", oldBinds, newBinds)
+	}
+
+	// The earlier-spelling warning is on the module only; the graph holds none.
+	if got := diagnosticCodes(moduleNode(t, oldG)); !reflect.DeepEqual(got, []string{modelspec.RuleDeprecated}) {
+		t.Fatalf("module diagnostics = %v", got)
+	}
+	for _, g := range []Graph{oldG, newG} {
+		for _, n := range findKind(g, model.KindMeaningGraph) {
+			if got := diagnosticCodes(n); len(got) != 0 {
+				t.Fatalf("graph diagnostics = %v", got)
+			}
+		}
+	}
+	if got := diagnosticCodes(moduleNode(t, newG)); len(got) != 0 {
+		t.Fatalf("current spelling module diagnostics = %v", got)
+	}
+}
+
+// A model file the meaning graph lists but that is not indexed here has no
+// module to hold its warning, so the graph keeps it once, with a relative path.
+func TestMeaningGraphKeepsTheWarningOfAModelThatIsNotIndexed(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "chinook.modelspec.hcl", testModel)
+	write(t, root, "demo.meaning.yaml", testMeaning)
+	g, err := Build(root, []string{"demo.meaning.yaml"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	graphs := findKind(g, model.KindMeaningGraph)
+	if len(graphs) != 1 {
+		t.Fatalf("graphs = %d", len(graphs))
+	}
+	if got := diagnosticCodes(graphs[0]); !reflect.DeepEqual(got, []string{modelspec.RuleDeprecated}) {
+		t.Fatalf("graph diagnostics = %v", got)
+	}
+	msg := graphs[0].Metadata["diagnostics"].([]map[string]any)[0]["message"].(string)
+	if !strings.Contains(msg, `"chinook.modelspec.hcl"`) || strings.Contains(msg, root) {
+		t.Fatalf("notice = %q", msg)
 	}
 }
