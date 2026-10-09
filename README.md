@@ -165,9 +165,8 @@ errors say.
 ## MeaningGraph and ModelSpec
 
 `init`, `index` and `sync` also index MeaningGraph `.meaning.yaml` files and
-ModelSpec HCL/JSON declarations. Concepts, modules, entities, components, enums,
-collections, recordsets and members retain their declared relationships, source
-locations and metadata. HCL/JSON twins share one semantic identity with both
+ModelSpec HCL/JSON declarations. Concepts, modules, entities, components, enums
+and members retain their declared relationships, source locations and metadata. HCL/JSON twins share one semantic identity with both
 source representations. Concept labels and synonyms are searchable with `query`.
 
 The viewer provides Code, Models and Meaning filters, declaration details,
