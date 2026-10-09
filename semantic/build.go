@@ -5,6 +5,7 @@ package semantic
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"net/url"
 	"os/exec"
 	"path/filepath"
@@ -35,7 +36,54 @@ type builder struct {
 	moduleNames map[string]string
 	concepts    map[string][]string
 	snapshot    *sourceSnapshot
+	noticed     map[string]bool // model files whose earlier-spelling warning is stored
 }
+
+// writtenModelKind is the one place that maps a concept kind read by the
+// ModelSpec library to the node kind CodeGrapher writes. The library names a
+// record type "record" whichever spelling the file uses; CodeGrapher still
+// writes it as model_entity, so the index does not change when a model file
+// moves to the current spelling. Writing model_record later is a one-line edit
+// here together with an extraction-version bump.
+var writtenModelKind = map[modelspec.Kind]model.NodeKind{
+	modelspec.KindRecord:    model.KindModelEntity,
+	modelspec.KindComponent: model.KindModelComponent,
+	modelspec.KindEnum:      model.KindModelEnum,
+}
+
+// writtenMemberKind is the memberKind metadata written for the members of a
+// concept kind. A record's members were properties; every other kind, as before,
+// has fields (see memberKindOf).
+var writtenMemberKind = map[modelspec.Kind]string{
+	modelspec.KindRecord:    "property",
+	modelspec.KindComponent: "field",
+}
+
+// writtenKind returns the node kind written for a concept kind. A kind the table
+// does not know is written the way the code before the table wrote it, as
+// "model_" and the kind, and reported as unmapped so a new library kind is
+// noticed instead of written as an empty node kind.
+func writtenKind(k modelspec.Kind) (kind model.NodeKind, mapped bool) {
+	if kind, mapped = writtenModelKind[k]; mapped {
+		return kind, true
+	}
+	return model.NodeKind("model_" + string(k)), false
+}
+
+func memberKindOf(k modelspec.Kind) string {
+	if v, ok := writtenMemberKind[k]; ok {
+		return v
+	}
+	return "field"
+}
+
+// The library reads a member's reference to a record as the attribute "record"
+// in either spelling. CodeGrapher keeps writing it under the name it has always
+// carried, as member metadata and as the attribute of the references edge.
+const (
+	readRecordRefAttr    = "record"
+	writtenRecordRefAttr = "entity"
+)
 
 func stableID(kind model.NodeKind, scope, name string) string {
 	sum := sha256.Sum256([]byte(string(kind) + "\x00" + scope + "\x00" + name))
@@ -105,7 +153,7 @@ func parseRepoAddress(raw string) string {
 }
 
 func Build(root string, files []string, sources []*store.Store) (Graph, error) {
-	b := &builder{root: root, address: repoAddress(root), nodes: map[string]model.Node{}, models: map[string][]string{}, modelPaths: map[string]string{}, moduleNames: map[string]string{}, concepts: map[string][]string{}, snapshot: newSourceSnapshot(root)}
+	b := &builder{root: root, address: repoAddress(root), nodes: map[string]model.Node{}, models: map[string][]string{}, modelPaths: map[string]string{}, moduleNames: map[string]string{}, concepts: map[string][]string{}, snapshot: newSourceSnapshot(root), noticed: map[string]bool{}}
 	if err := b.modelSpec(files); err != nil {
 		return Graph{}, err
 	}
@@ -204,6 +252,32 @@ func attrs(a []modelspec.Attr) map[string]any {
 	}
 	return out
 }
+
+// memberAttrs is attrs for a member: the record reference is written under its
+// established name (writtenRecordRefAttr), whichever spelling the file uses.
+func memberAttrs(a []modelspec.Attr) map[string]any {
+	out := attrs(a)
+	if v, ok := out[readRecordRefAttr]; ok {
+		delete(out, readRecordRefAttr)
+		out[writtenRecordRefAttr] = v
+	}
+	return out
+}
+
+// deprecationNotice is the stored text of the earlier-spelling warning, built
+// from the file's repository-relative path and the number of old spellings the
+// library counted, never from the library's own message: that quotes the checkout
+// path, cut at a fixed length, and would carry it into the index.
+func deprecationNotice(path string, count int) string {
+	return fmt.Sprintf("holds %d earlier spellings of the ModelSpec words record, field and record =; modelspec rewrite --write %q rewrites the file", count, path)
+}
+
+// meaningNotice is the same for a model file that a meaning graph lists and that
+// is not indexed here, so no module holds its notice.
+func meaningNotice(path string) string {
+	return fmt.Sprintf("the model file %q uses earlier spellings of the ModelSpec words record, field and record =; modelspec rewrite --write %q rewrites the file", path, path)
+}
+
 func (b *builder) lineCount(path string) int {
 	data := b.snapshot.readRange(path)
 	if data == nil {
@@ -363,7 +437,9 @@ func (b *builder) modelSpec(files []string) error {
 		groupScope[group] = scope
 	}
 	moduleID := map[string]string{}
+	oldCount := map[string]int{}
 	for _, m := range parsed {
+		oldCount[m.File] = len(m.Old)
 		group := m.Group
 		if m.Twin && m.TwinOf != nil {
 			group = m.TwinOf.Group
@@ -403,7 +479,7 @@ func (b *builder) modelSpec(files []string) error {
 		b.put(mn)
 		if m.Twin {
 			for _, c := range m.Concepts {
-				kind := model.NodeKind("model_" + string(c.Kind))
+				kind, _ := writtenKind(c.Kind)
 				cid := stableID(kind, scope, c.Name)
 				if n, ok := b.nodes[cid]; ok {
 					reps := n.Metadata["representations"].([]map[string]any)
@@ -427,7 +503,7 @@ func (b *builder) modelSpec(files []string) error {
 			continue
 		}
 		for _, c := range m.Concepts {
-			kind := model.NodeKind("model_" + string(c.Kind))
+			kind, mapped := writtenKind(c.Kind)
 			cid := stableID(kind, scope, c.Name)
 			end := b.blockEnd(m.File, c.Line)
 			meta := attrs(c.Attrs)
@@ -441,16 +517,19 @@ func (b *builder) modelSpec(files []string) error {
 				continue
 			}
 			b.put(n)
+			if !mapped {
+				b.diagnostic(cid, "unmapped-kind", "no written node kind is declared for ModelSpec concept kind "+string(c.Kind), c.Line)
+			}
 			b.edge(id, cid, model.EdgeContains, c.Line, nil)
 			b.models[m.Name+"."+c.Name] = append(b.models[m.Name+"."+c.Name], cid)
 			for _, mem := range c.Members {
 				mid := stableID(model.KindModelMember, scope, c.Name+"."+mem.Name)
 				mend := b.blockEnd(m.File, mem.Line)
-				mmeta := attrs(mem.Attrs)
+				mmeta := memberAttrs(mem.Attrs)
 				mmeta["semanticScope"] = scope
 				mmeta["semanticId"] = c.Name + "." + mem.Name
 				mmeta["module"] = m.Name
-				mmeta["memberKind"] = memberKind(c.Kind)
+				mmeta["memberKind"] = memberKindOf(c.Kind)
 				mmeta["representations"] = []map[string]any{repr(path, string(m.Form), mem.Line, mend)}
 				if _, ok := b.nodes[mid]; ok {
 					b.diagnostic(cid, "duplicate-member", "duplicate member "+mem.Name, mem.Line)
@@ -462,26 +541,21 @@ func (b *builder) modelSpec(files []string) error {
 			}
 		}
 	}
+	// Every finding is kept on the module of the file it is about, whichever file
+	// of the module that is. The earlier-spelling warning is worded here, from the
+	// relative path and the library's count, and remembered so a meaning graph that
+	// lists the same model does not report it a second time.
 	for _, f := range findings {
 		path := rel(b.root, f.File)
-		for _, n := range b.nodes {
-			if n.FilePath == path && n.Kind == model.KindModelModule {
-				b.diagnostic(n.ID, f.Rule, f.Message, f.Line)
-				break
-			}
+		msg := f.Message
+		if f.Rule == modelspec.RuleDeprecated {
+			msg = deprecationNotice(path, oldCount[f.File])
+			b.noticed[path] = true
 		}
+		b.diagnostic(moduleID[b.modelPaths[path]], f.Rule, msg, f.Line)
 	}
 	b.modelRelations()
 	return nil
-}
-func memberKind(k modelspec.Kind) string {
-	if k == modelspec.KindEntity {
-		return "property"
-	}
-	if k == modelspec.KindRecordset {
-		return "column"
-	}
-	return "field"
 }
 func (b *builder) modelRelations() {
 	for _, n := range b.nodes {
@@ -496,11 +570,6 @@ func (b *builder) modelRelations() {
 				}
 			}
 		}
-		if n.Kind == model.KindModelCollection {
-			if ref, ok := n.Metadata["source"].(string); ok {
-				b.linkModelRef(n, module, scope, "source", ref, model.EdgeReferences)
-			}
-		}
 		if n.Kind != model.KindModelMember {
 			continue
 		}
@@ -508,19 +577,6 @@ func (b *builder) modelRelations() {
 			ref, _ := n.Metadata[key].(string)
 			if ref != "" {
 				b.linkModelRef(n, module, scope, key, ref, model.EdgeReferences)
-			}
-		}
-		if bind, ok := n.Metadata["bind"].(string); ok {
-			parts := strings.Split(bind, ".")
-			ref := bind
-			if len(parts) == 2 {
-				ref = module + "." + bind
-			}
-			candidates := b.modelCandidates(ref, scope)
-			if len(candidates) == 1 {
-				b.edge(n.ID, candidates[0], model.EdgeReferences, n.StartLine, map[string]any{"attribute": "bind"})
-			} else {
-				b.diagnostic(n.ID, "unresolved-reference", "unresolved or ambiguous bind "+bind, n.StartLine)
 			}
 		}
 	}
@@ -614,6 +670,17 @@ func (b *builder) meaning(files []string) error {
 		blocked := map[string]map[int]bool{}
 		invalidModels := map[string]bool{}
 		for _, finding := range (meaning.Checker{}).Check(g) {
+			if finding.Rule == meaning.RuleEarlierSpelling {
+				// The warning is about a model file. When that file is indexed here its
+				// module already holds the ModelSpec reader's warning for it, so the
+				// graph keeps none; otherwise the graph keeps one, worded with the
+				// relative path.
+				path := rel(b.root, finding.File)
+				if !b.noticed[path] {
+					b.diagnostic(gid, finding.Rule, meaningNotice(path), finding.Line)
+				}
+				continue
+			}
 			b.diagnostic(gid, finding.Rule, finding.Message, finding.Line)
 			if finding.Severity == meaning.Error {
 				if finding.Rule == meaning.RuleModels || finding.Rule == meaning.RuleSchema {

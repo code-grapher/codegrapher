@@ -7,8 +7,8 @@ require (
 	github.com/gofrs/flock v0.13.1
 	github.com/ingr-io/ingr-go v0.0.2
 	github.com/klauspost/compress v1.19.1
-	github.com/meaninggraph/cli v0.2.0
-	github.com/modelspec-org/cli v0.1.2
+	github.com/meaninggraph/cli v0.3.0
+	github.com/modelspec-org/cli v0.2.0
 	github.com/odvcencio/gotreesitter v0.20.2
 	github.com/specscore/specscore-cli v0.40.0
 	github.com/spf13/cobra v1.10.2
