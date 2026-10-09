@@ -5,6 +5,7 @@ package semantic
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"net/url"
 	"os/exec"
 	"path/filepath"
@@ -36,6 +37,34 @@ type builder struct {
 	concepts    map[string][]string
 	snapshot    *sourceSnapshot
 }
+
+// writtenModelKind is the one place that maps a concept kind read by the
+// ModelSpec library to the node kind CodeGrapher writes. The library names a
+// record type "record" whichever spelling the file uses; CodeGrapher still
+// writes it as model_entity, so the index does not change when a model file
+// moves to the current spelling. Writing model_record later is a one-line edit
+// here together with an extraction-version bump.
+var writtenModelKind = map[modelspec.Kind]model.NodeKind{
+	modelspec.KindRecord:    model.KindModelEntity,
+	modelspec.KindComponent: model.KindModelComponent,
+	modelspec.KindEnum:      model.KindModelEnum,
+}
+
+// writtenMemberKind is the memberKind metadata written for the members of each
+// concept kind (a record's members were properties, a component's are fields).
+var writtenMemberKind = map[modelspec.Kind]string{
+	modelspec.KindRecord:    "property",
+	modelspec.KindComponent: "field",
+	modelspec.KindEnum:      "field",
+}
+
+// The library reads a member's reference to a record as the attribute "record"
+// in either spelling. CodeGrapher keeps writing it under the name it has always
+// carried, as member metadata and as the attribute of the references edge.
+const (
+	readRecordRefAttr    = "record"
+	writtenRecordRefAttr = "entity"
+)
 
 func stableID(kind model.NodeKind, scope, name string) string {
 	sum := sha256.Sum256([]byte(string(kind) + "\x00" + scope + "\x00" + name))
@@ -203,6 +232,23 @@ func attrs(a []modelspec.Attr) map[string]any {
 		out[x.Name] = nodeValue(x.Value)
 	}
 	return out
+}
+
+// memberAttrs is attrs for a member: the record reference is written under its
+// established name (writtenRecordRefAttr), whichever spelling the file uses.
+func memberAttrs(a []modelspec.Attr) map[string]any {
+	out := attrs(a)
+	if v, ok := out[readRecordRefAttr]; ok {
+		delete(out, readRecordRefAttr)
+		out[writtenRecordRefAttr] = v
+	}
+	return out
+}
+
+// deprecationNotice returns the library's message with the file named the way
+// the index names it: relative to the repository root, not the checkout path.
+func deprecationNotice(f modelspec.Finding, path string) string {
+	return strings.Replace(f.Message, fmt.Sprintf("%q", f.File), fmt.Sprintf("%q", path), 1)
 }
 func (b *builder) lineCount(path string) int {
 	data := b.snapshot.readRange(path)
@@ -403,7 +449,7 @@ func (b *builder) modelSpec(files []string) error {
 		b.put(mn)
 		if m.Twin {
 			for _, c := range m.Concepts {
-				kind := model.NodeKind("model_" + string(c.Kind))
+				kind := writtenModelKind[c.Kind]
 				cid := stableID(kind, scope, c.Name)
 				if n, ok := b.nodes[cid]; ok {
 					reps := n.Metadata["representations"].([]map[string]any)
@@ -427,7 +473,7 @@ func (b *builder) modelSpec(files []string) error {
 			continue
 		}
 		for _, c := range m.Concepts {
-			kind := model.NodeKind("model_" + string(c.Kind))
+			kind := writtenModelKind[c.Kind]
 			cid := stableID(kind, scope, c.Name)
 			end := b.blockEnd(m.File, c.Line)
 			meta := attrs(c.Attrs)
@@ -446,11 +492,11 @@ func (b *builder) modelSpec(files []string) error {
 			for _, mem := range c.Members {
 				mid := stableID(model.KindModelMember, scope, c.Name+"."+mem.Name)
 				mend := b.blockEnd(m.File, mem.Line)
-				mmeta := attrs(mem.Attrs)
+				mmeta := memberAttrs(mem.Attrs)
 				mmeta["semanticScope"] = scope
 				mmeta["semanticId"] = c.Name + "." + mem.Name
 				mmeta["module"] = m.Name
-				mmeta["memberKind"] = memberKind(c.Kind)
+				mmeta["memberKind"] = writtenMemberKind[c.Kind]
 				mmeta["representations"] = []map[string]any{repr(path, string(m.Form), mem.Line, mend)}
 				if _, ok := b.nodes[mid]; ok {
 					b.diagnostic(cid, "duplicate-member", "duplicate member "+mem.Name, mem.Line)
@@ -464,6 +510,12 @@ func (b *builder) modelSpec(files []string) error {
 	}
 	for _, f := range findings {
 		path := rel(b.root, f.File)
+		if f.Rule == modelspec.RuleDeprecated {
+			// One notice per file, kept on the module the file belongs to. A
+			// warning is retained like every other finding and never fails a run.
+			b.diagnostic(moduleID[b.modelPaths[path]], f.Rule, deprecationNotice(f, path), f.Line)
+			continue
+		}
 		for _, n := range b.nodes {
 			if n.FilePath == path && n.Kind == model.KindModelModule {
 				b.diagnostic(n.ID, f.Rule, f.Message, f.Line)
@@ -473,15 +525,6 @@ func (b *builder) modelSpec(files []string) error {
 	}
 	b.modelRelations()
 	return nil
-}
-func memberKind(k modelspec.Kind) string {
-	if k == modelspec.KindEntity {
-		return "property"
-	}
-	if k == modelspec.KindRecordset {
-		return "column"
-	}
-	return "field"
 }
 func (b *builder) modelRelations() {
 	for _, n := range b.nodes {
@@ -494,11 +537,6 @@ func (b *builder) modelRelations() {
 						b.linkModelRef(n, module, scope, "use", ref, model.EdgeReferences)
 					}
 				}
-			}
-		}
-		if n.Kind == model.KindModelCollection {
-			if ref, ok := n.Metadata["source"].(string); ok {
-				b.linkModelRef(n, module, scope, "source", ref, model.EdgeReferences)
 			}
 		}
 		if n.Kind != model.KindModelMember {
