@@ -36,6 +36,7 @@ type builder struct {
 	moduleNames map[string]string
 	concepts    map[string][]string
 	snapshot    *sourceSnapshot
+	noticed     map[string]bool // model files whose earlier-spelling warning is stored
 }
 
 // writtenModelKind is the one place that maps a concept kind read by the
@@ -50,12 +51,30 @@ var writtenModelKind = map[modelspec.Kind]model.NodeKind{
 	modelspec.KindEnum:      model.KindModelEnum,
 }
 
-// writtenMemberKind is the memberKind metadata written for the members of each
-// concept kind (a record's members were properties, a component's are fields).
+// writtenMemberKind is the memberKind metadata written for the members of a
+// concept kind. A record's members were properties; every other kind, as before,
+// has fields (see memberKindOf).
 var writtenMemberKind = map[modelspec.Kind]string{
 	modelspec.KindRecord:    "property",
 	modelspec.KindComponent: "field",
-	modelspec.KindEnum:      "field",
+}
+
+// writtenKind returns the node kind written for a concept kind. A kind the table
+// does not know is written the way the code before the table wrote it, as
+// "model_" and the kind, and reported as unmapped so a new library kind is
+// noticed instead of written as an empty node kind.
+func writtenKind(k modelspec.Kind) (kind model.NodeKind, mapped bool) {
+	if kind, mapped = writtenModelKind[k]; mapped {
+		return kind, true
+	}
+	return model.NodeKind("model_" + string(k)), false
+}
+
+func memberKindOf(k modelspec.Kind) string {
+	if v, ok := writtenMemberKind[k]; ok {
+		return v
+	}
+	return "field"
 }
 
 // The library reads a member's reference to a record as the attribute "record"
@@ -134,7 +153,7 @@ func parseRepoAddress(raw string) string {
 }
 
 func Build(root string, files []string, sources []*store.Store) (Graph, error) {
-	b := &builder{root: root, address: repoAddress(root), nodes: map[string]model.Node{}, models: map[string][]string{}, modelPaths: map[string]string{}, moduleNames: map[string]string{}, concepts: map[string][]string{}, snapshot: newSourceSnapshot(root)}
+	b := &builder{root: root, address: repoAddress(root), nodes: map[string]model.Node{}, models: map[string][]string{}, modelPaths: map[string]string{}, moduleNames: map[string]string{}, concepts: map[string][]string{}, snapshot: newSourceSnapshot(root), noticed: map[string]bool{}}
 	if err := b.modelSpec(files); err != nil {
 		return Graph{}, err
 	}
@@ -245,11 +264,20 @@ func memberAttrs(a []modelspec.Attr) map[string]any {
 	return out
 }
 
-// deprecationNotice returns the library's message with the file named the way
-// the index names it: relative to the repository root, not the checkout path.
-func deprecationNotice(f modelspec.Finding, path string) string {
-	return strings.Replace(f.Message, fmt.Sprintf("%q", f.File), fmt.Sprintf("%q", path), 1)
+// deprecationNotice is the stored text of the earlier-spelling warning, built
+// from the file's repository-relative path and the number of old spellings the
+// library counted, never from the library's own message: that quotes the checkout
+// path, cut at a fixed length, and would carry it into the index.
+func deprecationNotice(path string, count int) string {
+	return fmt.Sprintf("holds %d earlier spellings of the ModelSpec words record, field and record =; modelspec rewrite --write %q rewrites the file", count, path)
 }
+
+// meaningNotice is the same for a model file that a meaning graph lists and that
+// is not indexed here, so no module holds its notice.
+func meaningNotice(path string) string {
+	return fmt.Sprintf("the model file %q uses earlier spellings of the ModelSpec words record, field and record =; modelspec rewrite --write %q rewrites the file", path, path)
+}
+
 func (b *builder) lineCount(path string) int {
 	data := b.snapshot.readRange(path)
 	if data == nil {
@@ -409,7 +437,9 @@ func (b *builder) modelSpec(files []string) error {
 		groupScope[group] = scope
 	}
 	moduleID := map[string]string{}
+	oldCount := map[string]int{}
 	for _, m := range parsed {
+		oldCount[m.File] = len(m.Old)
 		group := m.Group
 		if m.Twin && m.TwinOf != nil {
 			group = m.TwinOf.Group
@@ -449,7 +479,7 @@ func (b *builder) modelSpec(files []string) error {
 		b.put(mn)
 		if m.Twin {
 			for _, c := range m.Concepts {
-				kind := writtenModelKind[c.Kind]
+				kind, _ := writtenKind(c.Kind)
 				cid := stableID(kind, scope, c.Name)
 				if n, ok := b.nodes[cid]; ok {
 					reps := n.Metadata["representations"].([]map[string]any)
@@ -473,7 +503,7 @@ func (b *builder) modelSpec(files []string) error {
 			continue
 		}
 		for _, c := range m.Concepts {
-			kind := writtenModelKind[c.Kind]
+			kind, mapped := writtenKind(c.Kind)
 			cid := stableID(kind, scope, c.Name)
 			end := b.blockEnd(m.File, c.Line)
 			meta := attrs(c.Attrs)
@@ -487,6 +517,9 @@ func (b *builder) modelSpec(files []string) error {
 				continue
 			}
 			b.put(n)
+			if !mapped {
+				b.diagnostic(cid, "unmapped-kind", "no written node kind is declared for ModelSpec concept kind "+string(c.Kind), c.Line)
+			}
 			b.edge(id, cid, model.EdgeContains, c.Line, nil)
 			b.models[m.Name+"."+c.Name] = append(b.models[m.Name+"."+c.Name], cid)
 			for _, mem := range c.Members {
@@ -496,7 +529,7 @@ func (b *builder) modelSpec(files []string) error {
 				mmeta["semanticScope"] = scope
 				mmeta["semanticId"] = c.Name + "." + mem.Name
 				mmeta["module"] = m.Name
-				mmeta["memberKind"] = writtenMemberKind[c.Kind]
+				mmeta["memberKind"] = memberKindOf(c.Kind)
 				mmeta["representations"] = []map[string]any{repr(path, string(m.Form), mem.Line, mend)}
 				if _, ok := b.nodes[mid]; ok {
 					b.diagnostic(cid, "duplicate-member", "duplicate member "+mem.Name, mem.Line)
@@ -508,20 +541,18 @@ func (b *builder) modelSpec(files []string) error {
 			}
 		}
 	}
+	// Every finding is kept on the module of the file it is about, whichever file
+	// of the module that is. The earlier-spelling warning is worded here, from the
+	// relative path and the library's count, and remembered so a meaning graph that
+	// lists the same model does not report it a second time.
 	for _, f := range findings {
 		path := rel(b.root, f.File)
+		msg := f.Message
 		if f.Rule == modelspec.RuleDeprecated {
-			// One notice per file, kept on the module the file belongs to. A
-			// warning is retained like every other finding and never fails a run.
-			b.diagnostic(moduleID[b.modelPaths[path]], f.Rule, deprecationNotice(f, path), f.Line)
-			continue
+			msg = deprecationNotice(path, oldCount[f.File])
+			b.noticed[path] = true
 		}
-		for _, n := range b.nodes {
-			if n.FilePath == path && n.Kind == model.KindModelModule {
-				b.diagnostic(n.ID, f.Rule, f.Message, f.Line)
-				break
-			}
-		}
+		b.diagnostic(moduleID[b.modelPaths[path]], f.Rule, msg, f.Line)
 	}
 	b.modelRelations()
 	return nil
@@ -546,19 +577,6 @@ func (b *builder) modelRelations() {
 			ref, _ := n.Metadata[key].(string)
 			if ref != "" {
 				b.linkModelRef(n, module, scope, key, ref, model.EdgeReferences)
-			}
-		}
-		if bind, ok := n.Metadata["bind"].(string); ok {
-			parts := strings.Split(bind, ".")
-			ref := bind
-			if len(parts) == 2 {
-				ref = module + "." + bind
-			}
-			candidates := b.modelCandidates(ref, scope)
-			if len(candidates) == 1 {
-				b.edge(n.ID, candidates[0], model.EdgeReferences, n.StartLine, map[string]any{"attribute": "bind"})
-			} else {
-				b.diagnostic(n.ID, "unresolved-reference", "unresolved or ambiguous bind "+bind, n.StartLine)
 			}
 		}
 	}
@@ -652,6 +670,17 @@ func (b *builder) meaning(files []string) error {
 		blocked := map[string]map[int]bool{}
 		invalidModels := map[string]bool{}
 		for _, finding := range (meaning.Checker{}).Check(g) {
+			if finding.Rule == meaning.RuleEarlierSpelling {
+				// The warning is about a model file. When that file is indexed here its
+				// module already holds the ModelSpec reader's warning for it, so the
+				// graph keeps none; otherwise the graph keeps one, worded with the
+				// relative path.
+				path := rel(b.root, finding.File)
+				if !b.noticed[path] {
+					b.diagnostic(gid, finding.Rule, meaningNotice(path), finding.Line)
+				}
+				continue
+			}
 			b.diagnostic(gid, finding.Rule, finding.Message, finding.Line)
 			if finding.Severity == meaning.Error {
 				if finding.Rule == meaning.RuleModels || finding.Rule == meaning.RuleSchema {
