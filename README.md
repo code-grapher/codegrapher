@@ -6,6 +6,12 @@ runtime dependencies.
 
 Website: https://codegrapher.dev
 
+## DataTug flagship: code intelligence during development
+
+DataTug is our flagship product. CodeGrapher helps the team inspect DataTug's
+code structure and trace relationships while developing it. [Open DataTug](https://datatug.app)
+or read [how we build it with our tools](https://datatug.app/en/under-the-hood/tools-we-built/).
+
 <!-- dev-approach:v1 -->
 ## Our approach to development
 
