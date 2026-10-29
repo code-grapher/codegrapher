@@ -6,6 +6,15 @@ runtime dependencies.
 
 Website: https://codegrapher.dev
 
+## Video
+
+<p>
+  <a href="https://youtu.be/LQ5ls_C4hOE"><img src="assets/video/codegrapher-en-poster.webp" alt="Play the 1:32 film: CodeGrapher — map of your code" width="640"></a><br>
+  ▶ <b><a href="https://youtu.be/LQ5ls_C4hOE">Watch the CodeGrapher film (1:32)</a></b>
+</p>
+
+Русская версия: https://youtu.be/UXK8lkRRyZM
+
 ## DataTug flagship: code intelligence during development
 
 DataTug is our flagship product. CodeGrapher helps the team inspect DataTug's
