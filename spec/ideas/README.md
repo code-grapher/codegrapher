@@ -15,6 +15,7 @@ Pre-spec one-pagers. Each Idea is a lint-clean problem-direction-MVP one-pager t
 | [live-daemon-repository-browser](live-daemon-repository-browser.md) | Implemented | 2026-09-12 | alex | live-daemon-api |
 | [meaninggraph-modelspec-navigation](meaninggraph-modelspec-navigation.md) | Approved | 2026-10-07 | alex | — |
 | [specscore-artifact-extraction](specscore-artifact-extraction.md) | Approved | 2026-06-15 | trakhimenok | — |
+| [worktree-index-seeding](worktree-index-seeding.md) | Draft | 2026-11-21 | alex | — |
 
 ## Open Questions
 

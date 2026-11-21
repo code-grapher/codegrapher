@@ -106,7 +106,9 @@ func withEmptyUpgradeEnv(t *testing.T) {
 			HostDir:      func() (string, error) { return "", errors.New("no host dir in test env") },
 			IsExecutable: func(string) bool { return false },
 			EvalSymlinks: func(p string) (string, error) { return p, nil },
-			Run:          func(context.Context, string, []string) ([]byte, error) { return nil, errors.New("not reachable in test env") },
+			Run: func(context.Context, string, []string) ([]byte, error) {
+				return nil, errors.New("not reachable in test env")
+			},
 		},
 		UserHomeDir: func() (string, error) { return "", errors.New("no home dir in test env") },
 		Getenv:      func(string) string { return "" },

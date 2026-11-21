@@ -65,6 +65,8 @@ codegrapher export [path]    Export index as INGR snapshot files
 codegrapher import [path]    Import an INGR snapshot into the local store
 codegrapher unlock [path]    Remove a stale lock file
 codegrapher version          Print version
+
+Global: --no-worktree-seed   Do not seed a linked worktree's index from the canonical clone
 ```
 
 ### Coverage campaign
@@ -151,7 +153,9 @@ returns a busy/retry error rather than combining an old graph with new code.
 Read commands (`status`, `query`, `node`, `callers`, `callees`, `impact`, `path`,
 `files`, `affected`, `context`, `stacktrace`, `trace`, `coverage targets`)
 open the index **read-only**: they never migrate, convert, re-index, or create
-`-wal`/`-shm` files, and they do not scan the tree for changes. The index uses
+`-wal`/`-shm` files, and they do not scan the tree for changes. (The one
+exception is a linked Git worktree with no index yet, which gets a seeded one
+first; see below.) The index uses
 SQLite's default rollback journal (no WAL), so an idle reader holds no lock and
 a concurrent `sync` is never blocked by one. `serve` is read-only only without
 watch (`serve --mcp` and/or `--api`): the default capability set and `--watch`
@@ -176,6 +180,40 @@ errors say.
   (exit code 3), and warns when `.codegraph/` is not Git-ignored or is tracked.
   `init` and `sync` repair the ignore entries (`.codegraph/.gitignore`,
   `.git/info/exclude`; a tracked `.gitignore` is never edited).
+
+### Git worktrees: seeded from the canonical clone
+
+In a linked Git worktree that has no index of its own, the first command that
+needs one — any read command, `sync`, `index`, `serve`, `daemon`, `watch`, or
+`init` — seeds it from the canonical clone (the main working tree, found with
+`git rev-parse --git-common-dir`) and catches it up incrementally. No manual
+`init` is needed, and answers match a fresh index.
+
+- The copy is consistent: each scope database is opened read-only and cloned
+  while a read transaction keeps writers from committing, and the whole set is
+  fingerprinted before and after so a canonical sync mid-copy forces a retry
+  (a legacy WAL-mode file is byte-copied only when its WAL is empty). It is
+  copy-on-write where the file system supports it (APFS `clonefile`,
+  btrfs/XFS reflink) and a plain copy otherwise.
+- Seeding never writes to the canonical clone, and never refreshes its index
+  first: the worktree's own incremental pass is correct whatever the base looks
+  like.
+- Full builds and refreshes record the commit the index was built from and
+  whether that tree was dirty. Seeded from a clean base, the first refresh diffs
+  `<base>..HEAD` plus working-tree changes; otherwise it rechecks every file by
+  content hash.
+- With no canonical index, or when seeding fails, the worktree gets a full
+  build. `status` stays read-only and never seeds. Parallel first commands in
+  one worktree share a single seed: the others wait for its catch-up.
+- Opt out with `--no-worktree-seed` or `CODEGRAPHER_WORKTREE_SEED=0`. With
+  seeding off, a worktree nested inside the canonical clone is refused (or, for
+  `status`, reported as a mismatch) rather than served the other tree's index.
+
+A canonical index built by an older release (different extraction version)
+is copied but then rebuilt in the worktree, so it saves nothing until the
+canonical clone is next synced. On sneat-co/sneat-go (1,110 files) with a
+same-version base, the first query in a new worktree took 0.3 s (no edits) and
+1.2 s (13 edited files), against 5.2 s for a fresh `init`.
 
 ## MeaningGraph and ModelSpec
 

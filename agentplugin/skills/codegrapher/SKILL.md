@@ -90,9 +90,17 @@ first and then returns current source. It never slices a stale range. `path
 --source` and `stacktrace --source` behave the same way (source withheld,
 `freshness.stale`, exit 0); `context` still fails and names `--refresh`.
 
-In a Git worktree, `node` refuses an index owned by another checkout. Run
-`codegrapher init` from the current worktree to create the local index; explicit
-initialization paths are exact and do not walk up to an initialized ancestor.
+In a fresh linked Git worktree you do not need `init`: the first command that
+needs an index (any query, `sync`, `index`, `serve`, `daemon`, `watch`, or
+`init` itself) seeds the worktree's own index from the canonical clone's index
+— a copy-on-write clone where the file system supports it — and catches it up
+incrementally, typically in about a second. It never writes to the canonical
+clone; with no canonical index it builds a fresh one. `status` is read-only and
+never seeds. Opt out with `--no-worktree-seed` or `CODEGRAPHER_WORKTREE_SEED=0`.
+With seeding off, commands refuse an index owned by another checkout (a
+worktree nested inside the canonical clone would otherwise borrow it); run
+`codegrapher init` from the worktree for a local index. Explicit initialization
+paths are exact and do not walk up to an initialized ancestor.
 
 When an agent knows an entry point and a target but not the intermediate
 implementation route, ask CodeGrapher for one bounded static path before

@@ -106,8 +106,14 @@ func (idx *Indexer) IndexAll(opts Options) IndexResult {
 	if err := idx.invalidateGitHead(); err != nil {
 		return IndexResult{Success: false, Errors: []model.ExtractionError{{Message: err.Error(), Severity: "error", Code: "git_head_metadata_error"}}}
 	}
-
-	return idx.indexAllLocked(opts)
+	observedHead, gitRepo := gitHead(idx.root)
+	dirtyBefore := workingTreeDirty(idx.root)
+	result := idx.indexAllLocked(opts)
+	if gitRepo && result.Success {
+		// Record the base commit the full build matches (see Sync).
+		_ = idx.markGitHeadIfCurrent(observedHead, dirtyBefore)
+	}
+	return result
 }
 
 // indexVersionStale reports whether the stored index was built by a different

@@ -21,6 +21,9 @@ chains, analyse blast radius, and keep the index in sync.`,
 		SilenceErrors: true,
 	}
 
+	root.PersistentFlags().BoolVar(&noWorktreeSeed, "no-worktree-seed", false,
+		"In a linked git worktree without its own index, do not seed one from the canonical clone (env "+worktreeSeedEnv+"=0)")
+
 	root.AddCommand(
 		newSelfUpdateCmd(),
 		newInstallCmd(),

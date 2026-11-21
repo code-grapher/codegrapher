@@ -27,6 +27,10 @@ func newSyncCmdWithRunner(runSync syncRunner) *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			projectPath := resolveArg(args)
+			if mismatch := indexer.DetectWorktreeIndexMismatch(resolveExactArg(args), projectPath); mismatch != nil {
+				// Never write another working tree's index from here (#40).
+				return fmt.Errorf("cannot %s a different git worktree's index:\n%s", "sync", indexer.WorktreeMismatchWarning(*mismatch))
+			}
 
 			if !indexer.IsInitialized(projectPath) {
 				if !initialize {

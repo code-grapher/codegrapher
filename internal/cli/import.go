@@ -26,7 +26,10 @@ Default input directory: <project-root>/codegraph/
 Use --in to override.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			projectPath := resolveArg(args)
+			projectPath := resolveArgExisting(args)
+			if mismatch := indexer.DetectWorktreeIndexMismatch(resolveExactArg(args), projectPath); mismatch != nil {
+				return fmt.Errorf("cannot import into a different git worktree's index:\n%s", indexer.WorktreeMismatchWarning(*mismatch))
+			}
 
 			in := inDir
 			if in == "" {

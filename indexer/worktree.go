@@ -69,8 +69,8 @@ func WorktreeMismatchWarning(m WorktreeIndexMismatch) string {
 			"  Running in: %s\n"+
 			"  Index from: %s\n"+
 			"Results reflect that tree's code (often a different branch), not this worktree — "+
-			"symbols changed only here are missing. Run \"codegrapher init\" in this worktree "+
-			"for a worktree-local index.",
+			"symbols changed only here are missing. Run \"codegrapher sync\" (or any query) in this worktree "+
+			"to seed a worktree-local index from the canonical clone, or \"codegrapher init\" for a fresh one.",
 		m.WorktreeRoot, m.IndexRoot)
 }
 
@@ -80,8 +80,8 @@ func WorktreeMismatchNotice(m WorktreeIndexMismatch) string {
 	return fmt.Sprintf(
 		"⚠ CodeGraph results below come from a different git worktree (%s), "+
 			"not where you're working (%s) — they may reflect another branch, "+
-			"and symbols changed only here are missing. Run \"codegrapher init\" here for a "+
-			"worktree-local index.",
+			"and symbols changed only here are missing. Run \"codegrapher sync\" here to seed a "+
+			"worktree-local index, or \"codegrapher init\" for a fresh one.",
 		m.IndexRoot, m.WorktreeRoot)
 }
 
