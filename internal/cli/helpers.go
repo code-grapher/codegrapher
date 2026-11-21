@@ -58,9 +58,23 @@ func resolveExactArg(args []string) string {
 	return abs
 }
 
+// resolveArgExisting is resolveArg without worktree provisioning, for
+// commands that must not create an index (status, uninit, unlock, import).
+func resolveArgExisting(args []string) string {
+	return findNearestExisting(resolveExactArg(args))
+}
+
 // findNearestOrReturn walks up from startPath looking for an initialized
-// CodeGraph project. Returns startPath if none is found.
+// CodeGraph project. Returns startPath if none is found. In a linked Git
+// worktree without its own index it first provisions one (seeded from the
+// canonical clone; see provisionWorktreeIndex).
 func findNearestOrReturn(startPath string) string {
+	provisionWorktreeIndex(startPath, false)
+	return findNearestExisting(startPath)
+}
+
+// findNearestExisting is findNearestOrReturn without provisioning.
+func findNearestExisting(startPath string) string {
 	if indexer.IsInitialized(startPath) {
 		return startPath
 	}

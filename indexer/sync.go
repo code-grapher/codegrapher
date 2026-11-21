@@ -33,7 +33,20 @@ func (idx *Indexer) Sync(opts Options) SyncResult {
 	if err := idx.invalidateGitHead(); err != nil {
 		return SyncResult{Errors: []model.ExtractionError{{Message: err.Error(), Severity: "error", Code: "git_head_metadata_error"}}}
 	}
+	observedHead, gitRepo := gitHead(idx.root)
+	dirtyBefore := workingTreeDirty(idx.root)
+	result := idx.syncLocked(opts)
+	if gitRepo && firstFatalExtractionError(result.Errors) == nil {
+		// A whole-tree sync leaves the index matching the working tree: record
+		// the base commit (and its dirtiness) so worktrees seeded from it can
+		// take the git-diff fast path. Skipped if HEAD moved meanwhile.
+		_ = idx.markGitHeadIfCurrent(observedHead, dirtyBefore)
+	}
+	return result
+}
 
+// syncLocked is Sync's body; the caller holds idx.mu and the file lock.
+func (idx *Indexer) syncLocked(opts Options) SyncResult {
 	now := opts.clock()
 	start := now()
 	result := SyncResult{}
@@ -678,6 +691,7 @@ func (idx *Indexer) ensureTraceProjection() error {
 func (idx *Indexer) refreshForRead(opts Options) (SyncResult, error) {
 	if idx.indexVersionStale() {
 		observedHead, gitRepo := gitHead(idx.root)
+		dirtyBefore := workingTreeDirty(idx.root)
 		if err := idx.invalidateGitHead(); err != nil {
 			return SyncResult{}, err
 		}
@@ -693,16 +707,17 @@ func (idx *Indexer) refreshForRead(opts Options) (SyncResult, error) {
 		}
 		if gitRepo {
 			if current, ok := gitHead(idx.root); !ok || current != observedHead {
-				_ = idx.markGitHead("") // invalidate an internally written unseen revision
+				_ = idx.invalidateGitHead() // invalidate an internally written unseen revision
 				return result, fmt.Errorf("repository HEAD changed during rebuild; no freshness stamp written")
 			}
-			if err := idx.markGitHead(observedHead); err != nil {
+			if err := idx.markGitHead(observedHead, dirtyBefore); err != nil {
 				return result, err
 			}
 		}
 		return result, nil
 	}
 	observedHead, gitRepo := gitHead(idx.root)
+	dirtyBefore := workingTreeDirty(idx.root)
 	changes, err := idx.changedFilesForRead()
 	if err != nil {
 		return SyncResult{}, fmt.Errorf("inspect index freshness: %w", err)
@@ -711,7 +726,7 @@ func (idx *Indexer) refreshForRead(opts Options) (SyncResult, error) {
 	paths = append(paths, changes.Removed...)
 	if len(paths) == 0 {
 		if gitRepo {
-			if err := idx.markGitHeadIfCurrent(observedHead); err != nil {
+			if err := idx.markGitHeadIfCurrent(observedHead, dirtyBefore); err != nil {
 				return SyncResult{}, err
 			}
 		}
@@ -728,7 +743,7 @@ func (idx *Indexer) refreshForRead(opts Options) (SyncResult, error) {
 		return result, fmt.Errorf("incremental refresh failed: %w", fatal)
 	}
 	if gitRepo {
-		if err := idx.markGitHeadIfCurrent(observedHead); err != nil {
+		if err := idx.markGitHeadIfCurrent(observedHead, dirtyBefore); err != nil {
 			return result, err
 		}
 	}
@@ -953,26 +968,63 @@ func (idx *Indexer) markCurrentGitHead() error {
 	if !ok {
 		return nil
 	}
-	return idx.markGitHead(head)
+	return idx.markGitHead(head, dirtyUnmeasured)
 }
 
-func (idx *Indexer) markGitHead(head string) error {
+// dirtyUnmeasured marks a stamp whose pre-operation dirtiness was not taken;
+// only the state at stamp time is recorded.
+const dirtyUnmeasured = "-"
+
+// markGitHead stamps the indexed revision and its dirtiness. dirtyBefore is
+// the working tree's state when the operation observed head; the recorded
+// value is "1" when the tree was dirty before or after, "0" only when it was
+// clean both times (so a stash between scan and stamp cannot fake "clean").
+func (idx *Indexer) markGitHead(head, dirtyBefore string) error {
+	dirty := ""
+	switch {
+	case head == "":
+	case dirtyBefore == "1":
+		dirty = "1" // no need to ask git again
+	default:
+		dirty = workingTreeDirty(idx.root)
+		if dirtyBefore == "" && dirty != "1" {
+			dirty = "" // unknown before, clean now: still unknown
+		}
+	}
 	for _, s := range idx.Stores() {
 		if err := s.SetMetadata(indexedGitHeadKey, head); err != nil {
+			return err
+		}
+		if err := s.SetMetadata(indexedGitDirtyKey, dirty); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (idx *Indexer) invalidateGitHead() error { return idx.markGitHead("") }
+// workingTreeDirty records, beside the indexed revision, whether the indexed
+// tree also held uncommitted or untracked changes: "1" dirty, "0" clean, ""
+// unknown. A worktree seeded from this index trusts the revision for its
+// git-diff fast path only when it was clean (see SeedFromCanonical).
+func workingTreeDirty(root string) string {
+	changes, ok := gitChangedFiles(root)
+	if !ok {
+		return ""
+	}
+	if len(changes.modified)+len(changes.added)+len(changes.deleted) > 0 {
+		return "1"
+	}
+	return "0"
+}
 
-func (idx *Indexer) markGitHeadIfCurrent(observed string) error {
+func (idx *Indexer) invalidateGitHead() error { return idx.markGitHead("", "") }
+
+func (idx *Indexer) markGitHeadIfCurrent(observed, dirtyBefore string) error {
 	current, ok := gitHead(idx.root)
 	if !ok || current != observed {
 		return fmt.Errorf("repository HEAD changed during refresh; no freshness stamp written")
 	}
-	return idx.markGitHead(observed)
+	return idx.markGitHead(observed, dirtyBefore)
 }
 
 type changedFilesSet struct {
@@ -1121,6 +1173,9 @@ func parsePorcelainZ(out string) gitChanges {
 		}
 		statusCode := record[:2]
 		filePath := filepath.ToSlash(record[3:])
+		if inDataDir(filePath) {
+			continue
+		}
 		switch {
 		case statusCode == "??":
 			changes.added = append(changes.added, filePath)

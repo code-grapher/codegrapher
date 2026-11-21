@@ -293,6 +293,9 @@ func (f *PathFilter) IsIgnored(relPath string) bool {
 	if relPath == "." || relPath == "" || strings.HasPrefix(relPath, "../") {
 		return false
 	}
+	if inDataDir(relPath) || IsCodeGraphDataDir(relPath) {
+		return true
+	}
 	if filepath.Base(relPath) == ".gitignore" {
 		f.refreshLocked()
 		return false
@@ -347,6 +350,9 @@ func isIgnoredSyncPath(root, relPath string) bool {
 	if relPath == "." || relPath == "" || strings.HasPrefix(relPath, "../") {
 		return false
 	}
+	if inDataDir(relPath) {
+		return true
+	}
 	if buildDefaultIgnore(root).Ignored(relPath, isDir) {
 		return true
 	}
@@ -354,6 +360,15 @@ func isIgnoredSyncPath(root, relPath string) bool {
 		return exec.Command("git", "-C", root, "check-ignore", "-q", "--", filepath.FromSlash(relPath)).Run() == nil
 	}
 	return NewPathFilter(root).IsIgnored(relPath)
+}
+
+// inDataDir reports whether a project-relative path lies inside a top-level
+// CodeGraph data directory. Those files are never indexed, even when Git
+// lists them (a data directory's own .gitignore un-ignores itself, so an
+// untracked .codegraph/.gitignore shows up when info/exclude lacks the entry).
+func inDataDir(relPath string) bool {
+	first, _, _ := strings.Cut(filepath.ToSlash(relPath), "/")
+	return first != relPath && IsCodeGraphDataDir(first)
 }
 
 // --- scanning ----------------------------------------------------------------
@@ -408,7 +423,7 @@ func gitVisibleFiles(rootDir string) []string {
 	ig := buildDefaultIgnore(rootDir)
 	var files []string
 	for f := range seen {
-		if !ig.Ignored(f, false) {
+		if !ig.Ignored(f, false) && !inDataDir(f) {
 			files = append(files, f)
 		}
 	}

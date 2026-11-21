@@ -34,13 +34,16 @@ notice, and exits with code 3; run "codegrapher sync" or pass --refresh.
 It also warns when .codegraph/ is not Git-ignored or is tracked.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var projectPath string
+			// status is read-only: it never provisions a worktree index. The
+			// mismatch check compares the requested path (not the resolved
+			// index root) with the index, so a worktree borrowing an enclosing
+			// clone's index is reported instead of called current (#40).
+			startArgs := args
 			if pathFlag != "" {
-				projectPath = resolveArg([]string{pathFlag})
-			} else {
-				projectPath = resolveArg(args)
+				startArgs = []string{pathFlag}
 			}
-			startPath := projectPath // for worktree mismatch detection
+			startPath := resolveExactArg(startArgs)
+			projectPath := findNearestExisting(startPath)
 
 			if !indexer.IsInitialized(projectPath) {
 				if wantsJSON(format, jsonOut) {
@@ -58,6 +61,13 @@ It also warns when .codegraph/ is not Git-ignored or is tracked.`,
 				printWarn("Not initialized")
 				printInfo("Run \"codegrapher init\" to initialize")
 				return nil
+			}
+
+			// Worktree mismatch detection.
+			mismatch := indexer.DetectWorktreeIndexMismatch(startPath, projectPath)
+			if refresh && mismatch != nil {
+				printError("Refusing to refresh a different git worktree's index:\n" + indexer.WorktreeMismatchWarning(*mismatch))
+				return &ExitError{Code: 1}
 			}
 
 			if refresh {
@@ -101,8 +111,6 @@ It also warns when .codegraph/ is not Git-ignored or is tracked.`,
 				}
 			}
 
-			// Worktree mismatch detection.
-			mismatch := indexer.DetectWorktreeIndexMismatch(startPath, projectPath)
 			if mismatch != nil {
 				status.WorktreeMismatch = map[string]string{
 					"worktreeRoot": mismatch.WorktreeRoot,
@@ -184,6 +192,10 @@ func printStatusFooter(status *StatusResult) {
 	if status.UpgradeNeeded != "" {
 		printWarn(status.UpgradeNeeded)
 		printInfo("Run \"codegrapher sync\" (or pass --refresh to any read command) to upgrade the index")
+		fmt.Println()
+	} else if status.WorktreeMismatch != nil {
+		// Pending changes describe the other tree; never call it current here.
+		printWarn("Not current for this worktree: the index belongs to a different git working tree")
 		fmt.Println()
 	} else if status.PendingChanges == nil {
 		printInfo("Pending changes not checked (--no-pending)")

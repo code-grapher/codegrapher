@@ -19,6 +19,16 @@ func newInitCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			projectPath := resolveExactArg(args)
 
+			// In a linked worktree, seed from the canonical clone's index and
+			// catch up incrementally instead of building from scratch; with no
+			// canonical index (or --no-worktree-seed) this falls through to
+			// the full build below.
+			if provisionWorktreeIndex(projectPath, true) && indexer.IsInitialized(projectPath) {
+				printSuccess(fmt.Sprintf("Initialized %s from the canonical clone's index", projectPath))
+				printWarnings(indexer.EnsureDataDirIgnored(projectPath))
+				return nil
+			}
+
 			if indexer.IsInitialized(projectPath) {
 				printWarn(fmt.Sprintf("Already initialized in %s", projectPath))
 				printInfo("Use \"codegrapher index\" to re-index or \"codegrapher sync\" to update")

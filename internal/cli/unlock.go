@@ -14,7 +14,7 @@ func newUnlockCmd() *cobra.Command {
 		Short: "Remove a stale lock file that is blocking indexing",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			projectPath := resolveArg(args)
+			projectPath := resolveArgExisting(args)
 
 			if !indexer.IsInitialized(projectPath) {
 				printError(fmt.Sprintf("CodeGraph not initialized in %s", projectPath))
