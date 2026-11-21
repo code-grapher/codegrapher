@@ -162,7 +162,9 @@ func SeedFromCanonical(sourceRoot, targetRoot string) (SeedResult, error) {
 			_ = os.RemoveAll(tmpDir)
 			return res, err
 		}
-		after, ferr := fingerprintSet(dbs)
+		// Re-list the directory: a writer may also have added a scope.
+		nowDBs, _ := filepath.Glob(filepath.Join(srcDir, dbPrefix+"*"+dbSuffix))
+		after, ferr := fingerprintSet(nowDBs)
 		if ferr == nil && after == before && !writerHoldsLock(lockPath) {
 			res.Method, res.Databases = method, n
 			break
@@ -208,12 +210,13 @@ func copyDatabases(dbs []string, dir string) (SeedMethod, int, error) {
 	return method, len(dbs), nil
 }
 
-// acquireWithin retries a file lock until it is taken or wait runs out.
+// acquireWithin retries a busy file lock until it is taken or wait runs out;
+// any other error fails at once.
 func acquireWithin(l *graphlock.FileLock, wait time.Duration) error {
 	deadline := time.Now().Add(wait)
 	for {
 		err := l.Acquire()
-		if err == nil || time.Now().After(deadline) {
+		if err == nil || !errors.Is(err, graphlock.ErrLockUnavailable) || time.Now().After(deadline) {
 			return err
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -246,34 +249,41 @@ func fileFingerprint(path string) (string, error) {
 		return "", err
 	}
 	hdr := make([]byte, 28)
-	n, _ := io.ReadFull(f, hdr)
+	n, err := io.ReadFull(f, hdr)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
+		return "", err
+	}
 	return fmt.Sprintf("%d %d %x", fi.Size(), fi.ModTime().UnixNano(), hdr[:n]), nil
 }
 
+// stubDataFiles are what an interrupted init or a repair leaves in a data
+// directory that holds no databases.
+var stubDataFiles = []string{".gitignore", "errors.log"}
+
 // publishSeedDir moves the finished copy into place with one directory
-// rename. The caller holds the per-target seed lock. A data directory that
-// exists without databases (e.g. only a .gitignore from an interrupted init)
-// is moved aside first and removed after the swap.
+// rename, so a reader never sees a partial set. The caller holds the
+// per-target seed lock. A data directory that exists without databases is
+// emptied of its stub files and removed (rmdir, empty only) first.
+// It never moves or deletes a populated directory: if an init filled the
+// target meanwhile, the rename fails and that index wins.
 func publishSeedDir(tmpDir, targetDir string) error {
 	if hasScopeDB(targetDir) {
 		_ = os.RemoveAll(tmpDir)
 		return nil
 	}
-	aside := ""
 	if _, err := os.Lstat(targetDir); err == nil {
-		aside = tmpDir + "-old"
-		if err := os.Rename(targetDir, aside); err != nil {
-			return fmt.Errorf("seed: publish: %w", err)
+		for _, name := range stubDataFiles {
+			_ = os.Remove(filepath.Join(targetDir, name))
 		}
+		// rmdir removes only an empty directory, never a populated one.
+		_ = os.Remove(targetDir)
 	}
 	if err := os.Rename(tmpDir, targetDir); err != nil {
-		if aside != "" {
-			_ = os.Rename(aside, targetDir)
+		if hasScopeDB(targetDir) {
+			_ = os.RemoveAll(tmpDir)
+			return nil // a concurrent init won
 		}
 		return fmt.Errorf("seed: publish: %w", err)
-	}
-	if aside != "" {
-		_ = os.RemoveAll(aside)
 	}
 	return nil
 }

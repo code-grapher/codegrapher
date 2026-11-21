@@ -505,3 +505,47 @@ func TestSeedWaitsOutRollbackJournal(t *testing.T) {
 		t.Fatal("seeded while a rollback journal sat beside the source")
 	}
 }
+
+func TestSeedRetriesWhenCanonicalGainsAScopeDuringCopy(t *testing.T) {
+	canonical, worktree := newSeedRepo(t)
+	initIndex(t, canonical)
+	addWorktree(t, canonical, worktree)
+	dbs, _ := filepath.Glob(filepath.Join(GetCodeGraphDir(canonical), dbPrefix+"*"+dbSuffix))
+	extra := filepath.Join(GetCodeGraphDir(canonical), dbPrefix+"extra-v0"+dbSuffix)
+	calls := 0
+	old := cloneFileFunc
+	cloneFileFunc = func(src, dst string) error {
+		calls++
+		if calls == 1 {
+			if err := copyFile(dbs[len(dbs)-1], extra); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return old(src, dst)
+	}
+	t.Cleanup(func() { cloneFileFunc = old })
+	if _, err := SeedFromCanonical(canonical, worktree); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(GetCodeGraphDir(worktree), filepath.Base(extra))); err != nil {
+		t.Fatalf("scope added during the copy is missing from the seed: %v", err)
+	}
+}
+
+func TestPublishNeverReplacesAPopulatedTarget(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, ".codegraph")
+	db := filepath.Join(target, dbPrefix+"go-v1"+dbSuffix)
+	writeFile(t, db, "index built by a concurrent init")
+	staged := filepath.Join(root, ".codegraph-seed-x")
+	writeFile(t, filepath.Join(staged, dbPrefix+"go-v1"+dbSuffix), "seed")
+	if err := publishSeedDir(staged, target); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(db); string(got) != "index built by a concurrent init" {
+		t.Fatalf("populated target replaced: %q", got)
+	}
+	if _, err := os.Stat(staged); !os.IsNotExist(err) {
+		t.Fatal("staged copy not removed")
+	}
+}
