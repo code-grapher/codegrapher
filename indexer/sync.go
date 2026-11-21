@@ -717,7 +717,11 @@ func (idx *Indexer) refreshForRead(opts Options) (SyncResult, error) {
 		return result, nil
 	}
 	observedHead, gitRepo := gitHead(idx.root)
-	dirtyBefore := workingTreeDirty(idx.root)
+	// An incremental refresh re-extracts only changed candidates, so content
+	// indexed from an earlier dirty tree can survive it (a reverted edit is no
+	// candidate). Dirtiness is therefore sticky here: only a whole-tree build
+	// or sync may record "clean" from scratch.
+	dirtyBefore := stickyDirty(idx.recordedDirty(), workingTreeDirty(idx.root))
 	changes, err := idx.changedFilesForRead()
 	if err != nil {
 		return SyncResult{}, fmt.Errorf("inspect index freshness: %w", err)
@@ -1000,6 +1004,35 @@ func (idx *Indexer) markGitHead(head, dirtyBefore string) error {
 		}
 	}
 	return nil
+}
+
+// recordedDirty returns the dirtiness stamp every scope agrees on, "" when
+// they disagree or none is recorded.
+func (idx *Indexer) recordedDirty() string {
+	value := ""
+	for i, s := range idx.Stores() {
+		v, err := s.GetMetadata(indexedGitDirtyKey)
+		if err != nil || (i > 0 && v != value) {
+			return ""
+		}
+		value = v
+	}
+	return value
+}
+
+// stickyDirty combines the recorded stamp with the working tree's state for
+// an incremental refresh: dirty stays dirty, and "clean" survives only when
+// the index was already recorded clean. A tree that is clean now but held
+// dirty content before is unknown ("").
+func stickyDirty(prior, now string) string {
+	switch {
+	case now == "1" || prior == "1":
+		return "1"
+	case prior == "0" && now == "0":
+		return "0"
+	default:
+		return ""
+	}
 }
 
 // workingTreeDirty records, beside the indexed revision, whether the indexed

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/specscore/codegrapher/indexer"
 )
@@ -42,8 +43,17 @@ var (
 		return nil
 	}
 	// catchUpFunc brings a freshly seeded copy up to date with the worktree.
+	// A busy writer lock is retried briefly rather than treated as failure.
 	catchUpFunc = func(root string) error {
-		_, err := refreshIndex(root)
+		var err error
+		for range 50 {
+			var res indexer.SyncResult
+			res, err = refreshIndex(root)
+			if err == nil || !res.LockUnavailable {
+				return err
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
 		return err
 	}
 )
@@ -83,21 +93,22 @@ func provisionWorktreeIndex(startPath string, forInit bool) bool {
 		return fullInitWorktree(worktreeRoot, "the canonical clone "+canonicalRoot+" has no index")
 	}
 
-	res, err := seedIndexFunc(source, target)
+	// Catch-up runs inside the seed, under the per-target seed lock, so a
+	// concurrent first command waits for it instead of racing it; a seed that
+	// another process published is left alone.
+	res, err := seedIndexFunc(source, target, func() error { return catchUpFunc(target) })
 	if err != nil {
 		if !allowFullInit {
 			fmt.Fprintf(os.Stderr, "codegrapher: could not seed this worktree's index from %s: %s\n", source, err)
 			return false
 		}
+		if indexer.IsInitialized(target) {
+			return false // never rebuild over an index another process published
+		}
 		return fullInitWorktree(target, fmt.Sprintf("seeding from %s failed: %s", source, err))
 	}
-	if err := catchUpFunc(target); err != nil {
-		_ = indexer.RemoveDirectory(target)
-		if !allowFullInit {
-			fmt.Fprintf(os.Stderr, "codegrapher: seeded index from %s could not be caught up: %s\n", source, err)
-			return false
-		}
-		return fullInitWorktree(target, fmt.Sprintf("catching up the index seeded from %s failed: %s", source, err))
+	if !res.Published {
+		return indexer.IsInitialized(target)
 	}
 	mode := "full hash check"
 	if res.FastPath {

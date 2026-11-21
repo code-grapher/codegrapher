@@ -70,7 +70,9 @@ func resolveArgExisting(args []string) string {
 // canonical clone; see provisionWorktreeIndex).
 func findNearestOrReturn(startPath string) string {
 	provisionWorktreeIndex(startPath, false)
-	return findNearestExisting(startPath)
+	root := findNearestExisting(startPath)
+	indexer.WaitForSeed(root) // a concurrent seed's catch-up finishes first
+	return root
 }
 
 // findNearestExisting is findNearestOrReturn without provisioning.

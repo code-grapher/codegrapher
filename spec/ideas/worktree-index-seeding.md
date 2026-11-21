@@ -76,7 +76,14 @@ copy of its index and catch it up with the normal incremental refresh.
   (`indexed_git_dirty`, dirty if dirty before or after the build). A copy of a
   clean, settled base keeps the revision, so the first refresh diffs
   `<base>..HEAD` plus working-tree changes; an unknown, dirty or mid-write
-  base is dropped and the refresh hashes every file instead.
+  base is dropped and the refresh hashes every file instead. Dirtiness is
+  sticky: an incremental refresh can record "clean" only over an index
+  already recorded clean (a reverted edit is no git candidate, so its dirty
+  content would survive); only a whole-tree build or sync starts clean.
+- **Concurrent first use.** The catch-up runs under the per-target seed
+  lock, and every command waits (bounded) while that lock is held, so
+  parallel first commands share one seed and never read a half-caught-up
+  copy. A failed catch-up removes only the copy its own process published.
 - **No canonical refresh in the seed path** (founder, 2026-11-21). Seed from
   whatever is there; the worktree's own incremental pass is correct whatever
   the base looks like. Refreshing the canonical index first would be a write
@@ -139,4 +146,7 @@ through seams, and one real check on sneat-co/sneat-go.
 
 ## Open Questions
 
+- Without a canonical index, the first query in a linked worktree builds a
+  full index (as #67 asks). Should that instead require an explicit
+  `init`/`sync --init`, so repositories that never opted in stay untouched?
 - Should the follow-up keep the canonical index fresh from wb's canonical fast-forward, or from a `codegrapher daemon` in the canonical clone?

@@ -203,7 +203,8 @@ needs one — any read command, `sync`, `index`, `serve`, `daemon`, `watch`, or
   `<base>..HEAD` plus working-tree changes; otherwise it rechecks every file by
   content hash.
 - With no canonical index, or when seeding fails, the worktree gets a full
-  build. `status` stays read-only and never seeds.
+  build. `status` stays read-only and never seeds. Parallel first commands in
+  one worktree share a single seed: the others wait for its catch-up.
 - Opt out with `--no-worktree-seed` or `CODEGRAPHER_WORKTREE_SEED=0`. With
   seeding off, a worktree nested inside the canonical clone is refused (or, for
   `status`, reported as a mismatch) rather than served the other tree's index.

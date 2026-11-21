@@ -139,7 +139,7 @@ func TestSeedFromCanonicalMatchesFreshIndexAndNeverWritesCanonical(t *testing.T)
 	writeFile(t, filepath.Join(worktree, "a.go"), "package a\n\nfunc Foo() {}\n\nfunc Bar() {}\n\nfunc Extra() { Foo() }\n")
 
 	before := dirState(t, canonical)
-	res, err := SeedFromCanonical(realpathOrAbs(canonical), realpathOrAbs(worktree))
+	res, err := SeedFromCanonical(realpathOrAbs(canonical), realpathOrAbs(worktree), nil)
 	if err != nil {
 		t.Fatalf("SeedFromCanonical: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestSeedFromDirtyCanonicalDropsBaseRevision(t *testing.T) {
 	initIndex(t, canonical)
 	addWorktree(t, canonical, worktree)
 
-	res, err := SeedFromCanonical(canonical, worktree)
+	res, err := SeedFromCanonical(canonical, worktree, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestSeedFallsBackToPlainCopyWhenCloneFails(t *testing.T) {
 	cloneFileFunc = func(src, dst string) error { return errors.New("no reflink here") }
 	t.Cleanup(func() { cloneFileFunc = old })
 
-	res, err := SeedFromCanonical(canonical, worktree)
+	res, err := SeedFromCanonical(canonical, worktree, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +235,7 @@ func TestSeedFallsBackToPlainCopyWhenCloneFails(t *testing.T) {
 func TestSeedRefusesInitializedTargetAndEmptySource(t *testing.T) {
 	canonical, worktree := newSeedRepo(t)
 	addWorktree(t, canonical, worktree)
-	if _, err := SeedFromCanonical(canonical, worktree); err == nil {
+	if _, err := SeedFromCanonical(canonical, worktree, nil); err == nil {
 		t.Fatal("seeding from an unindexed canonical clone succeeded")
 	}
 	if IsInitialized(worktree) {
@@ -243,7 +243,7 @@ func TestSeedRefusesInitializedTargetAndEmptySource(t *testing.T) {
 	}
 	initIndex(t, canonical)
 	initIndex(t, worktree)
-	if _, err := SeedFromCanonical(canonical, worktree); err == nil {
+	if _, err := SeedFromCanonical(canonical, worktree, nil); err == nil {
 		t.Fatal("seeding over an existing index succeeded")
 	}
 }
@@ -259,7 +259,7 @@ func TestSeedRefusesWhileCanonicalWriterRuns(t *testing.T) {
 	seedLockWait = 100 * time.Millisecond
 	t.Cleanup(func() { seedLockWait = oldWait; _ = os.Remove(lockPath) })
 
-	if _, err := SeedFromCanonical(canonical, worktree); err == nil {
+	if _, err := SeedFromCanonical(canonical, worktree, nil); err == nil {
 		t.Fatal("seeded while a canonical writer held the lock")
 	}
 	if IsInitialized(worktree) {
@@ -267,7 +267,7 @@ func TestSeedRefusesWhileCanonicalWriterRuns(t *testing.T) {
 	}
 	// A dead holder's lock is stale and does not block.
 	writeFile(t, lockPath, "999999")
-	if _, err := SeedFromCanonical(canonical, worktree); err != nil {
+	if _, err := SeedFromCanonical(canonical, worktree, nil); err != nil {
 		t.Fatalf("stale lock blocked seeding: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(GetCodeGraphDir(worktree), "codegraph.lock")); err == nil {
@@ -308,7 +308,7 @@ func TestSeedRetriesWhenCanonicalChangesDuringCopy(t *testing.T) {
 	}
 	t.Cleanup(func() { cloneFileFunc = old })
 
-	if _, err := SeedFromCanonical(canonical, worktree); err != nil {
+	if _, err := SeedFromCanonical(canonical, worktree, nil); err != nil {
 		t.Fatalf("SeedFromCanonical: %v", err)
 	}
 	if calls <= len(dbs) {
@@ -327,7 +327,7 @@ func TestSeedRetriesWhenCanonicalChangesDuringCopy(t *testing.T) {
 		bumpMetadata(t, other)
 		return old(src, dst)
 	}
-	if _, err := SeedFromCanonical(canonical, worktree2); err == nil {
+	if _, err := SeedFromCanonical(canonical, worktree2, nil); err == nil {
 		t.Fatal("seeded from a canonical index that never stopped changing")
 	}
 	if IsInitialized(worktree2) {
@@ -341,7 +341,7 @@ func TestSeedPublishesOverDataDirWithoutDatabases(t *testing.T) {
 	addWorktree(t, canonical, worktree)
 	// An interrupted init left only the data directory's .gitignore.
 	writeFile(t, filepath.Join(GetCodeGraphDir(worktree), ".gitignore"), dataDirGitignore)
-	if _, err := SeedFromCanonical(canonical, worktree); err != nil {
+	if _, err := SeedFromCanonical(canonical, worktree, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !IsInitialized(worktree) {
@@ -360,7 +360,7 @@ func TestConcurrentSeedsProduceOneIndex(t *testing.T) {
 	errs := make(chan error, 4)
 	for range 4 {
 		go func() {
-			_, err := SeedFromCanonical(canonical, worktree)
+			_, err := SeedFromCanonical(canonical, worktree, nil)
 			errs <- err
 		}()
 	}
@@ -457,7 +457,7 @@ func TestSeedFromLegacyWALCanonicalCreatesNoSideFiles(t *testing.T) {
 	addWorktree(t, canonical, worktree)
 	before := dirState(t, canonical)
 
-	if _, err := SeedFromCanonical(canonical, worktree); err != nil {
+	if _, err := SeedFromCanonical(canonical, worktree, nil); err != nil {
 		t.Fatalf("SeedFromCanonical: %v", err)
 	}
 	if after := dirState(t, canonical); after != before {
@@ -484,7 +484,7 @@ func TestSeedRefusesWALCanonicalWithPendingFrames(t *testing.T) {
 	addWorktree(t, canonical, worktree)
 	dbs, _ := filepath.Glob(filepath.Join(GetCodeGraphDir(canonical), dbPrefix+"*"+dbSuffix))
 	writeFile(t, dbs[0]+"-wal", "frames")
-	if _, err := SeedFromCanonical(canonical, worktree); err == nil {
+	if _, err := SeedFromCanonical(canonical, worktree, nil); err == nil {
 		t.Fatal("seeded from a WAL database with uncheckpointed frames")
 	}
 	if IsInitialized(worktree) {
@@ -501,7 +501,7 @@ func TestSeedWaitsOutRollbackJournal(t *testing.T) {
 	oldWait := seedLockWait
 	seedLockWait = 50 * time.Millisecond
 	t.Cleanup(func() { seedLockWait = oldWait })
-	if _, err := SeedFromCanonical(canonical, worktree); err == nil {
+	if _, err := SeedFromCanonical(canonical, worktree, nil); err == nil {
 		t.Fatal("seeded while a rollback journal sat beside the source")
 	}
 }
@@ -524,7 +524,7 @@ func TestSeedRetriesWhenCanonicalGainsAScopeDuringCopy(t *testing.T) {
 		return old(src, dst)
 	}
 	t.Cleanup(func() { cloneFileFunc = old })
-	if _, err := SeedFromCanonical(canonical, worktree); err != nil {
+	if _, err := SeedFromCanonical(canonical, worktree, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(GetCodeGraphDir(worktree), filepath.Base(extra))); err != nil {
@@ -539,13 +539,91 @@ func TestPublishNeverReplacesAPopulatedTarget(t *testing.T) {
 	writeFile(t, db, "index built by a concurrent init")
 	staged := filepath.Join(root, ".codegraph-seed-x")
 	writeFile(t, filepath.Join(staged, dbPrefix+"go-v1"+dbSuffix), "seed")
-	if err := publishSeedDir(staged, target); err != nil {
-		t.Fatal(err)
+	published, err := publishSeedDir(staged, target)
+	if err != nil || published {
+		t.Fatalf("publishSeedDir = %v, %v; want not published", published, err)
 	}
 	if got, _ := os.ReadFile(db); string(got) != "index built by a concurrent init" {
 		t.Fatalf("populated target replaced: %q", got)
 	}
 	if _, err := os.Stat(staged); !os.IsNotExist(err) {
 		t.Fatal("staged copy not removed")
+	}
+}
+
+func TestRevertedDirtyEditNeverStampsClean(t *testing.T) {
+	canonical, worktree := newSeedRepo(t)
+	initIndex(t, canonical) // whole-tree build of a clean tree: clean stamp
+	idx, err := Open(canonical, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := idx.recordedDirty(); got != "0" {
+		t.Fatalf("clean full build recorded dirty=%q", got)
+	}
+	_ = idx.Close()
+
+	// A dirty edit is indexed by a refresh, then reverted without a commit.
+	original, _ := os.ReadFile(filepath.Join(canonical, "a.go"))
+	writeFile(t, filepath.Join(canonical, "a.go"), string(original)+"\nfunc DirtyOnly() {}\n")
+	refresh(t, canonical)
+	mustGit(t, canonical, "checkout", "--", "a.go")
+	refresh(t, canonical) // finds no candidate: the reverted file is clean in git
+
+	idx, err = Open(canonical, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := idx.recordedDirty(); got == "0" {
+		t.Fatal("index still holding reverted dirty content was stamped clean")
+	}
+	_ = idx.Close()
+
+	addWorktree(t, canonical, worktree)
+	res, err := SeedFromCanonical(canonical, worktree, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.FastPath {
+		t.Fatal("seed took the git-diff fast path from a base holding dirty content")
+	}
+	refresh(t, worktree)
+	idx, err = Open(worktree, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	for _, s := range idx.Stores() {
+		if n, _ := s.GetNodesByName("DirtyOnly"); len(n) != 0 {
+			t.Fatal("reverted dirty symbol leaked into the seeded worktree")
+		}
+	}
+}
+
+func TestStickyDirty(t *testing.T) {
+	for _, c := range []struct{ prior, now, want string }{
+		{"0", "0", "0"}, {"0", "1", "1"}, {"1", "0", "1"}, {"", "0", ""}, {"", "1", "1"}, {"0", "", ""},
+	} {
+		if got := stickyDirty(c.prior, c.now); got != c.want {
+			t.Errorf("stickyDirty(%q, %q) = %q, want %q", c.prior, c.now, got, c.want)
+		}
+	}
+}
+
+func TestSeedCatchUpRunsUnderSeedLockAndFailureRemovesOwnCopy(t *testing.T) {
+	canonical, worktree := newSeedRepo(t)
+	initIndex(t, canonical)
+	addWorktree(t, canonical, worktree)
+	_, err := SeedFromCanonical(canonical, worktree, func() error {
+		if !writerHoldsLock(seedLockPath(worktree)) {
+			t.Error("catch-up ran without the seed lock")
+		}
+		return errors.New("catch-up failed")
+	})
+	if err == nil {
+		t.Fatal("catch-up failure not reported")
+	}
+	if IsInitialized(worktree) {
+		t.Fatal("failed catch-up left the published copy")
 	}
 }

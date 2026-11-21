@@ -86,6 +86,9 @@ type SeedResult struct {
 	Target    string     // index root written
 	Databases int        // database files copied
 	Method    SeedMethod // weakest method used across the files
+	// Published is true when this call published the copy; false when a
+	// concurrent seed of the same target finished first.
+	Published bool
 	// FastPath is true when the base revision was kept, so the first refresh
 	// diffs base..HEAD plus working-tree changes instead of hashing every file.
 	FastPath bool
@@ -97,7 +100,30 @@ var (
 	cloneFileFunc = cloneFile
 	// seedLockWait bounds how long seeding waits for a canonical writer.
 	seedLockWait = 10 * time.Second
+	// seedPeerWait bounds how long a command waits for a concurrent seed of
+	// the same target (copy plus catch-up). The lock protocol treats a lock
+	// older than two minutes as stale anyway.
+	seedPeerWait = 2 * time.Minute
 )
+
+// seedLockPath is the per-target lock that serializes seeding and catch-up.
+func seedLockPath(targetRoot string) string {
+	return filepath.Join(targetRoot, defaultCodeGraphDir+"-seed.lock")
+}
+
+// WaitForSeed blocks (stat-only polling, bounded) while another process is
+// seeding or catching up the index at targetRoot, so a command started in
+// that window never reads a half-caught-up copy.
+func WaitForSeed(targetRoot string) {
+	lockPath := seedLockPath(targetRoot)
+	if _, err := os.Stat(lockPath); err != nil {
+		return
+	}
+	deadline := time.Now().Add(seedPeerWait)
+	for writerHoldsLock(lockPath) && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+	}
+}
 
 // seedAttempts bounds how often seeding retries a copy that a canonical
 // writer changed underneath it.
@@ -113,7 +139,12 @@ const seedAttempts = 3
 // changing fails the seed. Concurrent seeds of one target are serialized by
 // a lock beside the target, and the finished copy is published with one
 // directory rename, so a reader never sees a partial set.
-func SeedFromCanonical(sourceRoot, targetRoot string) (SeedResult, error) {
+//
+// afterPublish (may be nil) runs once the copy is in place, still under the
+// seed lock, so concurrent commands wait for the catch-up instead of racing
+// it. If it fails, the copy this call published is removed and the error
+// returned.
+func SeedFromCanonical(sourceRoot, targetRoot string, afterPublish func() error) (SeedResult, error) {
 	start := time.Now()
 	res := SeedResult{Source: sourceRoot, Target: targetRoot}
 	if IsInitialized(targetRoot) {
@@ -125,8 +156,8 @@ func SeedFromCanonical(sourceRoot, targetRoot string) (SeedResult, error) {
 		return res, fmt.Errorf("seed: %w", err)
 	}
 
-	seedLock := graphlock.New(filepath.Join(filepath.Dir(targetDir), defaultCodeGraphDir+"-seed.lock"))
-	if err := acquireWithin(seedLock, seedLockWait); err != nil {
+	seedLock := graphlock.New(seedLockPath(filepath.Dir(targetDir)))
+	if err := acquireWithin(seedLock, seedPeerWait); err != nil {
 		if IsInitialized(targetRoot) {
 			res.Duration = time.Since(start)
 			return res, nil // a concurrent seed finished first
@@ -137,6 +168,13 @@ func SeedFromCanonical(sourceRoot, targetRoot string) (SeedResult, error) {
 	if IsInitialized(targetRoot) {
 		res.Duration = time.Since(start)
 		return res, nil
+	}
+	// Staging left by a crashed seed of this target (the lock is ours, so no
+	// live seed owns them).
+	if stale, _ := filepath.Glob(filepath.Join(filepath.Dir(targetDir), defaultCodeGraphDir+"-seed-*")); len(stale) > 0 {
+		for _, dir := range stale {
+			_ = os.RemoveAll(dir)
+		}
 	}
 
 	lockPath := filepath.Join(srcDir, "codegraph.lock")
@@ -190,10 +228,18 @@ func SeedFromCanonical(sourceRoot, targetRoot string) (SeedResult, error) {
 	}
 	res.FastPath = fastPath
 
-	if err := publishSeedDir(tmpDir, targetDir); err != nil {
+	published, err := publishSeedDir(tmpDir, targetDir)
+	if err != nil {
 		return res, err
 	}
 	cleanup = false
+	res.Published = published
+	if published && afterPublish != nil {
+		if err := afterPublish(); err != nil {
+			_ = RemoveDirectory(targetRoot)
+			return res, fmt.Errorf("seed: catch up: %w", err)
+		}
+	}
 	res.Duration = time.Since(start)
 	return res, nil
 }
@@ -266,10 +312,10 @@ var stubDataFiles = []string{".gitignore", "errors.log"}
 // emptied of its stub files and removed (rmdir, empty only) first.
 // It never moves or deletes a populated directory: if an init filled the
 // target meanwhile, the rename fails and that index wins.
-func publishSeedDir(tmpDir, targetDir string) error {
+func publishSeedDir(tmpDir, targetDir string) (bool, error) {
 	if hasScopeDB(targetDir) {
 		_ = os.RemoveAll(tmpDir)
-		return nil
+		return false, nil
 	}
 	if _, err := os.Lstat(targetDir); err == nil {
 		for _, name := range stubDataFiles {
@@ -281,11 +327,11 @@ func publishSeedDir(tmpDir, targetDir string) error {
 	if err := os.Rename(tmpDir, targetDir); err != nil {
 		if hasScopeDB(targetDir) {
 			_ = os.RemoveAll(tmpDir)
-			return nil // a concurrent init won
+			return false, nil // a concurrent init won
 		}
-		return fmt.Errorf("seed: publish: %w", err)
+		return false, fmt.Errorf("seed: publish: %w", err)
 	}
-	return nil
+	return true, nil
 }
 
 func weaker(a, b SeedMethod) SeedMethod {
@@ -333,7 +379,11 @@ func waitForCanonicalWriter(lockPath string, wait time.Duration) bool {
 // For the default rollback journal it opens the source mode=ro and holds a
 // read transaction (a SHARED lock, which keeps any writer from committing)
 // while it clones the file, so the clone is copy-on-write where supported.
-// A rollback-mode reader creates no side files.
+// A rollback-mode reader creates no side files. Caveat: POSIX record locks
+// are per process and inode, so opening and closing another descriptor on
+// the source (the FICLONE path and the plain-copy fallback do) drops that
+// SHARED lock early; the caller's before/after fingerprint of the whole set
+// (which includes SQLite's change counter) is what guarantees consistency.
 //
 // A legacy WAL-mode file is never opened through SQLite: even a mode=ro
 // reader creates -wal/-shm files beside a WAL database. It is copied only

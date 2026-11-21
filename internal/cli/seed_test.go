@@ -120,7 +120,7 @@ func TestProvisionWithoutCanonicalIndexBuildsFreshIndex(t *testing.T) {
 	withSeams(t)
 	canonical, worktree := seedRepo(t, false)
 	gitRun(t, canonical, "worktree", "add", "-q", "-b", "wt", worktree)
-	seedIndexFunc = func(string, string) (indexer.SeedResult, error) {
+	seedIndexFunc = func(string, string, func() error) (indexer.SeedResult, error) {
 		t.Fatal("seed attempted without a canonical index")
 		return indexer.SeedResult{}, nil
 	}
@@ -142,7 +142,7 @@ func TestProvisionSeedFailureFallsBackToInit(t *testing.T) {
 	withSeams(t)
 	canonical, worktree := seedRepo(t, true)
 	gitRun(t, canonical, "worktree", "add", "-q", "-b", "wt", worktree)
-	seedIndexFunc = func(string, string) (indexer.SeedResult, error) {
+	seedIndexFunc = func(string, string, func() error) (indexer.SeedResult, error) {
 		return indexer.SeedResult{}, errors.New("disk full")
 	}
 	var initRoot string
@@ -274,5 +274,32 @@ func TestInitInWorktreeSeedsFromCanonical(t *testing.T) {
 	defer func() { _ = idx.Close() }()
 	if idx.SeededFrom() != canonical {
 		t.Fatal("init in a worktree did not seed from the canonical clone")
+	}
+}
+
+func TestConcurrentFirstCommandsShareOneSeed(t *testing.T) {
+	withSeams(t)
+	canonical, worktree := seedRepo(t, true)
+	gitRun(t, canonical, "worktree", "add", "-q", "-b", "wt", worktree)
+	writeSeedFile(t, filepath.Join(worktree, "b.go"), "package a\n\nfunc Baz() { Foo() }\n")
+	fullInitFunc = func(string) error { t.Error("fell back to a full init"); return nil }
+	done := make(chan string, 3)
+	captureOutput(t, func() {
+		for range 3 {
+			go func() { done <- findNearestOrReturn(worktree) }()
+		}
+		for range 3 {
+			if root := <-done; root != worktree {
+				t.Errorf("resolved %q, want %q", root, worktree)
+			}
+		}
+	})
+	idx, err := indexer.Open(worktree, indexer.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idx.Close() }()
+	if changes := idx.GetChangedFiles(); len(changes.Added)+len(changes.Modified)+len(changes.Removed) != 0 {
+		t.Fatalf("index not caught up after concurrent first use: %+v", changes)
 	}
 }
