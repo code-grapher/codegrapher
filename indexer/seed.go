@@ -10,8 +10,10 @@ package indexer
 // worktree, stamps the copy with the worktree's identity, and leaves the
 // normal incremental refresh to catch up the difference.
 //
-// The canonical clone is only ever read: its databases are opened with
-// mode=ro, its lock file is only stat'ed, and nothing is created beside them.
+// The canonical clone is only ever read: rollback-journal databases are
+// opened mode=ro (which creates no side files), legacy WAL-mode ones are only
+// byte-copied (a SQLite open would create -wal/-shm beside them), its lock
+// file is only read, and nothing is created beside them.
 // Seeding never refreshes the canonical index first — the worktree's own
 // incremental pass is correct whatever the base looks like.
 
@@ -72,9 +74,8 @@ func LinkedWorktree(dir string) (worktreeRoot, canonicalRoot string, ok bool) {
 type SeedMethod string
 
 const (
-	SeedClone  SeedMethod = "clone"  // copy-on-write clone (APFS clonefile, FICLONE reflink)
-	SeedCopy   SeedMethod = "copy"   // plain byte copy
-	SeedVacuum SeedMethod = "vacuum" // VACUUM INTO (WAL-mode or hot-journal source)
+	SeedClone SeedMethod = "clone" // copy-on-write clone (APFS clonefile, FICLONE reflink)
+	SeedCopy  SeedMethod = "copy"  // plain byte copy
 )
 
 // SeedResult describes a completed seed.
@@ -197,7 +198,7 @@ func publishSeedDir(tmpDir, targetDir string) error {
 }
 
 func weaker(a, b SeedMethod) SeedMethod {
-	rank := map[SeedMethod]int{SeedClone: 0, SeedCopy: 1, SeedVacuum: 2}
+	rank := map[SeedMethod]int{SeedClone: 0, SeedCopy: 1}
 	if rank[b] > rank[a] {
 		return b
 	}
@@ -228,13 +229,33 @@ func waitForCanonicalWriter(lockPath string, wait time.Duration) bool {
 	}
 }
 
-// snapshotDatabase takes a consistent copy of one SQLite file. For the
-// default rollback journal it holds a read transaction (a SHARED lock, which
-// keeps any writer from committing) while it clones the file, so the clone is
-// copy-on-write where supported. A WAL-mode file, or one with a journal
-// beside it, goes through VACUUM INTO instead, which reads through SQLite.
-// The source is opened mode=ro and never written.
+// snapshotDatabase takes a consistent copy of one SQLite file without ever
+// writing beside it.
+//
+// For the default rollback journal it opens the source mode=ro and holds a
+// read transaction (a SHARED lock, which keeps any writer from committing)
+// while it clones the file, so the clone is copy-on-write where supported.
+// A rollback-mode reader creates no side files.
+//
+// A legacy WAL-mode file is never opened through SQLite: even a mode=ro
+// reader creates -wal/-shm files beside a WAL database. It is copied only
+// when its WAL is absent or empty (the main file then holds every committed
+// page) and the file is unchanged across the copy; the copy's header is then
+// switched to the rollback journal, which is exactly what a checkpointed
+// `PRAGMA journal_mode=DELETE` leaves. A non-empty WAL fails the seed (the
+// caller falls back to a full build).
 func snapshotDatabase(src, dst string) (SeedMethod, error) {
+	wal, err := sqliteHeaderIsWAL(src)
+	if err != nil {
+		return "", err
+	}
+	if wal {
+		return snapshotWALDatabase(src, dst)
+	}
+	if err := waitForJournal(src+"-journal", seedLockWait); err != nil {
+		return "", err
+	}
+
 	db, err := sql.Open("sqlite", "file:"+src+"?mode=ro&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return "", err
@@ -246,27 +267,85 @@ func snapshotDatabase(src, dst string) (SeedMethod, error) {
 		return "", err
 	}
 	defer func() { _ = conn.Close() }()
-
-	wal, err := sqliteHeaderIsWAL(src)
-	if err != nil {
-		return "", err
-	}
-	_, journalErr := os.Stat(src + "-journal")
-	if wal || journalErr == nil {
-		if _, err := conn.ExecContext(ctx, "VACUUM INTO ?", dst); err != nil {
-			return "", err
-		}
-		return SeedVacuum, nil
-	}
-
 	if _, err := conn.ExecContext(ctx, "BEGIN"); err != nil {
 		return "", err
 	}
 	defer func() { _, _ = conn.ExecContext(ctx, "COMMIT") }()
 	var n int
 	if err := conn.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master").Scan(&n); err != nil {
-		return "", err // takes the SHARED lock; fails on a hot journal
+		return "", err // takes the SHARED lock
 	}
+	return cloneOrCopy(src, dst)
+}
+
+// waitForJournal waits (stat only) for a rollback journal beside the source
+// to disappear: a writer is mid-commit, or crashed leaving a hot journal that
+// only a writer may roll back.
+func waitForJournal(journal string, wait time.Duration) error {
+	deadline := time.Now().Add(wait)
+	for {
+		if _, err := os.Stat(journal); os.IsNotExist(err) {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%s exists (writer mid-commit or crashed)", filepath.Base(journal))
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func snapshotWALDatabase(src, dst string) (SeedMethod, error) {
+	before, err := walSnapshotState(src)
+	if err != nil {
+		return "", err
+	}
+	method, err := cloneOrCopy(src, dst)
+	if err != nil {
+		return "", err
+	}
+	after, err := walSnapshotState(src)
+	if err != nil || after != before {
+		_ = os.Remove(dst)
+		if err == nil {
+			err = errors.New("WAL-mode database changed during the copy")
+		}
+		return "", err
+	}
+	if err := setRollbackJournalHeader(dst); err != nil {
+		_ = os.Remove(dst)
+		return "", err
+	}
+	return method, nil
+}
+
+// walSnapshotState fingerprints a WAL-mode file; it errors when the WAL holds
+// frames not yet in the main file.
+func walSnapshotState(src string) (string, error) {
+	if fi, err := os.Stat(src + "-wal"); err == nil && fi.Size() > 0 {
+		return "", fmt.Errorf("%s has uncheckpointed WAL frames", filepath.Base(src))
+	}
+	fi, err := os.Stat(src)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%d %d", fi.Size(), fi.ModTime().UnixNano()), nil
+}
+
+// setRollbackJournalHeader sets the file-format write/read versions (header
+// offsets 18/19) to 1, the legacy rollback journal.
+func setRollbackJournalHeader(path string) error {
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	if _, err := f.WriteAt([]byte{1, 1}, 18); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+func cloneOrCopy(src, dst string) (SeedMethod, error) {
 	if err := cloneFileFunc(src, dst); err == nil {
 		return SeedClone, nil
 	}

@@ -1,6 +1,7 @@
 package indexer
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -314,5 +315,85 @@ func TestScanNeverIndexesDataDirectory(t *testing.T) {
 	}
 	if !NewPathFilter(root).IsIgnored(".codegraph/.gitignore") {
 		t.Fatal("watcher admitted .codegraph/.gitignore")
+	}
+}
+
+// setWALMode converts every scope database under root to the legacy WAL
+// journal, as an index from an older release would be.
+func setWALMode(t *testing.T, root string) {
+	t.Helper()
+	dbs, _ := filepath.Glob(filepath.Join(GetCodeGraphDir(root), dbPrefix+"*"+dbSuffix))
+	for _, p := range dbs {
+		db, err := sql.Open("sqlite", "file:"+p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var mode string
+		if err := db.QueryRow("PRAGMA journal_mode=WAL").Scan(&mode); err != nil || mode != "wal" {
+			t.Fatalf("journal_mode=WAL: %v %q", err, mode)
+		}
+		_ = db.Close()
+		if wal, _ := sqliteHeaderIsWAL(p); !wal {
+			t.Fatalf("%s not WAL after conversion", p)
+		}
+		for _, side := range []string{"-wal", "-shm"} {
+			_ = os.Remove(p + side)
+		}
+	}
+}
+
+func TestSeedFromLegacyWALCanonicalCreatesNoSideFiles(t *testing.T) {
+	canonical, worktree := newSeedRepo(t)
+	initIndex(t, canonical)
+	setWALMode(t, canonical)
+	addWorktree(t, canonical, worktree)
+	before := dirState(t, canonical)
+
+	if _, err := SeedFromCanonical(canonical, worktree); err != nil {
+		t.Fatalf("SeedFromCanonical: %v", err)
+	}
+	if after := dirState(t, canonical); after != before {
+		t.Fatalf("seeding a WAL-mode canonical index wrote beside it:\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+	dbs, _ := filepath.Glob(filepath.Join(GetCodeGraphDir(worktree), dbPrefix+"*"+dbSuffix))
+	for _, p := range dbs {
+		if wal, _ := sqliteHeaderIsWAL(p); wal {
+			t.Errorf("seeded copy %s still in WAL mode", filepath.Base(p))
+		}
+	}
+	idx, err := OpenReadOnly(worktree, Options{})
+	if err != nil {
+		t.Fatalf("seeded copy needs an upgrade: %v", err)
+	}
+	_ = idx.Close()
+	refresh(t, worktree)
+}
+
+func TestSeedRefusesWALCanonicalWithPendingFrames(t *testing.T) {
+	canonical, worktree := newSeedRepo(t)
+	initIndex(t, canonical)
+	setWALMode(t, canonical)
+	addWorktree(t, canonical, worktree)
+	dbs, _ := filepath.Glob(filepath.Join(GetCodeGraphDir(canonical), dbPrefix+"*"+dbSuffix))
+	writeFile(t, dbs[0]+"-wal", "frames")
+	if _, err := SeedFromCanonical(canonical, worktree); err == nil {
+		t.Fatal("seeded from a WAL database with uncheckpointed frames")
+	}
+	if IsInitialized(worktree) {
+		t.Fatal("failed seed left an index")
+	}
+}
+
+func TestSeedWaitsOutRollbackJournal(t *testing.T) {
+	canonical, worktree := newSeedRepo(t)
+	initIndex(t, canonical)
+	addWorktree(t, canonical, worktree)
+	dbs, _ := filepath.Glob(filepath.Join(GetCodeGraphDir(canonical), dbPrefix+"*"+dbSuffix))
+	writeFile(t, dbs[0]+"-journal", "")
+	oldWait := seedLockWait
+	seedLockWait = 50 * time.Millisecond
+	t.Cleanup(func() { seedLockWait = oldWait })
+	if _, err := SeedFromCanonical(canonical, worktree); err == nil {
+		t.Fatal("seeded while a rollback journal sat beside the source")
 	}
 }

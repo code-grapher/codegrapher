@@ -206,8 +206,11 @@ needs one — any read command, `sync`, `index`, `serve`, `daemon`, `watch`, or
   seeding off, a worktree nested inside the canonical clone is refused (or, for
   `status`, reported as a mismatch) rather than served the other tree's index.
 
-On sneat-co/sneat-go (1,090 files) a seeded first query took about 1.3 s
-against 6.4 s for a fresh `init`.
+A canonical index built by an older release (different extraction version)
+is copied but then rebuilt in the worktree, so it saves nothing until the
+canonical clone is next synced. On sneat-co/sneat-go (1,110 files) with a
+same-version base, the first query in a new worktree took 0.3 s (no edits) and
+1.2 s (13 edited files), against 5.2 s for a fresh `init`.
 
 ## MeaningGraph and ModelSpec
 

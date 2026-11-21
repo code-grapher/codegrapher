@@ -36,6 +36,15 @@ copy-on-write clone about 0 s, and the incremental `index` on the seeded copy
 to a fresh one; the only difference was that the copied `.codegraph/.gitignore`
 was indexed as a file.
 
+Measured on the implementation (2026-11-21, sneat-go at 3aac9460, 1,110
+files, same-version base): first query in a new worktree 0.29 s with no edits
+and 1.21 s with 13 edited files, against 5.24 s for a fresh `init`;
+`callers`, `impact` and `query` answers matched a fresh index (timestamps
+aside). The real canonical sneat-go index was built at extraction version 14,
+so seeding from it rebuilds (6.8 s) until it is synced. Edge totals after any
+incremental sync differ from a fresh init independently of seeding
+([#68](https://github.com/code-grapher/codegrapher/issues/68)).
+
 Manual seeding is blocked in the fleet: the wb agent guard reads
 `cp -cR <canonical>/.codegraph .` as a write into the canonical clone and
 refuses it. The feature therefore has to live in CodeGrapher.
