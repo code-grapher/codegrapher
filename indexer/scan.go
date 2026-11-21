@@ -362,13 +362,14 @@ func isIgnoredSyncPath(root, relPath string) bool {
 	return NewPathFilter(root).IsIgnored(relPath)
 }
 
-// inDataDir reports whether a project-relative path lies inside a top-level
-// CodeGraph data directory. Those files are never indexed, even when Git
+// inDataDir reports whether a project-relative path is, or lies inside, a
+// top-level CodeGraph data entry (.codegraph, .codegraph-*, including the
+// transient seed lock and staging directories). Those files are never indexed, even when Git
 // lists them (a data directory's own .gitignore un-ignores itself, so an
 // untracked .codegraph/.gitignore shows up when info/exclude lacks the entry).
 func inDataDir(relPath string) bool {
 	first, _, _ := strings.Cut(filepath.ToSlash(relPath), "/")
-	return first != relPath && IsCodeGraphDataDir(first)
+	return IsCodeGraphDataDir(first)
 }
 
 // --- scanning ----------------------------------------------------------------

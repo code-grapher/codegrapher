@@ -55,13 +55,19 @@ On first use in a linked Git worktree that has no index of its own, resolve
 the canonical clone with `git rev-parse --git-common-dir`, take a consistent
 copy of its index and catch it up with the normal incremental refresh.
 
-- **Consistent, copy-on-write copy.** Each scope database is opened read-only
-  (`mode=ro`). For the default rollback journal, a read transaction holds
-  SQLite's SHARED lock — no writer can commit — while the file is cloned
-  (APFS `clonefile`, `FICLONE` reflink on btrfs/XFS), falling back to a plain
-  copy. A WAL-mode file or one with a journal beside it goes through
-  `VACUUM INTO`. Seeding waits (bounded, stat-only) for a live canonical
-  writer so the scope databases agree with one another.
+- **Consistent, copy-on-write copy.** For the default rollback journal each
+  scope database is opened read-only (`mode=ro`, which creates no side files)
+  and a read transaction holds SQLite's SHARED lock — no writer can commit —
+  while the file is cloned (APFS `clonefile`, `FICLONE` reflink on
+  btrfs/XFS), falling back to a plain copy. A legacy WAL-mode file is never
+  opened through SQLite (even `mode=ro` creates `-wal`/`-shm` beside it): it
+  is byte-copied only when its WAL is empty and the file is unchanged, and
+  the copy is switched to the rollback journal. Across scopes, the source set
+  is fingerprinted (size, mtime, SQLite change counter) before and after the
+  copy, with no live writer holding the canonical lock at either end;
+  otherwise the copy is retried, and a source that keeps changing fails the
+  seed. Concurrent seeds of one target are serialized by a lock beside it and
+  publish with a single directory rename.
 - **Identity stamp.** The copy records `seeded_from` and `worktree_root`; the
   path-based worktree mismatch guard accepts it because it now lives in the
   worktree, and still refuses an index borrowed from another working tree.
@@ -87,8 +93,8 @@ copy of its index and catch it up with the normal incremental refresh.
   `CODEGRAPHER_WORKTREE_SEED=0`.
 - **#40.** `status` compares the requested path, not the resolved index root,
   so a borrowing worktree is reported as a mismatch and never called current;
-  `status --refresh`, `sync` and `index` refuse to write another working
-  tree's index.
+  `status --refresh`, `sync`, `index`, `uninit`, `unlock` and `import` refuse
+  to act on another working tree's index.
 
 ## Alternatives Considered
 

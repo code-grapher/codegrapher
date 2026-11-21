@@ -248,7 +248,7 @@ func TestSeedRefusesInitializedTargetAndEmptySource(t *testing.T) {
 	}
 }
 
-func TestSeedWaitsForCanonicalWriterThenDropsBaseRevision(t *testing.T) {
+func TestSeedRefusesWhileCanonicalWriterRuns(t *testing.T) {
 	canonical, worktree := newSeedRepo(t)
 	initIndex(t, canonical)
 	addWorktree(t, canonical, worktree)
@@ -259,16 +259,124 @@ func TestSeedWaitsForCanonicalWriterThenDropsBaseRevision(t *testing.T) {
 	seedLockWait = 100 * time.Millisecond
 	t.Cleanup(func() { seedLockWait = oldWait; _ = os.Remove(lockPath) })
 
-	res, err := SeedFromCanonical(canonical, worktree)
-	if err != nil {
-		t.Fatal(err)
+	if _, err := SeedFromCanonical(canonical, worktree); err == nil {
+		t.Fatal("seeded while a canonical writer held the lock")
 	}
-	if res.FastPath {
-		t.Fatal("seed taken while a writer was busy must recheck every file")
+	if IsInitialized(worktree) {
+		t.Fatal("refused seed left an index")
+	}
+	// A dead holder's lock is stale and does not block.
+	writeFile(t, lockPath, "999999")
+	if _, err := SeedFromCanonical(canonical, worktree); err != nil {
+		t.Fatalf("stale lock blocked seeding: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(GetCodeGraphDir(worktree), "codegraph.lock")); err == nil {
 		t.Fatal("canonical lock file was copied")
 	}
+}
+
+// bumpMetadata commits a write to one canonical scope database, as a
+// concurrent canonical sync would.
+func bumpMetadata(t *testing.T, path string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err := db.Exec(`INSERT INTO project_metadata (key, value, updated_at) VALUES ('probe', ?, 0)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, time.Now().String()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSeedRetriesWhenCanonicalChangesDuringCopy(t *testing.T) {
+	canonical, worktree := newSeedRepo(t)
+	initIndex(t, canonical)
+	addWorktree(t, canonical, worktree)
+	dbs, _ := filepath.Glob(filepath.Join(GetCodeGraphDir(canonical), dbPrefix+"*"+dbSuffix))
+	sort.Strings(dbs)
+	calls := 0
+	old := cloneFileFunc
+	cloneFileFunc = func(src, dst string) error {
+		calls++
+		if calls == 1 {
+			// A writer commits to another scope while the first is copied.
+			bumpMetadata(t, dbs[len(dbs)-1])
+		}
+		return old(src, dst)
+	}
+	t.Cleanup(func() { cloneFileFunc = old })
+
+	if _, err := SeedFromCanonical(canonical, worktree); err != nil {
+		t.Fatalf("SeedFromCanonical: %v", err)
+	}
+	if calls <= len(dbs) {
+		t.Fatalf("copy was not retried after a concurrent write (clone calls %d, dbs %d)", calls, len(dbs))
+	}
+
+	// A source that changes on every attempt fails the seed.
+	worktree2 := filepath.Join(filepath.Dir(worktree), "wt2")
+	addWorktree(t, canonical, worktree2)
+	cloneFileFunc = func(src, dst string) error {
+		// Commit to a database other than the one under its SHARED lock.
+		other := dbs[0]
+		if src == other {
+			other = dbs[len(dbs)-1]
+		}
+		bumpMetadata(t, other)
+		return old(src, dst)
+	}
+	if _, err := SeedFromCanonical(canonical, worktree2); err == nil {
+		t.Fatal("seeded from a canonical index that never stopped changing")
+	}
+	if IsInitialized(worktree2) {
+		t.Fatal("failed seed left an index")
+	}
+}
+
+func TestSeedPublishesOverDataDirWithoutDatabases(t *testing.T) {
+	canonical, worktree := newSeedRepo(t)
+	initIndex(t, canonical)
+	addWorktree(t, canonical, worktree)
+	// An interrupted init left only the data directory's .gitignore.
+	writeFile(t, filepath.Join(GetCodeGraphDir(worktree), ".gitignore"), dataDirGitignore)
+	if _, err := SeedFromCanonical(canonical, worktree); err != nil {
+		t.Fatal(err)
+	}
+	if !IsInitialized(worktree) {
+		t.Fatal("not seeded")
+	}
+	left, _ := filepath.Glob(filepath.Join(worktree, defaultCodeGraphDir+"-*"))
+	if len(left) != 0 {
+		t.Fatalf("staging entries left behind: %v", left)
+	}
+}
+
+func TestConcurrentSeedsProduceOneIndex(t *testing.T) {
+	canonical, worktree := newSeedRepo(t)
+	initIndex(t, canonical)
+	addWorktree(t, canonical, worktree)
+	errs := make(chan error, 4)
+	for range 4 {
+		go func() {
+			_, err := SeedFromCanonical(canonical, worktree)
+			errs <- err
+		}()
+	}
+	for range 4 {
+		if err := <-errs; err != nil && !strings.Contains(err.Error(), "already has an index") {
+			t.Errorf("concurrent seed: %v", err)
+		}
+	}
+	if !IsInitialized(worktree) {
+		t.Fatal("not seeded")
+	}
+	left, _ := filepath.Glob(filepath.Join(worktree, defaultCodeGraphDir+"-*"))
+	if len(left) != 0 {
+		t.Fatalf("staging entries left behind: %v", left)
+	}
+	refresh(t, worktree)
 }
 
 func TestFindCanonicalIndexMapsSubprojects(t *testing.T) {

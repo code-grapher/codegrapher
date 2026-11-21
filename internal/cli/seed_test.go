@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/specscore/codegrapher/indexer"
+	"github.com/spf13/cobra"
 )
 
 // seedRepo builds a canonical clone (optionally indexed) and returns it with
@@ -236,6 +237,14 @@ func TestMismatchGuardRefusesUnseededBorrowedIndex(t *testing.T) {
 	}
 	if _, err := runCmd(t, newStatusCmd(), "--refresh", nested); err == nil {
 		t.Fatal("status --refresh refreshed another worktree's index")
+	}
+	for name, cmd := range map[string]func() *cobra.Command{"uninit": newUninitCmd, "unlock": newUnlockCmd} {
+		if _, err := runCmd(t, cmd(), nested); err == nil || !strings.Contains(err.Error(), "different git worktree") {
+			t.Fatalf("%s err = %v, want worktree mismatch", name, err)
+		}
+	}
+	if !indexer.IsInitialized(canonical) {
+		t.Fatal("a command run in the nested worktree removed the canonical index")
 	}
 
 	// With seeding on, the same worktree gets its own index instead.

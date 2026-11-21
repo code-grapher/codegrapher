@@ -190,9 +190,11 @@ needs one — any read command, `sync`, `index`, `serve`, `daemon`, `watch`, or
 `init` is needed, and answers match a fresh index.
 
 - The copy is consistent: each scope database is opened read-only and cloned
-  while a read transaction keeps writers from committing (`VACUUM INTO` for a
-  WAL-mode file). It is copy-on-write where the file system supports it (APFS
-  `clonefile`, btrfs/XFS reflink) and a plain copy otherwise.
+  while a read transaction keeps writers from committing, and the whole set is
+  fingerprinted before and after so a canonical sync mid-copy forces a retry
+  (a legacy WAL-mode file is byte-copied only when its WAL is empty). It is
+  copy-on-write where the file system supports it (APFS `clonefile`,
+  btrfs/XFS reflink) and a plain copy otherwise.
 - Seeding never writes to the canonical clone, and never refreshes its index
   first: the worktree's own incremental pass is correct whatever the base looks
   like.

@@ -15,6 +15,9 @@ func newUnlockCmd() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			projectPath := resolveArgExisting(args)
+			if mismatch := indexer.DetectWorktreeIndexMismatch(resolveExactArg(args), projectPath); mismatch != nil {
+				return fmt.Errorf("cannot unlock a different git worktree's index:\n%s", indexer.WorktreeMismatchWarning(*mismatch))
+			}
 
 			if !indexer.IsInitialized(projectPath) {
 				printError(fmt.Sprintf("CodeGraph not initialized in %s", projectPath))

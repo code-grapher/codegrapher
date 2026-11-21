@@ -28,6 +28,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	graphlock "github.com/specscore/codegrapher/lock"
 )
 
 // Metadata keys written on a seeded copy.
@@ -97,8 +99,20 @@ var (
 	seedLockWait = 10 * time.Second
 )
 
+// seedAttempts bounds how often seeding retries a copy that a canonical
+// writer changed underneath it.
+const seedAttempts = 3
+
 // SeedFromCanonical copies the index rooted at sourceRoot into targetRoot,
 // which must not be initialized yet. It never writes under sourceRoot.
+//
+// The copy is consistent across every scope database, not just within each:
+// it fingerprints the source set (size, mtime and SQLite change counter of
+// each file) before and after copying, requires that no writer held the
+// canonical lock at either end, and retries otherwise; a source that keeps
+// changing fails the seed. Concurrent seeds of one target are serialized by
+// a lock beside the target, and the finished copy is published with one
+// directory rename, so a reader never sees a partial set.
 func SeedFromCanonical(sourceRoot, targetRoot string) (SeedResult, error) {
 	start := time.Now()
 	res := SeedResult{Source: sourceRoot, Target: targetRoot}
@@ -106,24 +120,57 @@ func SeedFromCanonical(sourceRoot, targetRoot string) (SeedResult, error) {
 		return res, fmt.Errorf("seed: %s already has an index", targetRoot)
 	}
 	srcDir := GetCodeGraphDir(sourceRoot)
-	dbs, err := filepath.Glob(filepath.Join(srcDir, dbPrefix+"*"+dbSuffix))
-	if err != nil || len(dbs) == 0 {
-		return res, fmt.Errorf("seed: no index databases in %s", srcDir)
-	}
-
-	// A writer mid-sync updates several scope databases in turn. Wait briefly
-	// for it so the copies agree with one another; if it is still running,
-	// copy anyway but drop the base revision so the first refresh rechecks
-	// every file by content hash.
-	writerBusy := waitForCanonicalWriter(filepath.Join(srcDir, "codegraph.lock"), seedLockWait)
-
 	targetDir := GetCodeGraphDir(targetRoot)
 	if err := os.MkdirAll(filepath.Dir(targetDir), 0o755); err != nil {
 		return res, fmt.Errorf("seed: %w", err)
 	}
-	tmpDir, err := os.MkdirTemp(filepath.Dir(targetDir), defaultCodeGraphDir+"-seed-")
-	if err != nil {
+
+	seedLock := graphlock.New(filepath.Join(filepath.Dir(targetDir), defaultCodeGraphDir+"-seed.lock"))
+	if err := acquireWithin(seedLock, seedLockWait); err != nil {
+		if IsInitialized(targetRoot) {
+			res.Duration = time.Since(start)
+			return res, nil // a concurrent seed finished first
+		}
 		return res, fmt.Errorf("seed: %w", err)
+	}
+	defer seedLock.Release()
+	if IsInitialized(targetRoot) {
+		res.Duration = time.Since(start)
+		return res, nil
+	}
+
+	lockPath := filepath.Join(srcDir, "codegraph.lock")
+	var tmpDir string
+	for attempt := 1; ; attempt++ {
+		dbs, err := filepath.Glob(filepath.Join(srcDir, dbPrefix+"*"+dbSuffix))
+		if err != nil || len(dbs) == 0 {
+			return res, fmt.Errorf("seed: no index databases in %s", srcDir)
+		}
+		if waitForCanonicalWriter(lockPath, seedLockWait) {
+			return res, fmt.Errorf("seed: a canonical index writer is still running")
+		}
+		before, err := fingerprintSet(dbs)
+		if err != nil {
+			return res, fmt.Errorf("seed: %w", err)
+		}
+		tmpDir, err = os.MkdirTemp(filepath.Dir(targetDir), defaultCodeGraphDir+"-seed-")
+		if err != nil {
+			return res, fmt.Errorf("seed: %w", err)
+		}
+		method, n, err := copyDatabases(dbs, tmpDir)
+		if err != nil {
+			_ = os.RemoveAll(tmpDir)
+			return res, err
+		}
+		after, ferr := fingerprintSet(dbs)
+		if ferr == nil && after == before && !writerHoldsLock(lockPath) {
+			res.Method, res.Databases = method, n
+			break
+		}
+		_ = os.RemoveAll(tmpDir)
+		if attempt == seedAttempts {
+			return res, fmt.Errorf("seed: the canonical index changed during %d copy attempts", seedAttempts)
+		}
 	}
 	cleanup := true
 	defer func() {
@@ -132,21 +179,10 @@ func SeedFromCanonical(sourceRoot, targetRoot string) (SeedResult, error) {
 		}
 	}()
 
-	res.Method = SeedClone
-	for _, src := range dbs {
-		dst := filepath.Join(tmpDir, filepath.Base(src))
-		method, err := snapshotDatabase(src, dst)
-		if err != nil {
-			return res, fmt.Errorf("seed: copy %s: %w", filepath.Base(src), err)
-		}
-		res.Method = weaker(res.Method, method)
-		res.Databases++
-	}
 	if err := os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte(dataDirGitignore), 0o644); err != nil {
 		return res, fmt.Errorf("seed: %w", err)
 	}
-
-	fastPath, err := stampSeededCopy(tmpDir, sourceRoot, targetRoot, writerBusy)
+	fastPath, err := stampSeededCopy(tmpDir, sourceRoot, targetRoot)
 	if err != nil {
 		return res, fmt.Errorf("seed: stamp copy: %w", err)
 	}
@@ -160,40 +196,85 @@ func SeedFromCanonical(sourceRoot, targetRoot string) (SeedResult, error) {
 	return res, nil
 }
 
-// publishSeedDir moves the finished copy into place. A concurrent seed that
-// won the race leaves an initialized target; that is success, not an error.
-func publishSeedDir(tmpDir, targetDir string) error {
-	if _, err := os.Lstat(targetDir); os.IsNotExist(err) {
-		if err := os.Rename(tmpDir, targetDir); err == nil {
-			return nil
-		} else if !hasScopeDB(targetDir) {
-			return fmt.Errorf("seed: publish: %w", err)
+func copyDatabases(dbs []string, dir string) (SeedMethod, int, error) {
+	method := SeedClone
+	for _, src := range dbs {
+		m, err := snapshotDatabase(src, filepath.Join(dir, filepath.Base(src)))
+		if err != nil {
+			return "", 0, fmt.Errorf("seed: copy %s: %w", filepath.Base(src), err)
 		}
-		_ = os.RemoveAll(tmpDir)
-		return nil
+		method = weaker(method, m)
 	}
-	// The data directory exists without databases (e.g. only a .gitignore
-	// from an interrupted init): move the files in one by one.
+	return method, len(dbs), nil
+}
+
+// acquireWithin retries a file lock until it is taken or wait runs out.
+func acquireWithin(l *graphlock.FileLock, wait time.Duration) error {
+	deadline := time.Now().Add(wait)
+	for {
+		err := l.Acquire()
+		if err == nil || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// fingerprintSet identifies the current generation of a set of SQLite files.
+// The header change counter (offset 24) moves on every rollback-journal
+// commit, so it catches a write even where mtimes are coarse.
+func fingerprintSet(paths []string) (string, error) {
+	var b strings.Builder
+	for _, p := range paths {
+		fp, err := fileFingerprint(p)
+		if err != nil {
+			return "", err
+		}
+		b.WriteString(p + " " + fp + "\n")
+	}
+	return b.String(), nil
+}
+
+func fileFingerprint(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	fi, err := f.Stat()
+	if err != nil {
+		return "", err
+	}
+	hdr := make([]byte, 28)
+	n, _ := io.ReadFull(f, hdr)
+	return fmt.Sprintf("%d %d %x", fi.Size(), fi.ModTime().UnixNano(), hdr[:n]), nil
+}
+
+// publishSeedDir moves the finished copy into place with one directory
+// rename. The caller holds the per-target seed lock. A data directory that
+// exists without databases (e.g. only a .gitignore from an interrupted init)
+// is moved aside first and removed after the swap.
+func publishSeedDir(tmpDir, targetDir string) error {
 	if hasScopeDB(targetDir) {
 		_ = os.RemoveAll(tmpDir)
 		return nil
 	}
-	entries, err := os.ReadDir(tmpDir)
-	if err != nil {
-		return fmt.Errorf("seed: publish: %w", err)
-	}
-	for _, e := range entries {
-		dst := filepath.Join(targetDir, e.Name())
-		if e.Name() == ".gitignore" {
-			if _, err := os.Stat(dst); err == nil {
-				continue
-			}
-		}
-		if err := os.Rename(filepath.Join(tmpDir, e.Name()), dst); err != nil {
+	aside := ""
+	if _, err := os.Lstat(targetDir); err == nil {
+		aside = tmpDir + "-old"
+		if err := os.Rename(targetDir, aside); err != nil {
 			return fmt.Errorf("seed: publish: %w", err)
 		}
 	}
-	_ = os.RemoveAll(tmpDir)
+	if err := os.Rename(tmpDir, targetDir); err != nil {
+		if aside != "" {
+			_ = os.Rename(aside, targetDir)
+		}
+		return fmt.Errorf("seed: publish: %w", err)
+	}
+	if aside != "" {
+		_ = os.RemoveAll(aside)
+	}
 	return nil
 }
 
@@ -205,28 +286,35 @@ func weaker(a, b SeedMethod) SeedMethod {
 	return a
 }
 
+// writerHoldsLock reports whether a live, non-stale writer holds lockPath
+// right now (read only).
+func writerHoldsLock(lockPath string) bool {
+	data, err := os.ReadFile(lockPath)
+	if err != nil {
+		return false
+	}
+	pid, perr := strconv.Atoi(strings.TrimSpace(string(data)))
+	if perr != nil || pid <= 0 || !processAlive(pid) {
+		return false
+	}
+	if fi, err := os.Stat(lockPath); err == nil && time.Since(fi.ModTime()) > 2*time.Minute {
+		return false // stale by the lock protocol's own rule
+	}
+	return true
+}
+
 // waitForCanonicalWriter polls (stat only) until the canonical lock file is
 // gone or held by a dead process. It reports whether a live writer still
 // held it when the wait ran out.
 func waitForCanonicalWriter(lockPath string, wait time.Duration) bool {
 	deadline := time.Now().Add(wait)
-	for {
-		data, err := os.ReadFile(lockPath)
-		if err != nil {
-			return false
-		}
-		pid, perr := strconv.Atoi(strings.TrimSpace(string(data)))
-		if perr != nil || pid <= 0 || !processAlive(pid) {
-			return false
-		}
-		if fi, err := os.Stat(lockPath); err == nil && time.Since(fi.ModTime()) > 2*time.Minute {
-			return false // stale by the lock protocol's own rule
-		}
+	for writerHoldsLock(lockPath) {
 		if time.Now().After(deadline) {
 			return true
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	return false
 }
 
 // snapshotDatabase takes a consistent copy of one SQLite file without ever
@@ -324,11 +412,7 @@ func walSnapshotState(src string) (string, error) {
 	if fi, err := os.Stat(src + "-wal"); err == nil && fi.Size() > 0 {
 		return "", fmt.Errorf("%s has uncheckpointed WAL frames", filepath.Base(src))
 	}
-	fi, err := os.Stat(src)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%d %d", fi.Size(), fi.ModTime().UnixNano()), nil
+	return fileFingerprint(src)
 }
 
 // setRollbackJournalHeader sets the file-format write/read versions (header
@@ -393,10 +477,9 @@ func copyFile(src, dst string) error {
 
 // stampSeededCopy writes the worktree identity into every copied database
 // and decides whether the base revision can be trusted for the git-diff fast
-// path: only when every scope agrees on it, it was recorded clean, and no
-// writer was mid-sync during the copy. Otherwise the revision is cleared, so
+// path: only when every scope agrees on it and it was recorded clean. Otherwise the revision is cleared, so
 // the first refresh hashes every file.
-func stampSeededCopy(dir, sourceRoot, targetRoot string, writerBusy bool) (bool, error) {
+func stampSeededCopy(dir, sourceRoot, targetRoot string) (bool, error) {
 	dbs, err := filepath.Glob(filepath.Join(dir, dbPrefix+"*"+dbSuffix))
 	if err != nil {
 		return false, err
@@ -413,7 +496,7 @@ func stampSeededCopy(dir, sourceRoot, targetRoot string, writerBusy bool) (bool,
 			clean = false
 		}
 	}
-	fast := !writerBusy && clean && len(heads) == 1 && !heads[""]
+	fast := clean && len(heads) == 1 && !heads[""]
 	for _, p := range dbs {
 		if err := writeSeedMetadata(p, sourceRoot, targetRoot, fast); err != nil {
 			return false, err
