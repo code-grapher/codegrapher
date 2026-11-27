@@ -239,7 +239,10 @@ func runServeGroup(ctx context.Context, participants []func(context.Context) err
 	defer timer.Stop()
 	for remaining := len(participants) - completed; remaining > 0; remaining-- {
 		select {
-		case <-done:
+		case err := <-done:
+			// Participants stopping after cancellation report it; the first
+			// error, captured above, is the one returned.
+			_ = err
 		case <-timer.C:
 			if first != nil {
 				return fmt.Errorf("%w; serve participant did not stop", first)
