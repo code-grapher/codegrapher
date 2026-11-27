@@ -138,7 +138,7 @@ func TestOpenAPIListenerDirectTLSMatchesAuthorityAndServesHTTPS(t *testing.T) {
 		t.Fatalf("HTTPS status = %d", response.StatusCode)
 	}
 	_ = server.Shutdown(context.Background())
-	<-served
+	_ = <-served // Serve reports the shutdown just requested.
 
 	mismatch, err := openAPIListener(apiListenerSettings{
 		listenAddress: "127.0.0.1:0", certificate: certFile, privateKey: keyFile, publicAuthority: "other.example",
