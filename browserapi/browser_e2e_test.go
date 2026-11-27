@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -121,7 +122,9 @@ globalThis.runCodeGrapherJourney = async (endpoint, token) => {
 		shutdown, stop := context.WithTimeout(context.Background(), time.Second)
 		defer stop()
 		_ = pageServer.Shutdown(shutdown)
-		<-pageDone
+		if err := <-pageDone; !errors.Is(err, http.ErrServerClosed) {
+			t.Errorf("page server after shutdown = %v, want http.ErrServerClosed", err)
+		}
 	}()
 
 	apiEndpoint := "http://" + apiListener.Addr().String() + BasePath
