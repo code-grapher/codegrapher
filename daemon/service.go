@@ -159,7 +159,11 @@ func Run(parent context.Context, projectPath, stateDir, nonce, token, browserTok
 		_ = owner.Close()
 		shutdownServer(server)
 		cancel()
-		<-browserErr
+		// The readiness error is the one returned, as on the terminal path
+		// below; a browser API failure on the way down is still logged.
+		if browserCloseErr := <-browserErr; browserCloseErr != nil {
+			log.Printf("browser API stop after readiness failure: %v", browserCloseErr)
+		}
 		return err
 	}
 	log.Printf("codegrapher daemon ready pid=%d project=%s", os.Getpid(), projectPath)
