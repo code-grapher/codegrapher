@@ -51,7 +51,12 @@ func TestRealBrowserGeneratedClientJourney(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	apiDone := make(chan error, 1)
 	go func() { apiDone <- api.Serve(ctx, apiListener) }()
-	defer func() { cancel(); _ = <-apiDone }() // the cancellation it reports is expected
+	defer func() {
+		cancel()
+		if err := <-apiDone; err != nil {
+			t.Errorf("browser API serve after cancel = %v, want nil", err)
+		}
+	}()
 
 	entry := filepath.Join(t.TempDir(), "journey.ts")
 	clientImport := filepath.ToSlash(filepath.Join(repositoryRoot, "clients/typescript/src/index.ts"))

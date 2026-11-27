@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"io"
 	"math/big"
 	"net/http"
@@ -138,7 +139,9 @@ func TestOpenAPIListenerDirectTLSMatchesAuthorityAndServesHTTPS(t *testing.T) {
 		t.Fatalf("HTTPS status = %d", response.StatusCode)
 	}
 	_ = server.Shutdown(context.Background())
-	_ = <-served // Serve reports the shutdown just requested.
+	if err := <-served; !errors.Is(err, http.ErrServerClosed) {
+		t.Fatalf("serve after shutdown = %v, want http.ErrServerClosed", err)
+	}
 
 	mismatch, err := openAPIListener(apiListenerSettings{
 		listenAddress: "127.0.0.1:0", certificate: certFile, privateKey: keyFile, publicAuthority: "other.example",
